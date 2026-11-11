@@ -346,6 +346,7 @@ function Bills({ s, setS, act, setBillOpen, setCard, real, role, you, decide }) 
           <p className="small">Your instinct: <strong className={pv.signs ? "ok" : "no"}>{pv.signs ? "sign it" : "veto it"}</strong>. The public {info.pop > 0.05 ? "likes it" : info.pop < -0.05 ? "dislikes it" : "is split"}. {b.party === "D" ? "Democrats wrote it; signing it angers some of your base." : "Your party's bill."}</p>
           <div className="bill-actions"><button type="button" className="primary" onClick={() => decide(b.id, true)}>Sign it</button><button type="button" className="ghost danger" onClick={() => decide(b.id, false)}>Veto it</button></div>
         </article>); })}
+      <MustPass s={s} setS={setS} act={act} role={role} you={you} />
       <div className="pm-headrow"><h2 className="pm-h">Bills in play</h2><button type="button" className="primary" disabled={!S.can(s, "introduce")} onClick={() => setPick((x) => !x)}>{role === "P" ? "Send Congress a bill" : "Write a bill"} ({S.ACTIONS.introduce.hours} hours)</button></div>
       {pick && (
         <section className="panel">
@@ -365,6 +366,12 @@ function Bills({ s, setS, act, setBillOpen, setCard, real, role, you, decide }) 
                 <div className="hemi-by">{[[true, "Yes"], [false, "No"], [null, "Staff decides"]].map(([v, l]) => <button key={l} type="button" className={b.yourVote === v ? "on" : ""} onClick={() => setS(S.setVote(s, b.id, v))}>{l}</button>)}</div>
               </div>}
             </header>
+            {(() => { const code = b.comm || S.commFor(b.pid, b.origin === "S" ? "S" : "H"), chair = S.commChair(code); return (
+              <div className="pm-commline small">
+                <span className="pill">{S.commName(code)}</span>
+                {b.marked ? <span>Reported {b.markup ? `${b.markup.yes}-${b.markup.no}` : "without a markup"}</span> : <span>Markup around {S.fmtDate(Math.max(s.week, b.floorWeek - 1))}{chair ? <> · chair <button type="button" className="linkbtn" onClick={() => setCard(chair.id)}>{S.nameOf(chair, real)}</button> ({chair.p})</> : null}</span>}
+                {(b.amends || []).map((a, i) => <span key={i} className={`pill ${a.w < 0 ? "neg2" : "pos2"}`} title={a.by === s.youId ? "Yours" : S.memberById[a.by] ? S.nameOf(S.memberById[a.by], real) : ""}>{S.AMEND_LABEL[a.kind]}{a.by === s.youId ? " (yours)" : ""}</span>)}
+              </div>); })()}
             <p className="muted small pm-origin">{b.origin === "S" ? "Starts in the Senate, then the House." : "Starts in the House, then the Senate."} Count shown: {ch === "S" ? `the Senate (${b.route === "reconciliation" ? "51 under reconciliation" : "60 to end a filibuster"})` : "the House"}.{b.holds ? ` · ${b.holds} hold${b.holds > 1 ? "s" : ""}` : ""}{b.fil ? " · under a talking filibuster" : ""}{b.threat ? " · veto threatened" : ""}</p>
             <CountBar c={c} need={ch === "S" ? (b.route === "reconciliation" ? 51 : 60) : 218} total={ch === "S" ? 100 : 434} />
             {(() => { const said = (s.pres || []).find((x) => x.pid === b.pid); return said ? <blockquote className="pm-said">{said.text}</blockquote> : null; })()}
@@ -384,6 +391,45 @@ function Bills({ s, setS, act, setBillOpen, setCard, real, role, you, decide }) 
       {past.length > 0 && <h2 className="pm-h">Decided</h2>}
       {past.map((b) => <div key={b.id} className={`pm-past ${b.stage}`}><strong>{S.byId[b.pid].name}</strong><span>{b.stage === "law" ? "Law" : b.stage === "vetoed" ? "Vetoed" : b.stage === "died" ? "Died in committee" : "Failed"} · {b.hist.join(" · ")}</span></div>)}
     </div>
+  );
+}
+function MustPass({ s, setS, act, role, you }) {
+  const [pick, setPick] = useState(null);
+  const [q, setQ] = useState("");
+  const live = (s.mp || []).filter((mp) => mp.stage === "open" || mp.stage === "lapsed" || mp.stage === "desk");
+  const soon = (s.mp || []).filter((mp) => mp.stage === "waiting").slice(0, 1);
+  if (!live.length && !soon.length) return null;
+  const opts = pick ? POLICIES.filter((p) => !s.laws.includes(p.id) && !live.find((m) => m.id === pick).riders.some((x) => x.pid === p.id) && p.name.toLowerCase().includes(q.toLowerCase()) && p.category !== "mustpass").slice(0, 10) : [];
+  return (
+    <section className="pm-mp">
+      <h2 className="pm-h">Must-pass</h2>
+      {soon.map((mp) => <p key={mp.id} className="muted small">Next: {mp.name}, due {S.fmtDate(mp.deadline)}. The fight starts {S.fmtDate(mp.open)}.</p>)}
+      {live.map((mp) => { const h = S.mpCount(s, mp, "H"), sn = S.mpCount(s, mp, "S"), signs = S.mpPresSigns(s, mp); return (
+        <article key={mp.id} className={`pm-mpcard ${mp.stage === "lapsed" ? "lapsed" : ""}`}>
+          <header>
+            <div><span className="eyebrow">{mp.stage === "lapsed" ? (mp.kind === "funding" ? `SHUTDOWN · week ${mp.lapsed}` : `PAST THE X-DATE · week ${mp.lapsed}`) : mp.stage === "desk" ? "On the President's desk" : `Deadline ${S.fmtDate(mp.deadline)}`}</span><h3>{mp.name}</h3></div>
+            {role !== "P" && <div className="pm-vote"><span className="stat-label">Your vote</span><div className="hemi-by">{[[true, "Yes"], [false, "No"], [null, "Staff decides"]].map(([v, l]) => <button key={l} type="button" className={mp.yourVote === v ? "on" : ""} onClick={() => setS(S.setMpVote(s, mp.id, v))}>{l}</button>)}</div></div>}
+          </header>
+          <div className="pm-riders">
+            <span className="stat-label">Riders</span>
+            {mp.riders.length ? mp.riders.map((x) => (
+              <span key={x.pid} className={`pm-rider ${x.p === "D" ? "dem" : "rep"}`}>{S.byId[x.pid].name}<small> · {x.by}</small>
+                <button type="button" className="linkbtn" disabled={!S.can(s, "strip")} onClick={() => act("strip", { mp: mp.id, pid: x.pid })}>strip (4h)</button></span>
+            )) : <span className="muted small">None. It's a clean bill.</span>}
+            {mp.demand && !mp.riders.some((x) => x.pid === mp.demand) && <span className="pm-rider rep ghosty">The President demands {S.byId[mp.demand].name}</span>}
+          </div>
+          <div className="pm-mpcounts small">
+            <span>House <b className={h.yes >= 218 ? "ok" : "no"}>{h.yes}</b>/218</span><span>Senate <b className={sn.yes >= 60 ? "ok" : "no"}>{sn.yes}</b>/60</span>
+            <span>President: <b className={signs ? "ok" : "no"}>{role === "P" ? (signs ? "you can live with it" : "a rider you'd veto") : signs ? "would sign" : "would veto"}</b></span>
+          </div>
+          <div className="bill-actions">
+            <button type="button" className="ghost" disabled={!S.can(s, "rider")} onClick={() => { setPick(pick === mp.id ? null : mp.id); setQ(""); }}>{role === "P" ? "Demand a rider" : "Add a rider"} (6h)</button>
+          </div>
+          {pick === mp.id && (<div className="panel"><input className="pm-search" placeholder="Search policies to attach…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+            <div className="pm-results">{opts.map((p) => <button key={p.id} type="button" className="pm-row" onClick={() => { act("rider", { mp: mp.id, pid: p.id }); setPick(null); }}><span><strong>{p.name}</strong><small>{p.desc}</small></span></button>)}</div></div>)}
+          {mp.hist.length > 0 && <p className="muted small">{mp.hist.join(" · ")}</p>}
+        </article>); })}
+    </section>
   );
 }
 function BillBoard({ id, s, act, real, setCard, onClose, role }) {

@@ -238,3 +238,12 @@
 button.danger{color:#c8443a;border-color:#e8a093}
 @media(max-width:640px){.pm-where{grid-template-columns:1fr}.pm-oval{flex-direction:column;text-align:center}}
 .pm-oval .cast-trait{background:rgba(255,207,90,.16);color:#ffcf5a;border-color:rgba(255,207,90,.4)}
+.pm-mp{display:flex;flex-direction:column;gap:10px;margin-bottom:8px}
+.pm-mpcard{border:2px solid #ffcf5a;border-radius:14px;padding:14px;background:var(--card,#fff);display:flex;flex-direction:column;gap:10px}
+.pm-mpcard.lapsed{border-color:#c8443a;background:#fff6f4}
+.pm-mpcard header{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pm-riders{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pm-rider{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid}
+.pm-rider.dem{border-color:#9db8f0;background:#eef3fd}.pm-rider.rep{border-color:#f0a9a0;background:#fdf0ee}.pm-rider.ghosty{border-style:dashed}
+.pm-mpcounts{display:flex;gap:16px;flex-wrap:wrap}.pm-mpcounts b.ok{color:#1d8a4f}.pm-mpcounts b.no{color:#c8443a}
+.pm-commline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px}

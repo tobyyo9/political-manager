@@ -56,3 +56,8 @@ The Senate and the President as full characters, committees and amendments as pl
 - The Cabinet as characters (as reported Oct 30, 2026): scandal heat, resignations, firings, nominations from a bench of allies, Senate confirmation votes, oversight hearings, impeachment and trial votes for cabinet officers and the President.
 - The President endorses or attacks members by name after big votes.
 - Data: Oklahoma's special Senate winner (Hern) and his House successor; seats won on redrawn lines get an estimated lean.
+
+## Fifth pass: committees, amendments and must-pass fights
+- Every bill goes to a committee of jurisdiction in its first chamber. The chair can bury it; otherwise the committee marks it up and votes. Rosters are the 119th Congress's, so votes are scaled to the new Democratic majority ratio.
+- If you sit on the committee, you get a markup choice: a poison pill, a bipartisan fix, a sweetener, or an amendment for your district. Other members amend bills too. Amendments shift each party's support on the floor.
+- Must-pass bills: a stopgap (early 2027), the debt limit (estimated X-date, Aug 2027), fiscal 2028 funding, and a fiscal 2029 stopgap. These dates are game assumptions. Each side attaches riders; leaders drop riders when the Senate count is short; the President demands his own and vetoes riders he can't accept. Missing a deadline means a shutdown or a default, with blame that moves the national mood. Anyone can try to add or strip riders; the President gets the bill on his desk.

@@ -189,7 +189,7 @@ export function lean(m, pid, ctx) {
   const pledge = bill.tax && m.signer ? -1 : 0;
   const gp = groupPull(m, pid, noise);
   const G = gp.G;
-  const B = (ctx.boost?.[pid] || 0) + (m.p === "R" ? Math.max(0, ctx.wh || 0) * 0.5 : 0) - (ctx.fil && m.ch === "S" && m.p === ctx.fil.p ? ctx.fil.w : 0);                           // public pressure after an event
+  const B = (ctx.boost?.[pid] || 0) + (m.p === "R" ? Math.max(0, ctx.wh || 0) * 0.5 : 0) - (ctx.fil && m.ch === "S" && m.p === ctx.fil.p ? ctx.fil.w : 0) + (ctx.amends || []).reduce((a, x) => a + (x.p === m.p ? x.w : 0), 0);                           // public pressure after an event
   const T = ctx.trust?.[m.id] || 0;
   const K = ctx.deals?.[m.id] || 0;
   const eps = noise(`${ctx.seed}:${m.id}:${pid}:${ctx.kind || "p"}`) * W.eps * 2;
@@ -229,6 +229,7 @@ export const ACTIONS = {
   hearing: { label: "Oversight hearing", hours: 8, role: "HS" }, defend: { label: "Defend a cabinet member", hours: 4, role: "HS" },
   call: { label: "Call a member", hours: 3, role: "P" }, push: { label: "Use the bully pulpit", hours: 4, role: "P" }, threat: { label: "Threaten a veto", hours: 1, role: "P" },
   eo: { label: "Sign an executive order", hours: 6, role: "P" }, rally: { label: "Hold a rally", hours: 8, role: "P" }, fire: { label: "Fire a cabinet member", hours: 4, role: "P" },
+  rider: { label: "Add a rider", hours: 6 }, strip: { label: "Strip a rider", hours: 4 },
   sign: { label: "Sign", hours: 0, role: "P" }, veto: { label: "Veto", hours: 0, role: "P" }};
 export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom = null, diff = null) {
   if (youId === "POTUS") return newPresidency(seed, diff);
@@ -243,6 +244,7 @@ export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom 
     rapport: 0, pres: [], staff: makeStaff(seed), diff: diff || { info: "normal", world: "normal" }, boost: {}, groups: {}, flags: {}, usedEvents: [], moments: [],
     role: you.ch === "S" ? "S" : "H", cab: freshCabinet(), noms: [], presHeat: 0.35, imp: [],
   };
+  mpSeed(s);
   seedBills(s);
   if (you.ch === "S") pushInbox(s, { kind: "staff", from: "Your chief of staff", title: upIn2028(you) ? "You're on the ballot in 2028" : "You're not up until " + (you.cls === 1 ? 2030 : 2032), body: upIn2028(you) ? "Your seat is one of the 34 up in November 2028. Six years usually buys freedom; you don't have it." : "No election this Congress. That buys you room to take hard votes, but leadership, donors and the President still keep score. At the end of 2028 you'll get a verdict on your term." });
   pushInbox(s, { kind: "staff", from: "Your chief of staff", title: "Welcome to the 120th Congress", body: `You have ${HOURS} hours a week. Spend them on colleagues, your district, donors and bills. Votes come to the floor most weeks; I'll flag the ones that matter at home. The election is ${fmtDate(ELECTION_WEEK)}.` });
@@ -274,7 +276,7 @@ export function addBill(s, pid, sponsorId, floorIn = 3) {
   return b;
 }
 export const activeBills = (s) => s.bills.filter((b) => !b.dead && b.stage !== "law");
-export const billCtx = (s, b, kind = "passage") => ({ sponsor: b.party, kind, route: b.route, seed: s.seed, deals: b.deals, boost: s.boost, wh: b.wh, fil: b.fil, trust: Object.fromEntries(Object.entries(s.rel).map(([id, v]) => [id, b.asked[id] ? v : 0])) });
+export const billCtx = (s, b, kind = "passage") => ({ sponsor: b.party, kind, route: b.route, seed: s.seed, deals: b.deals, boost: s.boost, wh: b.wh, fil: b.fil, amends: b.amends, trust: Object.fromEntries(Object.entries(s.rel).map(([id, v]) => [id, b.asked[id] ? v : 0])) });
 
 // What you can see of a member's lean: the truth blurred by how well you know them.
 const BLUR = [0.34, 0.2, 0.1, 0.04];
@@ -340,6 +342,14 @@ export function doAction(s0, act, arg = {}) {
     else if (x < odds + (1 - odds) * 0.7) s.toast = { title: "No commitment", text: you.p === "D" ? "You get fifteen minutes with a deputy. Building a name in Washington would get you further." : "He talks about other things. You leave with a photo.", tone: "" };
     else { b.wh = (b.wh || 0) - 0.1; s.rapport = clamp(s.rapport - 0.15, -1, 1); pushNews(s, `The President attacks ${byId[b.pid].name} after a meeting with ${nameOf(you)}.`, "bad"); s.toast = { title: "It blew up", text: "He posts about the meeting that night. His allies in Congress take note.", tone: "bad" }; }
     void info;
+  }
+  if (act === "rider" || act === "strip") {
+    const mp = s.mp.find((x) => x.id === arg.mp), role = roleOf(s);
+    const odds = clamp((role === "P" ? 0.45 + (s.presApproval - 40) / 60 : (you.p === "D" ? 0.45 : 0.15) + s.clout / 200 + (onComm(you, "HSAP") || onComm(you, "SSAP") ? 0.2 : 0)), 0.05, 0.9);
+    if (r() < odds) {
+      if (act === "rider") { mp.riders.push({ pid: arg.pid, p: role === "P" ? "R" : you.p, by: role === "P" ? "the President" : nameOf(you), you: true }); s.profile = clamp(s.profile + 2, 0, 100); s.baseApproval = clamp(s.baseApproval + 1.5, 5, 99); pushNews(s, `${role === "P" ? "The President" : nameOf(you)} gets ${byId[arg.pid].name} attached to ${mp.name.toLowerCase()}.`); s.toast = { title: "Rider attached", text: `${byId[arg.pid].name} now rides on ${mp.name.toLowerCase()}. Watch the Senate count: every rider costs votes on the other side.`, tone: "good" }; }
+      else { const x = mp.riders.splice(mp.riders.findIndex((y) => y.pid === arg.pid), 1)[0]; pushNews(s, `${byId[x.pid].name} comes off ${mp.name.toLowerCase()}.`); s.toast = { title: "Rider stripped", text: `${byId[x.pid].name} is out. ${x.p === (role === "P" ? "R" : you.p) ? "Your own side is annoyed." : "The other side is furious."}`, tone: "good" }; if (role !== "P" && x.p === you.p) s.loyalty -= 1; }
+    } else s.toast = { title: "Leadership said no", text: act === "rider" ? "The appropriators wouldn't take it. Build clout, or get a seat on Appropriations." : "The rider stays. Its backers had the votes in the room.", tone: "" };
   }
   if (act === "hold") {
     const b = s.bills.find((x) => x.id === arg.bill);
@@ -411,6 +421,8 @@ export function answer(s0, msgId, choice) {
   if (!m || m.done) return s;
   m.done = true; m.choice = choice;
   const you = memberById[s.youId];
+  if (m.kind === "markup") { const b = s.bills.find((x) => x.id === m.bill); const opts = m.oppose ? ["pill", "fix", "district", null] : ["fix", "district", "sweet", null]; if (b && !b.dead && opts[choice]) { b.amends = b.amends || []; const ok = offerAmend(s, b, opts[choice]); s.toast = { title: ok ? "Amendment adopted" : "Amendment rejected", text: ok ? `Your ${AMEND[opts[choice]].label} is in the bill.` : "The committee voted it down. You still get your markup vote.", tone: ok ? "good" : "" }; } }
+  if (m.kind === "mpdesk") { const mp = s.mp.find((x) => x.id === m.mp); if (mp && mp.stage === "desk") { if (choice === 0) { mpSettle(s, mp, true); s.legacy += 1; } else { mp.blame = "pres"; s.vetoes++; const oh = mpVote(s, mp, "H", true), os = mpVote(s, mp, "S", true); const ov = oh.yes >= 290 && os.yes >= 67; mp.hist.push(`You veto it. Override: House ${oh.yes}, Senate ${os.yes}`); if (ov) { s.presApproval -= 1.5; s.clout -= 6; pushNews(s, `Congress overrides your veto of ${mp.name.toLowerCase()}.`, "bad"); } mpSettle(s, mp, ov); } } }
   if (m.kind === "confirm") { const n = s.noms.find((x) => x.id === m.nom); if (n) n.yourVote = choice === 0; }
   if (m.kind === "impeach") { const i = s.imp.find((x) => x.id === m.imp); if (i) i.yourVote = choice === 0; }
   if (m.kind === "nominate") { const c = s.cab.find((x) => x.id === m.post); if (c?.vacant && m.picks[choice]) nominate(s, c, m.picks[choice]); }
@@ -449,9 +461,12 @@ export function advance(s0) {
   const events = [];
   // 0. Bills left on the President's desk: decided by instinct.
   for (const b of s.bills) if (b.stage === "desk") events.push(...desk(s, b, presView(s, b).signs, { bill: b.id, pid: b.pid, auto: true, stages: [] }));
+  // 0b. Committees mark up what's due; must-pass deadlines.
+  committeeWeek(s, R(s, "comm"));
+  mpWeek(s, R(s, "mp"));
   // 1. Floor votes scheduled for this week.
   for (const b of s.bills) {
-    if (b.dead || b.stage !== "committee" || b.floorWeek > s.week) continue;
+    if (b.dead || b.stage !== "committee" || b.floorWeek > s.week || !b.marked) continue;
     events.push(...floor(s, b));
   }
   // 2. Favors that came due.
@@ -1067,6 +1082,7 @@ function newPresidency(seed, diff) {
     rapport: 0, pres: [], staff: makeStaff(seed), diff: diff || { info: "normal", world: "normal" }, boost: {}, groups: {}, flags: {}, usedEvents: [], moments: [],
     cab: freshCabinet(), noms: [], presHeat: 0.35, imp: [], eos: [], legacy: 0, vetoes: 0, signed: 0,
   };
+  mpSeed(s);
   for (const m of MEMBERS) if (m.p === "R") s.rel[m.id] = clamp(0.1 + 0.3 * (m.t.label === "follower" ? 1 : 0) + 0.2 * m.x - (m.vuln > 0.7 ? 0.1 : 0), -1, 1);
   seedBills(s);
   pushInbox(s, { kind: "staff", from: "Susie Wiles, chief of staff", title: "Democrats run Congress now", body: `They hold ${HOUSE.filter((m) => m.p === "D").length} House seats and ${SENATE.filter((m) => m.p === "D").length} in the Senate. Their bills will land on your desk; you can sign or veto. They can override with 290 and 67, so every Republican you keep matters. You can't run again, so this is about your approval, your legacy and whether your party keeps the White House in November 2028.` });
@@ -1133,3 +1149,159 @@ function termReview(s, r) {
   pushNews(s, `The 120th Congress ends. ${nameOf(memberById[s.youId])} heads toward ${s.result.next} with a ${score > 70 ? "strong" : score > 45 ? "mixed" : "weak"} record.`);
 }
 export { POLICIES, PRESIDENT_STANCE };
+
+// ════════ Committees and amendments ════════
+// Which committee a bill goes to, by chamber. Rough jurisdiction by policy.
+const JUR = [
+  [["corp_rate", "top_rate", "all_rates", "niit", "cap_gains", "step_up", "itemized", "vat", "ftt", "gas_tax", "intl_corp", "wealth_tax", "irs", "carried_interest", "buyback_tax", "home_sale", "no_tax_ss", "ctc", "ss_payroll_250k", "ss_progressive", "ss_rate", "ss_age", "chained_cpi", "tariffs_up", "tariff_repeal", "partb", "medicare_adv", "site_neutral", "debt_limit", "aca", "medicaid_restore", "medicaid_cap"], "HSWM", "SSFI"],
+  [["public_option", "m4a", "pbm", "health_extenders", "drug_neg", "kids_online", "ai_rules", "datacenter", "ratepayer", "price_gouging", "carbon"], "HSIF", "SSHR"],
+  [["clean_energy", "permitting"], "HSIF", "SSEG"],
+  [["defense_up", "defense_cut", "iran_supp"], "HSAS", "SSAS"], [["ukraine", "nato_exit", "foreign_aid", "war_powers"], "HSFA", "SSFR"],
+  [["deport", "immigration", "ice_limits", "background_checks", "aw_ban", "red_flag", "carry_reciprocity", "codify_roe", "abortion_15wk", "police", "sentencing", "marijuana", "pardon_reform", "term_limits", "court_expansion", "gender_care", "dei"], "HSJU", "SSJU"],
+  [["voter_id", "save_act", "voting_rights", "stock_ban", "ethics"], "HSHA", "SSRA"],
+  [["school_choice", "community_college", "student_debt", "childcare", "min_wage"], "HSED", "SSHR"],
+  [["infrastructure", "highways"], "HSPW", "SSEV"], [["ndd_grants"], "HSAP", "SSAP"], [["va_means"], "HSVR", "SSVA"],
+];
+export function commFor(pid, ch) { const row = JUR.find(([ids]) => ids.includes(pid)); return row ? (ch === "S" ? row[2] : row[1]) : ch === "S" ? "SSGA" : "HSGO"; }
+const COMM_NAME = {}; for (const m of MEMBERS) for (const c of m.comm || []) COMM_NAME[c.c] = c.n;
+export const commName = (code) => COMM_NAME[code] || "the committee";
+export const commMembers = (code) => MEMBERS.filter((m) => (m.comm || []).some((c) => c.c === code));
+export const commChair = (code) => MEMBERS.find((m) => (m.comm || []).some((c) => c.c === code && c.role === "Chair"));
+const onComm = (m, code) => (m.comm || []).some((c) => c.c === code);
+const AMEND = {
+  district: { label: "an amendment for your district", w: 0 }, fix: { label: "a bipartisan fix", w: 0.07 }, pill: { label: "a poison pill", w: 0.08 }, sweet: { label: "a sweetener for wavering members", w: 0.05 },
+};
+// Before markup: if you sit on the committee, your staff asks what you want to do.
+function preMarkup(s, b) {
+  if (b.preAsked || roleOf(s) === "P") return; b.preAsked = true;
+  const you = memberById[s.youId], code = b.comm;
+  if (!onComm(you, code)) return;
+  const l = lean(you, b.pid, billCtx(s, b)), oppose = l.L < 0;
+  pushInbox(s, { kind: "markup", bill: b.id, from: "Your committee staff", title: `Markup in ${commName(code)}: ${byId[b.pid].name}`,
+    body: `${commName(code)} marks it up ${fmtDate(Math.max(s.week + 1, b.floorWeek - 2))}. You sit on the committee, so you can try to change it. ${oppose ? "You're leaning against it." : "You're leaning for it."}`,
+    choices: oppose ? ["Offer a poison pill", "Offer a bipartisan fix", "Offer a district amendment", "Just vote"] : ["Offer a bipartisan fix", "Offer a district amendment", "Offer a sweetener for wavering members", "Just vote"], oppose });
+}
+function offerAmend(s, b, kind) {
+  const you = memberById[s.youId], members = commMembers(b.comm);
+  const maj = "D";
+  const odds = clamp((you.p === maj ? 0.72 : 0.3) + s.clout / 300 + (kind === "pill" && you.p !== b.party ? -0.1 : 0), 0.1, 0.92);
+  const r = R(s, "amend"), ok = r() < odds, name = AMEND[kind].label;
+  if (ok) {
+    if (kind === "fix") b.amends.push({ kind, by: s.youId, p: b.party === "D" ? "R" : "D", w: AMEND.fix.w });
+    if (kind === "sweet") b.amends.push({ kind, by: s.youId, p: b.party, w: AMEND.sweet.w });
+    if (kind === "pill") b.amends.push({ kind, by: s.youId, p: b.party, w: -AMEND.pill.w });
+    if (kind === "district") { s.approval = clamp(s.approval + 1.5, 5, 95); s.legis += 2; }
+    if (kind === "fix") { s.clout += 1.5; s.baseApproval = clamp(s.baseApproval - 1, 5, 95); s.rel[b.sponsor] = clamp((s.rel[b.sponsor] || 0) + 0.08, -1, 1); }
+    if (kind === "pill") { s.rel[b.sponsor] = clamp((s.rel[b.sponsor] || 0) - 0.2, -1, 1); s.baseApproval = clamp(s.baseApproval + 1.5, 5, 95); }
+    s.legis += 1;
+    pushNews(s, `${commName(b.comm)} adopts ${name} from ${titleOf(you)} ${nameOf(you)} to ${byId[b.pid].name}.`);
+  } else pushNews(s, `${commName(b.comm)} rejects ${name} from ${nameOf(you)} on ${byId[b.pid].name}.`);
+  return ok;
+}
+// Markup: the chair decides whether to hold one, then the committee votes. Others offer amendments too.
+function markup(s, b, r) {
+  b.marked = true;
+  const code = b.comm, members = commMembers(code), chair = commChair(code);
+  if (members.length < 5) { b.hist.push("Discharged to the floor without a markup."); return true; }
+  const ctx = billCtx(s, b);
+  if (chair && chair.id !== s.youId && lean(chair, b.pid, ctx).p < 0.25 && !(b.sponsor === s.youId && (s.rel[chair.id] || 0) > 0.2) && !billInfo(b.pid, b.party).mustPass) {
+    b.dead = true; b.stage = "died"; b.hist.push(`${commName(code)}: the chair never held a markup.`);
+    pushNews(s, `${byId[b.pid].name} dies in ${commName(code)}. Chair ${nameOf(chair)} won't hold a markup.`);
+    if (b.sponsor === s.youId) pushInbox(s, { kind: "staff", from: "Your legislative director", title: `${nameOf(chair)} buried your bill`, body: `The chair of ${commName(code)} won't mark it up. Next time, build a relationship with the chair first: meet with them, and do the committee work.` });
+    return false;
+  }
+  // Other members' amendments.
+  if (r() < 0.4) { const pill = r() < 0.45, by = members.filter((m) => (pill ? m.p !== b.party : m.p === b.party) && m.id !== s.youId)[Math.floor(r() * 8)] || members[0];
+    b.amends.push({ kind: pill ? "pill" : "sweet", by: by.id, p: b.party, w: pill ? -0.06 : 0.05 });
+    pushNews(s, `${commName(code)} adopts ${pill ? "a poison-pill amendment" : "a sweetener"} from ${nameOf(by)} to ${byId[b.pid].name}.`); }
+  const c2 = billCtx(s, b);
+  // Rosters still reflect the old Congress; in the 120th the Democratic majority holds the majority of every committee, so each party's vote is scaled to its new ratio.
+  const tally = { D: [0, 0], R: [0, 0] };
+  for (const m of members) { const v = m.id === s.youId ? (b.yourVote ?? lean(m, b.pid, c2).L > 0) : rng(hash(`${s.seed}:mk:${m.id}:${b.id}`))() < lean(m, b.pid, c2).p; tally[m.p][0] += v ? 1 : 0; tally[m.p][1]++; }
+  const ch = code[0] === "S" ? SENATE : HOUSE, dShare = ch.filter((m) => m.p === "D").length / ch.length, N = members.length, seatsD = Math.ceil(N * dShare) + (N % 2 === 0 ? 1 : 0), seatsR = N - seatsD;
+  const yes = Math.round((tally.D[1] ? tally.D[0] / tally.D[1] : 0) * seatsD + (tally.R[1] ? tally.R[0] / tally.R[1] : 0) * seatsR), no = N - yes;
+  b.markup = { yes, no };
+  if (yes <= no) { b.dead = true; b.stage = "failed"; b.hist.push(`${commName(code)}: voted down ${yes}-${no}.`); pushNews(s, `${commName(code)} votes down ${byId[b.pid].name}, ${yes}-${no}.`, "bad"); settle(s, b, false); return false; }
+  b.hist.push(`${commName(code)}: reported ${yes}-${no}${b.amends.length ? `, ${b.amends.length} amendment${b.amends.length > 1 ? "s" : ""}` : ""}.`);
+  return true;
+}
+function committeeWeek(s, r) {
+  for (const b of s.bills) {
+    if (b.dead || b.stage !== "committee") continue;
+    b.comm = b.comm || commFor(b.pid, b.origin === "S" ? "S" : "H"); b.amends = b.amends || [];
+    if (!b.marked && b.floorWeek - s.week <= 3) preMarkup(s, b);
+    if (!b.marked && b.floorWeek - s.week <= 1) markup(s, b, r);
+  }
+}
+
+// ════════ Must-pass: government funding and the debt limit ════════
+// In-game deadlines: the stopgap runs out early in 2027, then each new fiscal year; the debt limit X-date is an estimate.
+const MP_DEFS = [
+  { kind: "funding", week: 4, name: "Stopgap funding bill" }, { kind: "debt", week: 32, name: "Debt limit increase" },
+  { kind: "funding", week: 38, name: "Fiscal 2028 funding bill" }, { kind: "funding", week: 90, name: "Fiscal 2029 stopgap" },
+];
+const D_RIDERS = { funding: ["aca", "ice_limits", "war_powers", "tariff_repeal", "medicaid_restore", "pardon_reform"], debt: [] };
+const R_RIDERS = { funding: ["deport", "save_act", "ndd_grants"], debt: ["ndd_grants", "medicaid_cap"] };
+function mpSeed(s) { s.mp = MP_DEFS.map((d, i) => ({ id: `mp${i}`, ...d, deadline: d.week, open: d.week - 6, riders: [], stage: "waiting", hist: [], lapsed: 0, yourVote: null })); }
+const riderL = (s, m, rd) => lean(m, rd.pid, { sponsor: rd.p, kind: "passage", seed: s.seed, boost: s.boost, deals: {}, trust: {} }).L;
+function mpLean(s, m, mp, over = false) {
+  const base = mp.kind === "funding" ? 0.28 : m.p === "D" ? 0.3 : 0.12;
+  const rs = mp.riders.length ? mp.riders.reduce((a, rd) => a + riderL(s, m, rd), 0) / mp.riders.length : 0;
+  return base + 0.55 * rs + (over && m.p === "R" ? -0.12 : 0) + (mp.lapsed ? 0.06 * mp.lapsed : 0) + ((mp.deals || {})[m.id] || 0);
+}
+export function mpCount(s, mp, ch) { const ms = ch === "H" ? HOUSE : SENATE; let yes = 0; for (const m of ms) if (sig(14 * mpLean(s, m, mp)) > 0.5) yes++; return { yes, no: ms.length - yes }; }
+function mpVote(s, mp, ch, over = false) {
+  const ms = ch === "H" ? HOUSE : SENATE; let yes = 0; const votes = {};
+  for (const m of ms) { const v = m.id === s.youId && roleOf(s) !== "P" ? (mp.yourVote ?? mpLean(s, m, mp) > 0) : rng(hash(`${s.seed}:mp:${mp.id}:${s.week}:${m.id}:${over}`))() < sig(14 * mpLean(s, m, mp, over)); votes[m.id] = v; if (v) yes++; }
+  return { yes, no: ms.length - yes, votes };
+}
+export const mpPresSigns = (s, mp) => !mp.riders.some((rd) => (PRESIDENT_STANCE[rd.pid] ?? 0) <= -0.6 && rd.p === "D");
+function mpWeek(s, r) {
+  const role = roleOf(s), you = memberById[s.youId];
+  for (const mp of s.mp || []) {
+    if (mp.stage === "law") continue;
+    if (mp.stage === "waiting" && s.week >= mp.open) {
+      mp.stage = "open";
+      for (const pid of D_RIDERS[mp.kind].filter((p) => !s.laws.includes(p)).sort(() => r() - 0.5).slice(0, 2)) mp.riders.push({ pid, p: "D", by: "Democratic leaders" });
+      pushNews(s, `${mp.name}: the deadline is ${fmtDate(mp.deadline)}. ${mp.riders.length ? `Democrats attach ${mp.riders.map((x) => byId[x.pid].name).join(" and ")}.` : "Democrats want it clean."}`, "event");
+      if (role !== "P") pushInbox(s, { kind: "staff", from: "Your legislative director", title: `${mp.name} due ${fmtDate(mp.deadline)}`, body: mp.kind === "funding" ? "Miss it and the government shuts down. Riders are the fight: each side tries to attach policy the other has to swallow. You can add or strip riders from the Bills tab." : "Miss the X-date and the Treasury can't pay every bill. Republicans want spending cuts attached; Democrats want it clean.", done: true });
+      if (role === "P") pushInbox(s, { kind: "staff", from: "OMB", title: `${mp.name} due ${fmtDate(mp.deadline)}`, body: `Democrats attached ${mp.riders.map((x) => byId[x.pid].name).join(", ") || "nothing yet"}. You can demand riders of your own or demand theirs come off. If it reaches you with a rider you can't accept, you can veto, and own the shutdown.`, done: true });
+      continue;
+    }
+    if (mp.stage === "desk") { const m = s.inbox.find((x) => x.kind === "mpdesk" && x.mp === mp.id && !x.done); if (m && m.week < s.week) { m.done = true; m.choice = mpPresSigns(s, mp) ? 0 : 1; if (m.choice === 0) mpSettle(s, mp, true); else { mp.blame = "pres"; s.vetoes++; mpSettle(s, mp, false); } } continue; }
+    if (mp.stage !== "open" && mp.stage !== "lapsed") continue;
+    // The President demands a rider of his own (when you aren't him).
+    if (role !== "P" && !mp.presAsked && mp.riders.length && r() < 0.35) { mp.presAsked = true; const pid = R_RIDERS[mp.kind].find((p) => !mp.riders.some((x) => x.pid === p)); if (pid) { presPost(s, `The President says he won't sign ${mp.name.toLowerCase()} without ${byId[pid].name}.`, pid); mp.demand = pid; } }
+    // Leaders trade riders away when the Senate count is short.
+    const sc = mpCount(s, mp, "S");
+    if (sc.yes < 60 && !mp.lock) { const d = mp.riders.findIndex((x) => x.p === "D"); if (d >= 0 && r() < 0.4) { const x = mp.riders.splice(d, 1)[0]; pushNews(s, `To win Republican votes, Democratic leaders drop ${byId[x.pid].name} from ${mp.name.toLowerCase()}.`); }
+      else if (d < 0 && mp.kind === "debt" && r() < 0.3) { const pid = R_RIDERS.debt.find((p) => !mp.riders.some((x) => x.pid === p)); if (pid) { mp.riders.push({ pid, p: "R", by: "Senate deal" }); pushNews(s, `Senate deal: ${mp.name.toLowerCase()} now carries ${byId[pid].name}.`); } } }
+    if (mp.lock && s.week >= mp.lock) mp.lock = null;
+    if (s.week < mp.deadline - 1 && mp.stage === "open") continue;
+    // The vote.
+    const h = mpVote(s, mp, "H"), sn = mpVote(s, mp, "S");
+    mp.hist.push(`${fmtDate(s.week)}: House ${h.yes}-${h.no}, Senate ${sn.yes}-${sn.no}`);
+    if (role !== "P" && roleOf(s) !== "P") { const mine = (role === "S" ? sn : h).votes[s.youId]; s.votesCast.push({ week: s.week, pid: mp.kind === "debt" ? "debt_limit" : "mp_funding", vote: mine, d: 0, pb: 0, partyLine: mine === (you.p === "D") }); if (!mine && you.vuln > 0.6) s.approval = clamp(s.approval - 1, 5, 95); }
+    let passed = h.yes >= 218 && sn.yes >= 60, signed = false;
+    if (passed) {
+      if (role === "P") { mp.stage = "desk"; pushInbox(s, { kind: "mpdesk", mp: mp.id, from: "Staff secretary", title: `${mp.name} is on your desk`, body: `Riders: ${mp.riders.map((x) => byId[x.pid].name).join(", ") || "none, it's clean"}. Sign it, or veto it and own what happens next.`, choices: ["Sign it", "Veto it"] }); continue; }
+      signed = mpPresSigns(s, mp);
+      if (!signed) { const oh = mpVote(s, mp, "H", true), os = mpVote(s, mp, "S", true); mp.hist.push(`Vetoed. Override: House ${oh.yes}, Senate ${os.yes}`); signed = oh.yes >= 290 && os.yes >= 67; presPost(s, `VETO: the President rejects ${mp.name.toLowerCase()} over ${mp.riders.filter((x) => (PRESIDENT_STANCE[x.pid] ?? 0) <= -0.6).map((x) => byId[x.pid].name).join(" and ")}.`); mp.blame = signed ? null : "pres"; }
+    } else mp.blame = h.yes < 218 ? "house" : mp.riders.some((x) => x.p === "D") ? "dems" : "gop";
+    mpSettle(s, mp, passed && signed);
+  }
+}
+function mpSettle(s, mp, ok) {
+  if (ok) { mp.stage = "law"; for (const x of mp.riders) if (!s.laws.includes(x.pid)) s.laws.push(x.pid);
+    pushNews(s, `${mp.name} becomes law${mp.riders.length ? `, carrying ${mp.riders.map((x) => byId[x.pid].name).join(" and ")}` : ", clean"}.${mp.lapsed ? ` The ${mp.kind === "funding" ? "shutdown" : "default crisis"} ends after ${mp.lapsed} week${mp.lapsed > 1 ? "s" : ""}.` : ""}`, "good"); return; }
+  mp.stage = "lapsed"; mp.lapsed++;
+  const blame = mp.blame === "pres" ? 0.25 : mp.blame === "gop" ? 0.15 : -0.15;      // + = voters blame Republicans
+  s.mood = clamp(s.mood + blame, -6, 9); s.presApproval = clamp(s.presApproval - (mp.kind === "debt" ? 2 : 0.5) - (mp.blame === "pres" ? 0.4 : 0), 20, 70);
+  s.approval = clamp(s.approval - (mp.kind === "debt" ? 1.5 : 0.3), 5, 95);
+  if (mp.kind === "debt" && mp.lapsed === 1) { s.econ.growth -= 1.2; s.econ.jobs += 0.4; }
+  if (mp.riders.length && mp.lapsed > 1) { const x = mp.riders.pop(); pushNews(s, `Under pressure, ${mp.name.toLowerCase()} loses ${byId[x.pid].name}.`); }
+  mp.deadline = s.week + 2;
+  pushNews(s, mp.kind === "funding" ? `The government shuts down. Week ${mp.lapsed}. ${mp.blame === "pres" ? "Polls blame the President." : mp.blame === "dems" ? "Republicans blame Democrats' riders." : "Both parties point fingers."}` : `The Treasury hits the debt limit. Markets fall; payments are delayed.`, "bad");
+}
+export function setMpVote(s0, id, v) { const s = structuredClone(s0); const mp = s.mp.find((x) => x.id === id); if (mp) mp.yourVote = v; return s; }
+export const AMEND_LABEL = { district: "District amendment", fix: "Bipartisan fix", pill: "Poison pill", sweet: "Sweetener" };
