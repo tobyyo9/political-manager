@@ -4,7 +4,7 @@ import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import RollCall from "./RollCall.jsx";
 import Scene from "./Scene.jsx";
-import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections } from "./Pages.jsx";
+import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
@@ -34,7 +34,9 @@ export default function App() {
   const [billOpen, setBillOpen] = useState(null);
   const [queue, setQueue] = useState([]);        // roll calls waiting to be shown
   const [toast, setToast] = useState(null);
-  const [scene, setScene] = useState(null);      // inbox message id of a scene being played
+  const [scene, setScene] = useState(null);
+  const [banner, setBanner] = useState(null);     // this week's top headline, sliding in
+  useEffect(() => { if (!banner || queue.length) return; const t = setTimeout(() => setBanner(null), 5200); return () => clearTimeout(t); }, [banner, queue.length]);      // inbox message id of a scene being played
   useEffect(() => { save({ s, real }); }, [s, real]);
   // Record a finished career in the hall of fame, once.
   useEffect(() => { if (!s?.over || !s.result) return; const e = S.fameEntry(s, real), f = loadFame(); const old = f.find((x) => x.id === e.id); if (old && old.upto >= e.upto) return; saveFame([e, ...f.filter((x) => x.id !== e.id)]); }, [s?.over, s?.week]);
@@ -42,7 +44,8 @@ export default function App() {
   if (!s) return <Start real={real} setReal={setReal} onStart={(st, r2) => { setS(st); if (r2 !== undefined) setReal(r2); setTab("inbox"); window.scrollTo(0, 0); }} />;
   const you = S.memberById[s.youId];
   const act = (name, arg) => { const n = S.doAction(s, name, arg); if (n.toast) setToast(n.toast); n.toast = null; setS(n); };
-  const next = () => { const n = S.advance(s); setQueue(n.events || []); n.events = []; setS(n); window.scrollTo(0, 0); };
+  const next = () => { const n = S.advance(s); setQueue(n.events || []); n.events = []; setS(n); window.scrollTo(0, 0);
+    const top = (n.wire || []).find((a) => a.week >= s.week); if (top) { setBanner({ ...top, k: n.week }); } };
   const open = s.inbox.filter((m) => !m.done).length;
   const reply = (id, i) => { const n = S.answer(s, id, i); if (n.toast) setToast(n.toast); n.toast = null; setS(n); };
   const openBoard = (id) => { setS((cur) => S.flag(cur, "board")); setBillOpen(id); };
@@ -67,15 +70,15 @@ export default function App() {
           <Meter label={s.term > 1 ? `${S.ord(119 + s.term)} Congress` : "Week"} value={`${Math.min(s.week - (s.termStart || 0) + 1, S.WEEKS)} / ${S.WEEKS}`} sub={S.fmtDate(s.week)} />
           <Meter label="Hours left" value={s.hours} sub={`of ${S.HOURS}`} />
           {role === "P" ? <>
-            <Meter label="Approval" value={`${Math.round(s.presApproval)}%`} tone={s.presApproval >= 42 ? "ok" : "no"} />
-            <Meter label="Republicans approve" value={`${Math.round(s.baseApproval)}%`} tone={s.baseApproval >= 80 ? "ok" : "no"} />
-            <Meter label="Political capital" value={Math.round(s.clout)} />
-            <Meter label="Scandal heat" value={`${Math.round(s.presHeat * 100)}`} tone={s.presHeat < 0.6 ? "ok" : "no"} />
+            <Meter label="Approval" num={s.presApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.presApproval >= 42 ? "ok" : "no"} />
+            <Meter label="Republicans approve" num={s.baseApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.baseApproval >= 80 ? "ok" : "no"} />
+            <Meter label="Political capital" num={s.clout} fmt={(v) => Math.round(v)} />
+            <Meter label="Scandal heat" num={s.presHeat * 100} fmt={(v) => Math.round(v)} invert tone={s.presHeat < 0.6 ? "ok" : "no"} />
           </> : <>
-          <Meter label="War chest" value={money(s.cash)} />
-          <Meter label={role === "S" ? "Approval in your state" : "Approval at home"} value={`${Math.round(s.approval)}%`} tone={s.approval >= 50 ? "ok" : "no"} />
-          <Meter label="Your base" value={`${Math.round(s.baseApproval)}%`} tone={s.baseApproval >= 60 ? "ok" : "no"} />
-          <Meter label="Clout" value={Math.round(s.clout)} />
+          <Meter label="War chest" num={s.cash} fmt={money} />
+          <Meter label={role === "S" ? "Approval in your state" : "Approval at home"} num={s.approval} fmt={(v) => `${Math.round(v)}%`} tone={s.approval >= 50 ? "ok" : "no"} />
+          <Meter label="Your base" num={s.baseApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.baseApproval >= 60 ? "ok" : "no"} />
+          <Meter label="Clout" num={s.clout} fmt={(v) => Math.round(v)} />
           </>}
         </div>
         {!s.over && <button type="button" className="cold-go pm-next" onClick={next}>End the week →</button>}
@@ -109,14 +112,35 @@ export default function App() {
       {card && <MemberCard id={card} {...ctx} onClose={() => setCard(null)} />}
       {billOpen && <BillBoard id={billOpen} {...ctx} onClose={() => setBillOpen(null)} />}
       {toast && <Toast t={toast} onClose={() => setToast(null)} />}
+      {banner && !queue.length && !sceneMsg && <button type="button" key={banner.k} className="pm-banner" onClick={() => { setBanner(null); setTab("news"); }}><span className="pm-banner-tag">{banner.outlet}</span><strong>{realize(banner.headline, [banner.who, banner.target].filter(Boolean), real)}</strong><small>Read the papers →</small></button>}
       {sceneMsg && !sceneMsg.done && <Scene s={s} msg={sceneMsg} real={real} onFinish={finishScene} onClose={() => setScene(null)} />}
       {queue.length > 0 && <RollCall ev={queue[0]} s={s} real={real} onClose={() => setQueue((q) => q.slice(1))} />}
     </div>
   );
 }
 
-function Meter({ label, value, sub, tone }) {
-  return <div className={`pm-meter ${tone || ""}`}><span>{label}</span><b>{value}</b>{sub && <small>{sub}</small>}</div>;
+const calm = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
+// A number that counts to its new value and flashes green or red when it moves.
+function useCount(num) {
+  const [shown, setShown] = useState(num), [dir, setDir] = useState("");
+  const prev = React.useRef(num);
+  useEffect(() => {
+    if (num === undefined || num === prev.current) return;
+    const from = prev.current, to = num; prev.current = num;
+    if (Math.abs(to - from) < 0.5) { setShown(to); return; }
+    setDir(to > from ? "up" : "down");
+    if (calm()) { setShown(to); const t = setTimeout(() => setDir(""), 1200); return () => clearTimeout(t); }
+    let raf; const t0 = performance.now();
+    const tick = (t) => { const k = Math.min(1, (t - t0) / 700), e = 1 - Math.pow(1 - k, 3); setShown(from + (to - from) * e); if (k < 1) raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick); const t2 = setTimeout(() => setDir(""), 1400);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t2); };
+  }, [num]);
+  return [shown, dir];
+}
+function Meter({ label, value, sub, tone, num, fmt, invert }) {
+  const [shown, dir] = useCount(num);
+  const flash = dir && (invert ? (dir === "up" ? "down" : "up") : dir);
+  return <div className={`pm-meter ${tone || ""} ${flash ? "flash-" + flash : ""}`}><span>{label}</span><b>{num !== undefined ? fmt(shown) : value}</b>{sub && <small>{sub}</small>}{flash && <i className="pm-meter-arrow">{dir === "up" ? "▲" : "▼"}</i>}</div>;
 }
 function Toast({ t, onClose }) {
   return (
@@ -744,6 +768,7 @@ function End({ s, you, real, setS }) {
         <span className="rc-stamp">{r.kind === "primary" ? "DEFEATED IN THE PRIMARY" : won ? "REELECTED" : "DEFEATED"}</span>
         <p>{r.kind === "primary" ? `Your own party's voters chose someone else. You took ${r.share}%.` : `${S.nameOf(you, real)} ${won ? "wins" : "loses"} ${you.seat} by ${Math.abs(r.margin)} points. The national mood ran ${r.env >= 0 ? "with" : "against"} your party by ${Math.abs(r.env)}. Democrats will hold ${r.houseD} House seats.`}</p>
       </div>
+      {s.night && <ElectionNight night={s.night} real={real} />}
       <div className="grades">
         <div className="grade-overall"><span>Career rank</span><b>#{me.r_score}</b></div>
         <div className="grade"><b>{yours.filter((b) => b.stage === "law").length}/{yours.length}</b><span>Your bills that became law</span></div>
@@ -769,6 +794,7 @@ function EndOther({ s, you, real, setS, role }) {
     <section className={`desk pm-end ${r.won ? "won" : "lost"}`}>
       <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? `January 3, ${S.electionYear(s) + 1}` : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>
       <div className="desk-verdict"><span className="rc-stamp">{stamp}</span><p>{line}</p></div>
+      {s.night && <ElectionNight night={s.night} real={real} />}
       <div className="grades">
         {role === "P" ? <>
           <div className="grade"><b>{s.signed || 0}</b><span>Bills you signed</span></div>

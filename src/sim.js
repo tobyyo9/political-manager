@@ -662,6 +662,7 @@ function primary(s, r) {
   else pushInbox(s, { kind: "staff", from: "Your campaign manager", title: challenged ? `You won the primary with ${s.primary.share}%` : "No primary challenger filed", body: "Now the general election. Approval at home, the national mood and your war chest decide it.", done: true });
 }
 function general(s, r) {
+  electionNight(s);
   const you = memberById[s.youId];
   const env = you.p === "D" ? s.mood : -s.mood;                       // national swing toward your party, in points
   const lean2 = (you.own - 50) * 2;                                   // the seat's 2024 margin for your party
@@ -1171,7 +1172,7 @@ function presWeek(s, r) {
   if (s.week % 4 === 0) pushInbox(s, { kind: "staff", from: "Your pollster", title: `You're at ${Math.round(s.presApproval)}%`, body: `Republicans: ${Math.round(s.baseApproval)}% approve. ${s.presApproval < 38 ? "Below 38 your party starts running away from you." : s.presApproval > 45 ? "Members want you in their districts again." : "Stable, not strong."}`, done: true });
 }
 function presVerdict(s, r) {
-  const map = presMap(s, true); s.lastPres = map;
+  electionNight(s); const map = s.night.pres;
   const won = map.winner === PP, margin = map.nat * (PP === "D" ? 1 : -1);
   s.over = true;
   s.result = { kind: "pres", won, margin: Math.round(margin * 10) / 10, ev: map.ev, approval: Math.round(s.presApproval), laws: s.laws.length, vetoes: s.vetoes, eos: (s.eos || []).filter((e) => e.alive).length, legacy: s.legacy };
@@ -1179,6 +1180,7 @@ function presVerdict(s, r) {
 }
 // Senators who aren't on the 2028 ballot: a verdict on the term instead of an election.
 function termReview(s, r) {
+  electionNight(s);
   const score = s.clout * 0.4 + s.legis * 0.6 + s.profile * 0.3 + (s.baseApproval - 50) * 0.5 + s.integrity * 0.2 + (r() - 0.5) * 6;
   s.over = true;
   s.result = { kind: "term", won: true, score: Math.round(score), next: memberById[s.youId].cls === 1 ? 2030 : 2032 };
@@ -1408,7 +1410,7 @@ function electWorld(s) {
   // The White House, every four years.
   let presMsg = "";
   if (s.term % 2 === 1) {
-    const map = presMap(s, true); s.lastPres = map;
+    const map = s.lastPres && s.lastPres.year === year ? s.lastPres : presMap(s, true); s.lastPres = map;
     const winner = map.winner;
     presMsg = `${winner === "D" ? "A Democrat" : "A Republican"} wins the White House, ${Math.max(map.ev.D, map.ev.R)} electoral votes to ${Math.min(map.ev.D, map.ev.R)}${winner === PP ? ", keeping it for the President's party" : ""}.`;
     if (winner !== PP) { PP = winner; s.presApproval = 52; } else s.presApproval = 48;
@@ -1479,6 +1481,7 @@ function leaderRace(s, choice, commCode) {
 }
 // A House member running statewide for the Senate.
 function runHigher(s, r) {
+  electionNight(s);
   const you = memberById[s.youId], seat = memberById[s.runFor];
   const env = you.p === "D" ? s.mood : -s.mood, lean = (you.p === "D" ? seat.dem : 100 - seat.dem) - 50;
   const inc = seat.p === you.p ? 0 : 4;
@@ -1651,3 +1654,12 @@ function voteReactions(s, ev, r) {
     headline: v === pass ? `${titleOf(m)} ${nameOf(m)} ${pass ? "cheers" : "celebrates the defeat of"} ${billRef(byId[ev.pid].name)}` : `${titleOf(m)} ${nameOf(m)} ${pass ? "fumes as Congress passes" : "fumes as Congress sinks"} ${billRef(byId[ev.pid].name)}`, quote: react(voiceOf(m), v === pass, r) });
 }
 export const wireAbout = (s, id) => (s.wire || []).filter((a) => a.who === id || a.target === id).slice(0, 4);
+
+// Election night: the presidential map (every four years), the Senate races and the House, as they'll be reported.
+function houseCount(s) { let d = 0; for (const m of HOUSE) { if (m.id === s.youId) { d += m.p === "D" ? 1 : 0; continue; } const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`); if ((m.dem - 50) * 2 + s.mood * 0.9 + inc * 4 + n * 5 > 0) d++; } return d; }
+function electionNight(s) {
+  const year = electionYear(s), pres = s.term % 2 === 1 ? (s.lastPres && s.lastPres.year === year ? s.lastPres : presMap(s, true)) : null;
+  if (pres) s.lastPres = pres;
+  const sen = senateMap(s, true), keep = SENATE.filter((m) => sen.states[m.st]?.who !== m.id && m.p === "D").length;
+  s.night = { year, pres, senate: sen, senD: keep + Object.values(sen.states).filter((x) => x.w === "D").length, houseD: houseCount(s) };
+}

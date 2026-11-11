@@ -47,6 +47,7 @@ export default function Scene({ s, msg, real, onFinish, onClose }) {
           </div>
           <div className="sc-lower"><b>{speaker ? speaker.name : scene.lower[0]}</b><span>{speaker ? speaker.title : scene.lower[1]}</span></div>
         </div>
+        {res && <div className="pm-react" key={picks.length}>{[["Your base", res.choice.aud.base], ["Swing voters", res.choice.aud.swing], ["Buzz", res.choice.aud.profile]].filter(([, v]) => v).map(([l, v], i) => { const good = res.ok ? v > 0 : v < 0; return <i key={l} className={good ? "up" : "down"} style={{ animationDelay: `${i * 0.18}s` }}>{l} {good ? "👍" : "👎"}</i>; })}<i className={res.ok ? "up" : "down"} style={{ animationDelay: "0.5s" }}>{res.ok ? "The room is with you" : "Groans in the room"}</i></div>}
         <div className="sc-ticker"><span>{ticker || "Washington News Channel"}</span></div>
         <div className="sc-panel">
           {done ? (

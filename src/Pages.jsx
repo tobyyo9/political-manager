@@ -326,3 +326,38 @@ export function Elections({ s }) {
   );
 }
 const SENATE_SAFE = (s, sen) => S.SENATE.filter((m) => m.p === "D" && sen.states[m.st]?.who !== m.id).length + Object.values(sen.states).filter((x) => x.pD >= 0.5).length;
+
+// ── Election night: the map fills in, east to west, as the networks call states ──
+export function ElectionNight({ night, real }) {
+  const order = useMemo(() => {
+    const src = night.pres ? night.pres.states : night.senate.states;
+    return Object.keys(src).filter((st) => USMAP[st]).sort((a, b) => (USMAP[b].c[0] - USMAP[a].c[0]) || (src[a].m - src[b].m));
+  }, [night]);
+  const calm = (() => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } })();
+  const [n, setN] = useState(calm ? order.length : 0), [run, setRun] = useState(0);
+  React.useEffect(() => { if (calm) return; setN(0); let i = 0; const t = setInterval(() => { i++; setN(i); if (i >= order.length) clearInterval(t); }, 95); return () => clearInterval(t); }, [order, run]);
+  const called = new Set(order.slice(0, n));
+  const src = night.pres ? night.pres.states : night.senate.states;
+  let D = 0, R = 0; for (const st of called) { const x = src[st]; if (night.pres) (x.w === "D" ? (D += x.ev) : (R += x.ev)); else (x.w === "D" ? D++ : R++); }
+  const winner = night.pres ? (D >= 270 ? "D" : R >= 270 ? "R" : null) : n >= order.length ? (night.senD >= 51 ? "D" : "R") : null;
+  const latest = order[n - 1];
+  return (
+    <section className="pm-elx">
+      <div className="pm-elx-head">
+        <span className="rc-live"><i className="live-dot" /> Election night {night.year}</span>
+        <strong>{night.pres ? "The race for the White House" : "The Senate races"}</strong>
+        {latest && n < order.length && <span className="pm-elx-call">Projected: {latest} goes {src[latest].w === "D" ? "Democratic" : "Republican"}</span>}
+        <button type="button" className="linkbtn" onClick={() => setRun((x) => x + 1)}>Replay</button>
+      </div>
+      <div className="pm-elx-tally">
+        <span className="dem"><b>{D}</b> {night.pres ? "Democrats" : "D wins"}</span>
+        <div className="pm-ev-track">{night.pres ? <><i className="d" style={{ width: `${(D / 538) * 100}%` }} /><i className="r" style={{ width: `${(R / 538) * 100}%` }} /><em style={{ left: "50.2%" }} /></> : <><i className="d" style={{ width: `${(D / order.length) * 100}%` }} /><i className="r" style={{ width: `${(R / order.length) * 100}%` }} /></>}</div>
+        <span className="rep">{night.pres ? "Republicans" : "R wins"} <b>{R}</b></span>
+      </div>
+      <svg viewBox="0 0 975 610" className="pm-map">
+        {Object.entries(USMAP).map(([st, g]) => { const x = src[st], on = called.has(st); return <path key={st} d={g.d} fill={!x ? "#2a3550" : on ? (x.w === "D" ? (Math.abs(x.m) > 10 ? "#1b3f8f" : "#3d7bd9") : (Math.abs(x.m) > 10 ? "#8f231b" : "#d4594d")) : "#55627d"} stroke="#0b1220" strokeWidth="1" className={on ? "called" : ""} />; })}
+      </svg>
+      {winner && <div className="pm-elx-win"><span className="rc-stamp">{night.pres ? `${winner === "D" ? "DEMOCRATS" : "REPUBLICANS"} WIN THE WHITE HOUSE` : `${winner === "D" ? "DEMOCRATS" : "REPUBLICANS"} HOLD THE SENATE`}</span><small>{night.pres ? `${Math.max(night.pres.ev.D, night.pres.ev.R)} electoral votes. ` : ""}Senate: {night.senD} Democrats · House: {night.houseD} Democrats</small></div>}
+    </section>
+  );
+}

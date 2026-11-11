@@ -342,3 +342,44 @@ button.danger{color:#c8443a;border-color:#e8a093}
 .pm-inpapers{display:flex;flex-direction:column;gap:8px;margin:8px 0}
 @media(max-width:720px){.pm-papers{grid-template-columns:1fr}}
 .pm-more{margin-top:10px}
+/* Animation: weekly numbers, headlines, roll calls */
+.pm-meter{position:relative;transition:background .4s,box-shadow .4s}
+.pm-meter.flash-up{box-shadow:0 0 0 2px #2fbf71 inset;background:#12351f}
+.pm-meter.flash-down{box-shadow:0 0 0 2px #e0574a inset;background:#3a1717}
+.pm-meter-arrow{position:absolute;top:6px;right:8px;font-style:normal;font-size:10px;animation:arrowrise 1.2s ease-out both}
+.flash-up .pm-meter-arrow{color:#2fbf71}.flash-down .pm-meter-arrow{color:#ff6b5c}
+@keyframes arrowrise{from{opacity:0;transform:translateY(6px)}30%{opacity:1}to{opacity:0;transform:translateY(-8px)}}
+.pm-banner{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:12px;max-width:min(760px,calc(100vw - 24px));background:#fbf8f1;color:#1b1b1b;border:0;border-top:4px double #1b1b1b;border-radius:8px;padding:10px 16px;box-shadow:0 12px 40px #0006;cursor:pointer;text-align:left;font-family:Georgia,serif;animation:bannerin 5.2s ease both}
+.pm-banner-tag{font-variant:small-caps;letter-spacing:.06em;font-weight:700;font-size:12px;white-space:nowrap;border-right:1px solid #cfc6b0;padding-right:10px}
+.pm-banner strong{font-size:15px;line-height:1.3}.pm-banner small{font-family:system-ui,sans-serif;font-size:11px;opacity:.6;white-space:nowrap}
+@keyframes bannerin{0%{opacity:0;transform:translate(-50%,-30px)}8%{opacity:1;transform:translate(-50%,0)}88%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-20px)}}
+.rc-seat.yea,.rc-seat.nay{transform-box:fill-box;transform-origin:center;animation:seatpop .35s ease-out both}
+@keyframes seatpop{from{transform:scale(2.2);opacity:.2}to{transform:scale(1);opacity:1}}
+.rc-chamber{position:relative}
+.rc-chamber.crossed .rc-bar i{background:#2fbf71;box-shadow:0 0 12px #2fbf71}
+.rc-crossed{position:absolute;right:10px;top:8px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#0b1220;background:#2fbf71;padding:3px 8px;border-radius:999px;animation:crossed .6s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes crossed{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.rc-desk-face .portrait{border-radius:10px}
+@media(max-width:560px){.pm-banner small{display:none}.pm-banner-tag{display:none}}
+@media (prefers-reduced-motion: reduce){.pm-banner,.rc-seat.yea,.rc-seat.nay,.rc-crossed,.pm-meter-arrow,.sc-ticker span,.pm-elx path,.pm-react i{animation:none!important}.pm-meter{transition:none}}
+.pm-elx{background:#0b1220;color:#eef2f8;border-radius:16px;padding:14px;margin:12px 0;display:flex;flex-direction:column;gap:10px}
+.pm-elx-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.pm-elx-head strong{font-size:1.05rem}
+.pm-elx-call{margin-left:auto;font-size:13px;color:#ffcf5a;animation:slidein .25s ease both}
+.pm-elx-tally{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.pm-elx-tally b{font-size:1.6rem}.pm-elx-tally .dem b{color:#7fa6ec}.pm-elx-tally .rep b{color:#f0a9a0}
+.pm-elx .pm-ev-track{margin:0;background:#26314a}
+.pm-elx .pm-ev-track i{transition:width .3s ease}
+.pm-elx path{transition:fill .35s ease}.pm-elx path.called{animation:called .5s ease}
+@keyframes called{from{filter:brightness(1.8)}to{filter:none}}
+.pm-elx-win{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.pm-elx-win .rc-stamp{color:#ffcf5a;font-size:clamp(1.2rem,4vw,2.2rem)}
+.pm-elx-win small{opacity:.8}
+.sc-person.talking .portrait{animation:talk .5s ease-in-out infinite alternate}
+@keyframes talk{from{transform:translateY(0) rotate(-.6deg)}to{transform:translateY(-3px) rotate(.6deg)}}
+.sc-set{position:relative}
+.pm-react{position:absolute;right:16px;top:64px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none;z-index:2}
+.sc-stage{position:relative}
+.pm-react i{font-style:normal;font-size:13px;font-weight:700;padding:5px 10px;border-radius:999px;animation:reactrise 2.6s ease-out both}
+.pm-react i.up{background:#12351fee;color:#9be27b}.pm-react i.down{background:#3a1717ee;color:#f0a9a0}
+@keyframes reactrise{0%{opacity:0;transform:translateY(16px)}12%{opacity:1;transform:translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateY(-18px)}}
+@media (prefers-reduced-motion: reduce){.sc-person.talking .portrait{animation:none}}

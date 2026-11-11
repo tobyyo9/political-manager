@@ -93,3 +93,10 @@ The Senate and the President as full characters, committees and amendments as pl
 - The papers: fictional outlets run 3 to 4 stories a week. The President riffs on whatever is on his mind (sharks, windmills, the ballroom, Greenland, gold) and hands out nicknames; members make news in their own voice; votes get reactions. Articles show in the News tab, the inbox and on member cards, with real names swapped in when that toggle is on.
 - All lines are invented for the game, written in character. Nothing is a real quote.
 - Well-known members have personalities set by hand from their public style (71 of them, in src/data/personas.json). Everyone else is assigned by formula, and real people never get the "bombastic" or "gaffe machine" labels; those are for fictional characters.
+
+## Eleventh pass: animation
+- Your numbers count up or down when they change and flash green or red; the week's top headline slides in after "End the week".
+- Roll calls: seats pop in as members vote, and the tally lights up when it crosses the number needed. The President's desk shows his portrait.
+- Election night: on the end screen, the map fills in east to west as states are called, the electoral vote bars climb, and a winner is stamped at 270 (in midterm years, the Senate races). Replay button.
+- Scenes: whoever is talking bobs, and the room's reaction rises after each answer.
+- Everything respects the reduce-motion setting.

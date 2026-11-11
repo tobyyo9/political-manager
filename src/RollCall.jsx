@@ -1,5 +1,6 @@
 // The live roll call: every seat is a real member casting their own vote.
 import * as S from "./sim.js";
+import Portrait from "./Portrait.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const MS = 2400, PAUSE = 800;
@@ -39,9 +40,10 @@ function Chamber({ st, run, youId }) {
   const shown = Math.floor(k * list.length);
   let yea = 0, nay = 0;
   list.forEach((m, i) => { if (rank[i] < shown) (st.t.votes[m.id] ? yea++ : nay++); });
-  const done = k >= 1, ok = st.t.yes >= st.need;
+  const done = k >= 1, ok = st.t.yes >= st.need, crossed = yea >= st.need;
   return (
-    <div className={`rc-chamber ${done ? (ok ? "ok" : "no") : ""}`}>
+    <div className={`rc-chamber ${done ? (ok ? "ok" : "no") : ""} ${crossed && !done ? "crossed" : ""}`}>
+      {crossed && <span className="rc-crossed" key="x">{st.need} reached</span>}
       <div className="rc-head"><span className="rc-label">{st.label}</span><span className="rc-need">{st.need} needed</span></div>
       <svg viewBox="-1.08 -1.06 2.16 1.12" className="rc-svg">
         {seats.map((p, i) => { const m = list[i], on = rank[i] < shown; return <circle key={m.id} cx={p.x} cy={-p.y} r={dotR} className={`rc-seat ${m.p === "D" ? "d" : "r"} ${on ? (st.t.votes[m.id] ? "yea" : "nay") : ""} ${m.id === youId ? "you" : ""}`} />; })}
@@ -75,7 +77,7 @@ export default function RollCall({ ev, s, onClose }) {
         <div className="rc-chambers">
           {list.map((st, idx) => st.type !== "ch" ? null : idx > i ? <div key={idx} className="rc-chamber pending"><div className="rc-head"><span className="rc-label">{st.label}</span><span className="rc-need">waiting</span></div></div> : <Chamber key={idx} st={st} run={idx === i} youId={s.youId} />)}
         </div>
-        {desk && list.indexOf(desk) <= i && <div className={`rc-desk ${desk.signs ? "ok" : "no"}`}><span className="avatar rep">DT</span><span><strong>The President's desk</strong><small>{list.indexOf(desk) === i ? "He's reading it…" : desk.signs ? "He signs it." : "He vetoes it."}</small></span></div>}
+        {desk && list.indexOf(desk) <= i && <div className={`rc-desk ${desk.signs ? "ok" : "no"}`}><span className="rc-desk-face"><Portrait id={S.PRES_M.id} g={S.PRES_M.g} born={S.PRES_M.born} p={S.PRES_M.p} size={44} fix={S.PRES_M.look} /></span><span><strong>The President's desk</strong><small>{list.indexOf(desk) === i ? "He's reading it…" : desk.signs ? "He signs it." : "He vetoes it."}</small></span></div>}
         {end && <div className={`rc-verdict ${verdict.tone}`}><span className="rc-stamp">{verdict.stamp}</span><p>{verdict.line}</p></div>}
         <div className="rc-actions">
           {!end && <button type="button" className="ghost" onClick={() => setI(list.length - 1)}>Skip to result</button>}
