@@ -2551,7 +2551,7 @@ const FORMER = [
   ["Bill", "Clinton", "D", 1946, "M", 0, "Former President", { influence: 50, legis: 75, pop: 45, profile: 78, integrity: 40, cash: 400 }],
   ["Kamala", "Harris", "D", 1964, "F", 3, "Former Vice President", { influence: 55, legis: 30, pop: 42, profile: 88, integrity: 66, cash: 900 }],
   ["Mike", "Pence", "R", 1959, "M", 0, "Former Vice President", { influence: 22, legis: 30, pop: 33, profile: 55, integrity: 70, cash: 50 }],
-  ["Hillary", "Clinton", "D", 1947, "F", 0, "Former Secretary of State", { influence: 40, legis: 40, pop: 40, profile: 78, integrity: 50, cash: 100 }],
+  ["Hillary", "Clinton", "D", 1947, "F", 0, "Former Secretary of State", { influence: 50, legis: 50, pop: 41, profile: 88, integrity: 50, cash: 300 }],
   ["Nancy", "Pelosi", "D", 1940, "F", 0, "Speaker Emerita, retired", { influence: 70, legis: 92, pop: 36, profile: 80, integrity: 50, cash: 400 }],
   ["Mitch", "McConnell", "R", 1942, "M", 0, "Former Senate Leader, retired", { influence: 45, legis: 80, pop: 24, profile: 55, integrity: 45, cash: 200 }],
   ["Mitt", "Romney", "R", 1947, "M", 0, "Former Senator", { influence: 25, legis: 45, pop: 42, profile: 50, integrity: 78, cash: 100 }],
@@ -2562,31 +2562,42 @@ const FORMER = [
   ["JB", "Pritzker", "D", 1965, "M", 0, "Governor of Illinois", { influence: 55, legis: 45, pop: 50, profile: 65, integrity: 60, cash: 3000 }],
   ["Gretchen", "Whitmer", "D", 1971, "F", 0, "Governor of Michigan", { influence: 50, legis: 40, pop: 52, profile: 65, integrity: 68, cash: 500 }],
   ["Ron", "DeSantis", "R", 1978, "M", 0, "Governor of Florida", { influence: 55, legis: 50, pop: 47, profile: 75, integrity: 55, cash: 900 }],
+  ["Zohran", "Mamdani", "D", 1991, "M", 3, "Mayor of New York City", { influence: 55, legis: 15, pop: 48, profile: 95, integrity: 72, cash: 300 }],
+  ["Pete", "Buttigieg", "D", 1982, "M", 0, "Former Secretary of Transportation", { influence: 45, legis: 25, pop: 47, profile: 85, integrity: 74, cash: 400 }],
   ["Glenn", "Youngkin", "R", 1966, "M", 0, "Former Governor of Virginia", { influence: 40, legis: 30, pop: 48, profile: 55, integrity: 65, cash: 800 }],
 ];
+// National profile for members whose fame outruns their seniority (0-100), and the people already running for 2028.
+const FAME = { "Ocasio-Cortez NY": 96, "Sanders VT": 95, "Warren MA": 86, "Cruz TX": 88, "Omar MN": 78, "Jordan OH": 80, "Hawley MO": 72, "Fetterman PA": 78, "Booker NJ": 78, "Paul KY": 76, "Schiff CA": 76,
+  "Raskin MD": 70, "Murphy CT": 72, "Kennedy LA": 70, "Lee UT": 66, "Murkowski AK": 66, "Tlaib MI": 66, "Khanna CA": 68, "Talarico TX": 72, "Boebert CO": 70, "Luna FL": 62, "Moskowitz FL": 56, "Slotkin MI": 62, "Gallego AZ": 62,
+  "Kelly AZ": 70, "Ossoff GA": 68, "Warnock GA": 66, "Crenshaw TX": 60, "Brown OH": 72, "Cotton AR": 64, "Scott SC": 66, "Johnson LA": 80, "Jeffries NY": 88, "Schumer NY": 90, "Thune SD": 72, "Pressley MA": 60, "Frost FL": 56, "Waters CA": 66 };
+const CONTENDER = new Set(["Vance", "Rubio", "Newsom", "Shapiro", "Pritzker", "Whitmer", "DeSantis", "Ocasio-Cortez", "Harris", "Buttigieg", "Booker", "Kelly", "Ossoff", "Cruz", "Hawley", "Youngkin"]);
 export const RANK_GROUPS = [["all", "Everyone"], ["H", "House"], ["S", "Senate"], ["X", "White House and Cabinet"], ["J", "Supreme Court"], ["F", "Former officials and governors"]];
 export function allRankings(s) {
   const base = rankings(s), byId = {}; for (const r of base) byId[r.m.id] = r;
   const sponsored = {}; for (const b of s.bills) if (b.stage === "law") sponsored[b.sponsor] = (sponsored[b.sponsor] || 0) + 1;
   // The office you hold or held is most of a career's weight: a presidency outranks any senator's resume.
-  const PRESTIGE = (t) => !t ? 0 : /^President$/.test(t) ? 170 : /Former President/.test(t) ? 160 : /Chief Justice/.test(t) ? 100 : /Former Vice President/.test(t) ? 70 : /Vice President/.test(t) ? 160 : /Speaker Emerita/.test(t) ? 60 : /^Speaker/.test(t) ? 125 : /Senate Majority Leader/.test(t) ? 85 : /Senate Minority Leader|Former Senate Leader/.test(t) ? 65 : /House (Majority|Minority) Leader|Republican Leader|Democratic Leader/.test(t) ? 60 : /Associate Justice/.test(t) ? 60 : /Secretary of State/.test(t) ? 50 : /Governor of (California|Florida|Pennsylvania|Illinois|Michigan)/.test(t) ? 40 : /Secretary|Attorney General|Chief of Staff/.test(t) ? 30 : /Governor/.test(t) ? 30 : /Whip/.test(t) ? 35 : /Director|Administrator|Ambassador|Representative/.test(t) ? 15 : /Pro Tempore/.test(t) ? 10 : 0;
-  const row = (m, me, x, title) => ({ m, me, ...x, prestige: PRESTIGE(title || m.lead?.[0]), score: Math.round(0.7 * (x.influence * 1.2 + x.legis * 1.5 + (x.pop - 40) * 0.8 + Math.min(40, x.cash / 60) + x.integrity * 0.3 + x.profile * 0.5) + PRESTIGE(title || m.lead?.[0])) });
+  const PRESTIGE = (t) => !t ? 0 : /^President$/.test(t) ? 160 : /Former President/.test(t) ? 160 : /Chief Justice/.test(t) ? 100 : /Former Vice President/.test(t) ? 70 : /Vice President/.test(t) ? 160 : /Speaker Emerita/.test(t) ? 60 : /^Speaker/.test(t) ? 125 : /Senate Majority Leader/.test(t) ? 85 : /Senate Minority Leader|Former Senate Leader/.test(t) ? 65 : /House (Majority|Minority) Leader|Republican Leader|Democratic Leader/.test(t) ? 60 : /Associate Justice/.test(t) ? 60 : /Secretary of State/.test(t) ? 50 : /Governor of (California|Florida|Pennsylvania|Illinois|Michigan)/.test(t) ? 40 : /Mayor of New York/.test(t) ? 30 : /Secretary|Attorney General|Chief of Staff/.test(t) ? 30 : /Governor/.test(t) ? 30 : /Whip/.test(t) ? 35 : /Director|Administrator|Ambassador|Representative/.test(t) ? 15 : /Pro Tempore/.test(t) ? 10 : 0;
+  const row = (m, me, x, title) => ({ m, me, ...x, prestige: PRESTIGE(title || m.lead?.[0]), score: Math.round(0.7 * (x.influence * 1.2 + x.legis * 1.1 + (x.pop - 40) * 0.8 + Math.min(40, x.cash / 60) + x.integrity * 0.3 + x.profile * 1.1) + PRESTIGE(title || m.lead?.[0]) + (CONTENDER.has(m.last) && !me ? 20 : 0) + Math.max(0, x.profile - 60) * 0.7 + Math.max(0, x.profile - 80) * 1.5) });
   const rows = [];
-  // Every member of both chambers, scored the same way the chamber ranking does.
+  // Every member of both chambers. Seniority counts, but national profile counts more.
   for (const m of MEMBERS) {
-    if (byId[m.id]) { const b = byId[m.id], pr = PRESTIGE(m.lead?.[0]) + ((m.comm || []).some((c) => c.role === "Chair") ? 8 : 0); rows.push({ ...b, prestige: pr, score: Math.round(b.score * 0.7 + pr), grp: m.ch }); continue; }
-    const me = m.id === s.youId;
-    rows.push({ ...row(m, me, { influence: me ? s.clout : m.base.influence + (sponsored[m.id] || 0) * 6, legis: me ? s.legis : (sponsored[m.id] || 0) * 12 + Math.round(m.seniority * 0.4 + (m.chair ? 6 : 0)), pop: me ? s.approval : Math.round(50 + (m.own - 50) * 0.5 + noise(m.id + "pop") * 6), cash: me ? s.cash : m.base.cash, integrity: me ? s.integrity : Math.round(45 + m.t.ethics * 50), profile: me ? s.profile : Math.round(5 + m.seniority * 1.2 + (m.lead?.length ? 50 : 0) + m.t.ego * 20) }), grp: m.ch });
-    rows[rows.length - 1].score += (m.comm || []).some((c) => c.role === "Chair") ? 8 : 0;
+    const me = m.id === s.youId, chair = (m.comm || []).some((c) => c.role === "Chair"), fame = FAME[`${m.last} ${m.st}`];
+    const x = { influence: me ? s.clout : Math.round(10 + m.seniority * 0.8 + (m.lead?.length ? 40 : 0) + (chair ? 18 : 0) + m.t.ambition * 10 + (sponsored[m.id] || 0) * 6 + (fame ? fame * 0.25 : 0)),
+      legis: me ? s.legis : (sponsored[m.id] || 0) * 12 + Math.round(m.seniority * 0.3 + (chair ? 6 : 0)), pop: me ? s.approval : Math.round(50 + (m.own - 50) * 0.5 + noise(m.id + "pop") * 6), cash: me ? s.cash : m.base.cash,
+      integrity: me ? s.integrity : Math.round(45 + m.t.ethics * 50), profile: me ? s.profile : fame ?? Math.round(5 + m.seniority * 0.4 + (m.lead?.length ? 40 : 0) + m.t.ego * 15) };
+    const r0 = row(m, me, x); r0.score += chair ? 6 : 0; rows.push({ ...r0, grp: m.ch });
   }
   // The President, the Vice President and the Cabinet.
   const P = PRES_M, meP = roleOf(s) === "P";
   rows.push({ ...row(P, meP, { influence: 100, legis: Math.round(55 + (s.laws || []).length * 2), pop: Math.round(s.presApproval), cash: 3000, integrity: Math.round(70 - s.presHeat * 50), profile: 100 }, "President"), grp: "X", title: "President" });
+  const CABW = { vp: [72, 79], cos: [85, 55], state: [85, 85], treasury: [78, 65], defense: [68, 82], ag: [65, 60], hhs: [60, 88], dhs: [62, 70], fbi: [55, 72], omb: [62, 45], commerce: [55, 65], un: [45, 55] };
   for (const c of s.cab || []) { if (c.vacant) continue; const m = { id: "cab-" + c.id, first: c.first, last: c.last, sf: c.sf, sl: c.sl, p: PP, born: c.born, g: /Susie|Brooke|Linda|Pam|Jeanine|Kari|Tulsi|Kristi|Lori/.test(c.first) ? "F" : "M", look: c.tone !== undefined ? { skin: c.tone } : undefined, seat: c.short };
-    rows.push({ ...row(m, false, { influence: Math.round(c.id === "vp" ? 75 : c.id === "cos" ? 70 : 35 + c.loyal * 25), legis: 10, pop: Math.round(c.id === "vp" ? 40 : 35 + (1 - c.heat) * 12), cash: c.id === "vp" ? 500 : 0, integrity: Math.round(80 - c.heat * 60), profile: Math.round(30 + c.heat * 30 + (c.id === "vp" ? 40 : 0)) }, c.post), grp: "X", title: c.post }); }
+    const [inf, prof] = CABW[c.id] || [Math.round(35 + c.loyal * 20), Math.round(30 + c.heat * 30)];
+    rows.push({ ...row(m, false, { influence: inf, legis: 10, pop: Math.round(c.id === "vp" ? 41 : 36 + (1 - c.heat) * 10), cash: c.id === "vp" ? 500 : 0, integrity: Math.round(80 - c.heat * 60), profile: prof }, c.post), grp: "X", title: c.post }); }
   // The Court.
   for (const j of onBench(s)) { const m = { id: j.id, first: j.first, last: j.last, sf: j.sf, sl: j.sl, p: j.by, born: j.born, g: j.g, look: j.skin != null ? { skin: j.skin } : undefined, seat: "Supreme Court" };
-    const med = Math.abs(j.x - courtMedian(s)) < 0.12; rows.push({ ...row(m, false, { influence: med ? 85 : j.chief ? 80 : 60, legis: 20, pop: 45, cash: 0, integrity: 70, profile: j.chief ? 70 : 45 }, j.chief ? "Chief Justice" : "Associate Justice"), grp: "J", title: j.chief ? "Chief Justice" : "Associate Justice" }); }
+    const med = Math.abs(j.x - courtMedian(s)) < 0.12, yrs = gameYear(s) - j.since, lean = Math.abs(j.x);
+    rows.push({ ...row(m, false, { influence: Math.round((j.chief ? 82 : med ? 75 : 50) + Math.min(15, yrs * 0.5) + lean * 8), legis: 20 + Math.min(20, yrs), pop: 45, cash: 0, integrity: 70, profile: Math.round(40 + Math.min(20, yrs * 0.6) + lean * 15 + (j.chief ? 15 : 0)) }, j.chief ? "Chief Justice" : "Associate Justice"), grp: "J", title: j.chief ? "Chief Justice" : "Associate Justice" }); }
   // Former officials and governors: they still move money, voters and members.
   for (const [first, last, p, born, g, skin, title, st] of FORMER) { const [sf, sl] = swapPair(first.split(" ")[0], last); const m = { id: "fmr-" + last + first, first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, born, g, look: { skin }, seat: title };
     rows.push({ ...row(m, false, st, title), grp: "F", title }); }
