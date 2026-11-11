@@ -641,8 +641,8 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
           )}
           {(() => { const B = S.bonds(m); return (
             <div className="pm-bonds">
-              <div><h4 className="pm-subh">Close to</h4>{B.friends.map(({ m: o, why }) => <button key={o.id} type="button" className="linkless pm-bond" onClick={() => setCard(o.id)}><Face m={o} size={30} /><span><b>{S.nameOf(o, real)}</b><small>{why}</small></span></button>)}</div>
-              <div><h4 className="pm-subh">At odds with</h4>{B.rivals.map(({ m: o, why }) => <button key={o.id} type="button" className="linkless pm-bond neg" onClick={() => setCard(o.id)}><Face m={o} size={30} /><span><b>{S.nameOf(o, real)}</b><small>{why}</small></span></button>)}</div>
+              <div><h4 className="pm-subh">Close to</h4>{B.friends.map(({ m: o, why, real: r }) => <button key={o.id} type="button" className={`linkless pm-bond ${r ? "realtie" : ""}`} onClick={() => setCard(o.id)}><Face m={o} size={30} /><span><b>{S.nameOf(o, real)}{r ? " ★" : ""}</b><small>{why}</small></span></button>)}</div>
+              <div><h4 className="pm-subh">At odds with</h4>{B.rivals.map(({ m: o, why, real: r }) => <button key={o.id} type="button" className={`linkless pm-bond neg ${r ? "realtie" : ""}`} onClick={() => setCard(o.id)}><Face m={o} size={30} /><span><b>{S.nameOf(o, real)}{r ? " ★" : ""}</b><small>{why}</small></span></button>)}</div>
             </div>); })()}
           {me && <><h4 className="pm-subh">Attributes</h4><Attrs a={S.yourAttrs(s)} know={3} /></>}
           {S.wireAbout(s, id).length > 0 && <div className="pm-inpapers"><h4 className="pm-subh">In the papers</h4>{S.wireAbout(s, id).slice(0, 2).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={() => {}} />)}</div>}

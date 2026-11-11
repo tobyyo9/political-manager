@@ -4,6 +4,7 @@
 import RAW from "./data/members.json";
 import GENDER from "./data/gender.json";
 import CAUCUS from "./data/caucuses.json";
+import TIES from "./data/ties.json";
 import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import { PRESIDENT_STANCE } from "./shared/data/president.js";
@@ -470,6 +471,7 @@ export function doAction(s0, act, arg = {}) {
       const odds = clamp(0.3 + 0.5 * rel + (m.t.label === "dealmaker" ? 0.15 : 0) + (m.t.label === "believer" ? -0.2 : 0) + (m.t.label === "vain" ? s.profile / 300 : 0) + s.clout / 400 - Math.abs(l.L) * 0.8, 0.04, 0.9);
       if (r() < odds) {
         b.deals[m.id] = (b.deals[m.id] || 0) + 0.3;
+        for (const t of realTies(m.id)) if (t.k !== "feud" && memberById[t.id]?.ch === m.ch) b.deals[t.id] = (b.deals[t.id] || 0) + 0.08;   // close friends tend to move together
         let ask = "";
         if (m.t.label === "dealmaker" || r() < 0.4) {
           const want = wantOf(s, m, r);
@@ -1041,18 +1043,24 @@ export function relations(s) {
 // Who is close to whom, among the other characters. Built from things that really bind members:
 // the same caucus, the same state delegation, the same committee, and how close their voting records are.
 const bondCache = {};
+// Real friendships, alliances and feuds that are public knowledge (src/data/ties.json).
+const TIE = {}; for (const t of TIES) { (TIE[t.a] = TIE[t.a] || []).push({ id: t.b, k: t.k, why: t.why }); (TIE[t.b] = TIE[t.b] || []).push({ id: t.a, k: t.k, why: t.why }); }
+export const realTies = (id) => TIE[id] || [];
 export function bonds(m) {
   if (bondCache[m.id]) return bondCache[m.id];
+  const real = (TIE[m.id] || []).filter((t) => memberById[t.id] && !memberById[t.id].fictional);
+  const realF = real.filter((t) => t.k !== "feud").map((t) => ({ m: memberById[t.id], why: t.why, real: true })), realR = real.filter((t) => t.k === "feud").map((t) => ({ m: memberById[t.id], why: t.why, real: true }));
+  const skip = new Set(real.map((t) => t.id));
   const pool = MEMBERS.filter((o) => o.id !== m.id && o.ch === m.ch);
   const shareComm = (o) => (m.comm || []).filter((c) => c.c.length <= 4 && (o.comm || []).some((d) => d.c === c.c)).length;
   const score = (o) => (o.p === m.p ? 0.6 : -0.6) + (o.faction === m.faction ? 0.5 : 0) + (o.st === m.st ? 0.45 : 0) + 0.15 * shareComm(o) - 1.4 * Math.abs(o.x - m.x) + 0.25 * noise(m.id < o.id ? m.id + o.id : o.id + m.id);
   const why = (o) => o.st === m.st && o.p === m.p ? `same ${o.st} delegation` : o.faction === m.faction ? `both ${m.faction}` : shareComm(o) ? "serve on a committee together" : o.p !== m.p ? "cross-party friendship" : "vote alike";
   const whyNot = (o) => o.p === m.p ? (o.faction !== m.faction ? `${o.faction} vs ${m.faction}` : "old feud") : o.st === m.st ? `rivals in ${o.st}` : "opposite ends of the chamber";
   const ranked = pool.map((o) => ({ o, v: score(o) })).sort((a, b) => b.v - a.v);
-  const friends = ranked.slice(0, 4).map(({ o }) => ({ m: o, why: why(o) }));
-  const sameP = ranked.filter(({ o }) => o.p === m.p).slice(-1).map(({ o }) => ({ m: o, why: whyNot(o) }));
-  const other = ranked.filter(({ o }) => o.p !== m.p && (o.st === m.st || Math.abs(o.x - m.x) > 1)).slice(-1).map(({ o }) => ({ m: o, why: whyNot(o) }));
-  return (bondCache[m.id] = { friends, rivals: [...sameP, ...other] });
+  const friends = [...realF, ...ranked.filter(({ o }) => !skip.has(o.id)).slice(0, Math.max(1, 4 - realF.length)).map(({ o }) => ({ m: o, why: why(o) }))];
+  const sameP = ranked.filter(({ o }) => o.p === m.p && !skip.has(o.id)).slice(-1).map(({ o }) => ({ m: o, why: whyNot(o) }));
+  const other = ranked.filter(({ o }) => o.p !== m.p && !skip.has(o.id) && (o.st === m.st || Math.abs(o.x - m.x) > 1)).slice(-1).map(({ o }) => ({ m: o, why: whyNot(o) }));
+  return (bondCache[m.id] = { friends, rivals: [...realR, ...(realR.length ? [] : sameP), ...other].slice(0, 3) });
 }
 export const caucusOf = (m) => (m.caucus || [m.faction]);
 
@@ -1741,6 +1749,12 @@ function startRelations(s, you) {
     .sort((a, b) => Math.abs(a.x - you.x) - Math.abs(b.x - you.x)).slice(0, extra);
   for (const m of more) bump(m.id, 2, 0.22);
   for (const { m } of B.rivals) bump(m.id, 2, mine >= 4 ? -0.3 : -0.12);
+  // Real friendships and feuds outweigh everything else: working ties top out below a real friendship.
+  for (const id in s.rel) s.rel[id] = Math.min(s.rel[id], 0.62);
+  for (const t of realTies(you.id)) { const m = memberById[t.id]; if (!m || m.fictional) continue;
+    if (t.k === "friend") { s.know[m.id] = 3; s.rel[m.id] = Math.max(s.rel[m.id] || 0, 0.85); s.owedToYou[m.id] = Math.max(s.owedToYou[m.id] || 0, 1); }
+    else if (t.k === "ally") { s.know[m.id] = 3; s.rel[m.id] = Math.max(s.rel[m.id] || 0, 0.68); }
+    else { s.know[m.id] = 3; s.rel[m.id] = Math.min(s.rel[m.id] || 0, -0.6); } }
   // Veterans are owed a few favors.
   if (mine >= 8) for (const { m } of B.friends.slice(0, Math.min(3, Math.floor(mine / 6)))) s.owedToYou[m.id] = (s.owedToYou[m.id] || 0) + 1;
 }
