@@ -82,3 +82,8 @@ The Senate and the President as full characters, committees and amendments as pl
 - Each answer rolls your attributes (a blend of who you are and what you've built) against the other side's; risky answers swing harder. Prepping with your communications director costs 4 hours and helps more if they're good.
 - Scenes wait in the inbox; if you don't play one in two weeks, your staff handles it with no effect. Effects: approval at home, your base, profile, relationships, cabinet heat, your vote deals with leadership, and up to 3.5 points on election night from the debate.
 - Names with initials (J.D. Ford) now alter cleanly.
+
+## Ninth pass: polish
+- Save to file and load from file: a save holds the whole career, including every change to Washington since 2027, so it picks up exactly where you left off on any device. On claude.ai the save goes through the viewer's download prompt.
+- Hall of fame: one entry per career, updated each term, kept in your browser, ranked by a score for winning, terms, laws, clout and leadership posts.
+- Create a newcomer for the Senate: take any senator's seat; you face voters in 2028 only if that seat's class is up.

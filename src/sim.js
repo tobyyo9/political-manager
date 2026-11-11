@@ -712,6 +712,7 @@ export function applyCustom(c) {
   m.vuln = clamp(1 - (m.own - 49) / 14, 0.12, 1); m.prisk = clamp((m.own - 52) / 22, 0.08, 0.85);
   m.signer = false; m.seniority = 0; m.chair = null;
   m.faction = m.p === "D" ? (m.x < -0.4 ? "Progressive Caucus" : m.x > -0.1 ? "Blue Dog Coalition" : "New Democrat Coalition") : (m.x > 0.62 ? "Freedom Caucus" : m.x > 0.4 ? "Republican Study Committee" : "Main Street Caucus");
+  if (m.ch === "S") m.faction = senFaction(m);
   m.caucus = [m.faction]; m.cauEst = false;
   m.base = { influence: 8, cash: 400 };
   for (const k in factionLine) delete factionLine[k];
@@ -1583,3 +1584,25 @@ export function finishScene(s0, id, out) {
   return s;
 }
 export function sceneCtx() { return { PP, cycleClass }; }
+
+// ════════ Saving, loading and the hall of fame ════════
+export const SAVE_VERSION = 1;
+export function exportSave(s, real) { return JSON.stringify({ game: "political-manager", v: SAVE_VERSION, saved: new Date().toISOString(), real: !!real, s }); }
+export function importSave(text) {
+  const o = JSON.parse(text);
+  if (!o || o.game !== "political-manager" || !o.s || typeof o.s.youId !== "string" || !Number.isFinite(o.s.week)) throw new Error("That file isn't a Political Manager save.");
+  const s = o.s;
+  if (s.youId !== "POTUS" && !memberById[s.youId] && !s.edits?.[s.youId]) throw new Error("This save names a member the game doesn't know.");
+  restore(s); if (s.custom) applyCustom(s.custom); if (!s.edits || !Object.keys(s.edits).length) { if (!s.custom) { resetWorld(); applyPres(s); } }
+  return { s, real: !!o.real };
+}
+// One line for the hall of fame when a career ends.
+export function fameEntry(s, real) {
+  const you = memberById[s.youId], r = s.result || {}, role = roleOf(s);
+  const laws = s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length + (s.career || []).reduce((a, c) => a + (c.laws || 0), 0);
+  const terms = (s.career || []).length + 1;
+  const verdict = r.kind === "general" ? (r.won ? "Reelected" : "Defeated") : r.kind === "primary" ? "Lost the primary" : r.kind === "term" ? "Finished the term" : r.kind === "higher" ? (r.won ? "Won a Senate seat" : "Lost a Senate run") : r.kind === "pres" ? (r.won ? "Party held the White House" : "Party lost the White House") : r.kind === "removed" ? "Removed from office" : "Ended";
+  const score = Math.round((r.won ? 40 : 0) + terms * 15 + laws * 6 + Math.max(0, s.clout) * 0.3 + (role === "P" ? (s.presApproval - 40) * 1.5 + (s.legacy || 0) * 2 : 0) + (you.lead?.length ? 15 : 0));
+  return { id: `${s.seed}-${s.youId}`, upto: s.week, when: new Date().toISOString(), name: role === "P" ? `President ${nameOf(you, real)}` : `${titleOf(you)} ${nameOf(you, real)}`, real: `${you.first} ${you.last}`, alt: `${you.sf} ${you.sl}`,
+    role, party: you.p, seat: you.seat, terms, years: `2027-${electionYear(s)}`, verdict, won: !!r.won, laws, title: you.lead?.[0] || "", score, custom: !!s.custom };
+}

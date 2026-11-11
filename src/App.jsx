@@ -10,6 +10,14 @@ const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
 const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.s) S.restore(v.s); if (v?.s?.custom) S.applyCustom(v.s.custom); return v; } catch { return null; } };
 const save = (v) => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* storage may be unavailable */ } };
+const FAME = "political-manager:fame";
+const loadFame = () => { try { return JSON.parse(localStorage.getItem(FAME)) || []; } catch { return []; } };
+const saveFame = (f) => { try { localStorage.setItem(FAME, JSON.stringify(f.slice(0, 50))); } catch { /* storage may be unavailable */ } };
+// Offer a file to the viewer: the claude.ai downloads capability when it's there, a plain link download elsewhere.
+async function offerFile(filename, text) {
+  try { const d = window.claude?.use ? await window.claude.use("downloads") : null; if (d) { await d.save({ filename, data: text }); return "saved"; } } catch (e) { if (e?.code === "declined") return "declined"; }
+  try { const url = URL.createObjectURL(new Blob([text], { type: "application/json" })); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); return "saved"; } catch { return "failed"; }
+}
 const ini = (m, real) => (real ? m.first[0] + m.last[0] : m.sf[0] + m.sl[0]).toUpperCase();
 const pc = (p) => (p === "D" ? "dem" : "rep");
 const money = (k) => (k >= 1000 ? `$${(k / 1000).toFixed(1)}M` : `$${Math.round(k)}K`);
@@ -28,8 +36,10 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [scene, setScene] = useState(null);      // inbox message id of a scene being played
   useEffect(() => { save({ s, real }); }, [s, real]);
+  // Record a finished career in the hall of fame, once.
+  useEffect(() => { if (!s?.over || !s.result) return; const e = S.fameEntry(s, real), f = loadFame(); const old = f.find((x) => x.id === e.id); if (old && old.upto >= e.upto) return; saveFame([e, ...f.filter((x) => x.id !== e.id)]); }, [s?.over, s?.week]);
 
-  if (!s) return <Start real={real} setReal={setReal} onStart={(st) => { setS(st); setTab("inbox"); window.scrollTo(0, 0); }} />;
+  if (!s) return <Start real={real} setReal={setReal} onStart={(st, r2) => { setS(st); if (r2 !== undefined) setReal(r2); setTab("inbox"); window.scrollTo(0, 0); }} />;
   const you = S.memberById[s.youId];
   const act = (name, arg) => { const n = S.doAction(s, name, arg); if (n.toast) setToast(n.toast); n.toast = null; setS(n); };
   const next = () => { const n = S.advance(s); setQueue(n.events || []); n.events = []; setS(n); window.scrollTo(0, 0); };
@@ -76,6 +86,7 @@ export default function App() {
         ))}
         <span className="pm-spacer" />
         <label className="pm-real"><input type="checkbox" checked={real} onChange={(e) => setReal(e.target.checked)} /> Real names</label>
+        <button type="button" className="linkbtn" onClick={async () => { const you2 = S.memberById[s.youId]; const r = await offerFile(`political-manager-${(you2.last || "career").replace(/[^a-z]/gi, "").toLowerCase()}-${S.fmtDate(s.week).replace(/[^0-9a-z]+/gi, "-")}.json`, S.exportSave(s, real)); setToast(r === "saved" ? { title: "Career saved", text: "Load the file from the start screen any time, on any device.", tone: "good" } : r === "declined" ? null : { title: "Couldn't save", text: "This view can't save files.", tone: "bad" }); }}>Save to file</button>
         <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) setS(null); }}>New career</button>
       </nav>
       <main className="pm-main">
@@ -118,6 +129,34 @@ function Toast({ t, onClose }) {
 }
 
 // ── Start: pick a seat or build a newcomer ──
+function LoadSave({ onStart }) {
+  const [err, setErr] = useState("");
+  return (
+    <label className="pm-load ghost">Load a saved career
+      <input type="file" accept=".json,application/json" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; f.text().then((t) => { try { const o = S.importSave(t); onStart(o.s, o.real); } catch (x) { setErr(x.message || "That file couldn't be read."); } }); e.target.value = ""; }} />
+      {err && <small className="no">{err}</small>}
+    </label>
+  );
+}
+function HallOfFame({ real }) {
+  const [f, setF] = useState(loadFame);
+  if (!f.length) return null;
+  const top = [...f].sort((a, b) => b.score - a.score).slice(0, 10);
+  return (
+    <section className="panel pm-fame">
+      <div className="pm-headrow"><h3>Hall of fame</h3><button type="button" className="linkbtn" onClick={() => { if (window.confirm("Clear the hall of fame?")) { saveFame([]); setF([]); } }}>Clear</button></div>
+      <ol>{top.map((e, i) => (
+        <li key={e.id} className={e.won ? "won" : "lost"}>
+          <span className="pm-fame-rank">{i + 1}</span>
+          <span className={`pm-fame-party ${e.party === "D" ? "dem" : "rep"}`}>{e.party}</span>
+          <span className="pm-fame-who"><strong>{real ? e.name.replace(e.alt, e.real) : e.name.replace(e.real, e.alt)}</strong><small>{e.role === "P" ? "The White House" : e.seat} · {e.years} · {e.terms} term{e.terms > 1 ? "s" : ""}{e.title ? ` · ${e.title}` : ""}{e.custom ? " · created" : ""}</small></span>
+          <span className="pm-fame-verdict">{e.verdict}<small>{e.laws} law{e.laws === 1 ? "" : "s"}</small></span>
+          <b className="pm-fame-score">{e.score}</b>
+        </li>))}</ol>
+      <p className="muted small">Kept in this browser. Scores reward winning, terms served, laws passed, clout and leadership posts.</p>
+    </section>
+  );
+}
 function Start({ onStart, real, setReal }) {
   const [q, setQ] = useState("");
   const [diff, setDiff] = useState({ info: "normal", world: "normal" });
@@ -168,8 +207,10 @@ function Start({ onStart, real, setReal }) {
       </section>
       <div className="pm-startbar">
         <div className="hemi-by">{[["pick", "Take a seat"], ["create", "Create a newcomer"]].map(([v, l]) => <button key={v} type="button" className={mode === v ? "on" : ""} onClick={() => setMode(v)}>{l}</button>)}</div>
+        <LoadSave onStart={onStart} />
         <label className="pm-real"><input type="checkbox" checked={real} onChange={(e) => setReal(e.target.checked)} /> Show real names</label>
       </div>
+      <HallOfFame real={real} />
       {mode === "pick" && (
         <div className="pm-where">
           {[["H", "The House", "435 members, two-year terms, everyone on the ballot in 2028."], ["S", "The Senate", "100 senators, six-year terms, the filibuster and confirmations."], ["P", "The White House", "Play the President against a Democratic Congress."]].map(([v, l, d]) => (
@@ -260,7 +301,8 @@ function Start({ onStart, real, setReal }) {
 function Create({ onStart, diff }) {
   const [c, setC] = useState({ first: "Alex", last: "Rivera", p: "D", x: -0.3, seat: "", background: "teacher", trait: "dealmaker" });
   const [q, setQ] = useState("");
-  const hits = q.length > 1 ? S.HOUSE.filter((m) => `${m.seat} ${m.sf} ${m.sl}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8) : [];
+  const [ch, setCh] = useState("H");
+  const hits = q.length > 1 ? (ch === "S" ? S.SENATE : S.HOUSE).filter((m) => `${m.seat} ${m.sf} ${m.sl} ${m.first} ${m.last}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8) : [];
   const seat = c.seat && S.memberById[c.seat];
   const set = (k, v) => setC((o) => ({ ...o, [k]: v }));
   const xmin = c.p === "D" ? -0.8 : 0.1, xmax = c.p === "D" ? -0.05 : 0.9;
@@ -276,10 +318,12 @@ function Create({ onStart, diff }) {
         <label>Background<select value={c.background} onChange={(e) => set("background", e.target.value)}>{Object.entries(S.BACKGROUNDS).map(([k, b]) => <option key={k} value={k}>{b.label}</option>)}</select><small>{S.BACKGROUNDS[c.background].note}</small></label>
         <label>Your style<select value={c.trait} onChange={(e) => set("trait", e.target.value)}>{["dealmaker", "believer", "wonk", "showhorse", "loyalist"].map((k) => <option key={k} value={k}>{S.TRAIT_LABEL[k]}</option>)}</select><small>{S.TRAIT_DESC[c.trait]}</small></label>
       </div>
+      <div className="hemi-by pm-create-ch">{[["H", "Run for the House"], ["S", "Run for the Senate"]].map(([v, l]) => <button key={v} type="button" className={ch === v ? "on" : ""} onClick={() => { setCh(v); setQ(""); set("seat", ""); }}>{l}</button>)}</div>
       <label className="pm-seatpick">Which seat do you take?
-        <input className="pm-search" placeholder="Search a district, like OH-9 or a current member" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+        <input className="pm-search" placeholder={ch === "S" ? "Search a state, like GA or a current senator" : "Search a district, like OH-9 or a current member"} value={q} onChange={(e) => setQ(e.target.value)} /></label>
       <div className="pm-results">{hits.map((m) => <button key={m.id} type="button" className={`pm-row ${c.seat === m.id ? "on" : ""}`} onClick={() => set("seat", m.id)}><span className={`avatar ${pc(m.p)} sm`}>{ini(m)}</span><span><strong>{m.seat}</strong><small>Held by {S.nameOf(m)} · voted {m.dem >= 50 ? `D +${((m.dem - 50) * 2).toFixed(0)}` : `R +${((50 - m.dem) * 2).toFixed(0)}`} in 2024</small></span></button>)}</div>
-      {seat && <p className="muted small">You replace {S.nameOf(seat)} in {seat.seat}. {(c.p === "D") === (seat.dem >= 50) ? "The district leans your way." : "The district voted for the other party: expect a hard reelection."}</p>}
+      {seat && seat.ch === "S" && <p className="muted small">You take {S.nameOf(seat)}'s Senate seat in {seat.st}. {S.upIn2028(seat) ? "It's on the ballot in 2028, so you face voters right away." : `It isn't up until ${seat.cls === 1 ? 2030 : 2032}: you get the 120th Congress without an election.`} {(c.p === "D") === (seat.dem >= 50) ? "The state leans your way." : "The state voted for the other party."}</p>}
+      {seat && seat.ch === "H" && <p className="muted small">You replace {S.nameOf(seat)} in {seat.seat}. {(c.p === "D") === (seat.dem >= 50) ? "The district leans your way." : "The district voted for the other party: expect a hard reelection."}</p>}
       <button type="button" className="cold-go" disabled={!seat || !c.first || !c.last} onClick={() => onStart(S.startCustom(c, undefined, diff))}>Get sworn in →</button>
     </section>
   );
