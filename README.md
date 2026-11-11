@@ -182,3 +182,11 @@ The Senate and the President as full characters, committees and amendments as pl
   - You can request meetings, ask for support or endorsements, or cut ties.
 - **They come to you.** Meeting requests (take it, send a staffer, or decline), offers of money or super PAC spending, endorsements, and threats from megadonors in your own party. Offers often come with a vote they'd like from you; accepting with a promise locks your vote. Endorsements from groups far to the left or right help with your base and hurt in swing seats.
 - **Influence from abroad,** shown generically: a Gulf monarchy's registered lobbyists, a state-linked trade delegation, a "friendship society". They offer unapproved trips, "consulting" for your spouse, or straw-donor schemes. Accepting is a crime and can surface months later as a scandal, an FBI investigation, or an indictment that ends your career. Reporting it to the FBI helps your integrity.
+- **More people in the rankings (about 619 now).** Added:
+  - **White House and recent Cabinet:** Stephen Miller, plus former Cabinet members Noem, Bondi and Gabbard.
+  - **National figures out of office:** Haley, Greene, Ramaswamy, McCarthy, Ryan, Pompeo, Walz, Crockett, Gore and Buttigieg.
+  - **Sitting governors:** Beshear, Wes Moore, Hochul, Spanberger and Sherrill.
+  - **Governors-elect from Nov 2026:** Klobuchar, Blackburn, Hinojosa, Donalds, Becerra, Bottoms, Acton, Benson, Haaland and Sand.
+  - **Mayor:** Mamdani.
+- **Governors whose terms end in January** are now listed as former: Newsom, Whitmer, DeSantis, plus Abbott and Kemp among the new names.
+- **Klobuchar's and Blackburn's Senate seats** (both won governor's races) are held by placeholder appointees until the real names are announced.

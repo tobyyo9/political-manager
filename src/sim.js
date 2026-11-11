@@ -2557,20 +2557,52 @@ const FORMER = [
   ["Mitt", "Romney", "R", 1947, "M", 0, "Former Senator", { influence: 25, legis: 45, pop: 42, profile: 50, integrity: 78, cash: 100 }],
   ["Liz", "Cheney", "R", 1966, "F", 0, "Former Representative", { influence: 20, legis: 25, pop: 38, profile: 55, integrity: 85, cash: 300 }],
   ["Dick", "Durbin", "D", 1944, "M", 0, "Former Senate Whip, retired", { influence: 30, legis: 75, pop: 45, profile: 35, integrity: 72, cash: 50 }],
-  ["Gavin", "Newsom", "D", 1967, "M", 0, "Governor of California", { influence: 70, legis: 50, pop: 46, profile: 90, integrity: 55, cash: 1200 }],
+  ["Gavin", "Newsom", "D", 1967, "M", 0, "Former Governor of California", { influence: 70, legis: 50, pop: 46, profile: 90, integrity: 55, cash: 1200 }],
   ["Josh", "Shapiro", "D", 1973, "M", 0, "Governor of Pennsylvania", { influence: 55, legis: 45, pop: 57, profile: 70, integrity: 70, cash: 800 }],
   ["JB", "Pritzker", "D", 1965, "M", 0, "Governor of Illinois", { influence: 55, legis: 45, pop: 50, profile: 65, integrity: 60, cash: 3000 }],
-  ["Gretchen", "Whitmer", "D", 1971, "F", 0, "Governor of Michigan", { influence: 50, legis: 40, pop: 52, profile: 65, integrity: 68, cash: 500 }],
-  ["Ron", "DeSantis", "R", 1978, "M", 0, "Governor of Florida", { influence: 55, legis: 50, pop: 47, profile: 75, integrity: 55, cash: 900 }],
+  ["Gretchen", "Whitmer", "D", 1971, "F", 0, "Former Governor of Michigan", { influence: 50, legis: 40, pop: 52, profile: 65, integrity: 68, cash: 500 }],
+  ["Ron", "DeSantis", "R", 1978, "M", 0, "Former Governor of Florida", { influence: 55, legis: 50, pop: 47, profile: 75, integrity: 55, cash: 900 }],
   ["Zohran", "Mamdani", "D", 1991, "M", 3, "Mayor of New York City", { influence: 55, legis: 15, pop: 48, profile: 95, integrity: 72, cash: 300 }],
   ["Pete", "Buttigieg", "D", 1982, "M", 0, "Former Secretary of Transportation", { influence: 45, legis: 25, pop: 47, profile: 85, integrity: 74, cash: 400 }],
+  // The White House staff, recent Cabinet departures, and national figures out of office
+  ["Stephen", "Miller", "R", 1985, "M", 0, "White House Deputy Chief of Staff", { influence: 90, legis: 20, pop: 35, profile: 80, integrity: 45, cash: 0 }],
+  ["Nikki", "Haley", "R", 1972, "F", 2, "Former UN Ambassador", { influence: 38, legis: 30, pop: 42, profile: 74, integrity: 62, cash: 300 }],
+  ["Marjorie Taylor", "Greene", "R", 1974, "F", 0, "Former Representative", { influence: 28, legis: 10, pop: 32, profile: 82, integrity: 45, cash: 200 }],
+  ["Vivek", "Ramaswamy", "R", 1985, "M", 3, "Lost the 2026 Ohio governor's race", { influence: 26, legis: 5, pop: 38, profile: 70, integrity: 55, cash: 2000 }],
+  ["Kevin", "McCarthy", "R", 1965, "M", 0, "Former Speaker", { influence: 28, legis: 55, pop: 30, profile: 52, integrity: 50, cash: 300 }],
+  ["Paul", "Ryan", "R", 1970, "M", 0, "Former Speaker", { influence: 25, legis: 62, pop: 36, profile: 50, integrity: 65, cash: 200 }],
+  ["Mike", "Pompeo", "R", 1963, "M", 0, "Former Secretary of State", { influence: 28, legis: 40, pop: 35, profile: 52, integrity: 55, cash: 100 }],
+  ["Kristi", "Noem", "R", 1971, "F", 0, "Former Secretary of Homeland Security", { influence: 22, legis: 20, pop: 33, profile: 62, integrity: 40, cash: 100 }],
+  ["Pam", "Bondi", "R", 1965, "F", 0, "Former Attorney General", { influence: 22, legis: 15, pop: 35, profile: 58, integrity: 45, cash: 50 }],
+  ["Tulsi", "Gabbard", "R", 1981, "F", 2, "Former Director of National Intelligence", { influence: 22, legis: 25, pop: 38, profile: 62, integrity: 55, cash: 50 }],
+  ["Greg", "Abbott", "R", 1957, "M", 0, "Former Governor of Texas (lost in 2026)", { influence: 36, legis: 50, pop: 40, profile: 60, integrity: 50, cash: 1500 }],
+  ["Brian", "Kemp", "R", 1963, "M", 0, "Former Governor of Georgia", { influence: 34, legis: 45, pop: 50, profile: 50, integrity: 68, cash: 300 }],
+  ["Tim", "Walz", "D", 1964, "M", 0, "Former Governor of Minnesota", { influence: 28, legis: 40, pop: 42, profile: 62, integrity: 58, cash: 100 }],
+  ["Jasmine", "Crockett", "D", 1981, "F", 5, "Former Representative", { influence: 24, legis: 15, pop: 45, profile: 74, integrity: 60, cash: 300 }],
+  ["Al", "Gore", "D", 1948, "M", 0, "Former Vice President", { influence: 14, legis: 45, pop: 45, profile: 48, integrity: 70, cash: 500 }],
+  // Sitting and incoming governors
+  ["Andy", "Beshear", "D", 1977, "M", 0, "Governor of Kentucky", { influence: 45, legis: 40, pop: 58, profile: 60, integrity: 70, cash: 300 }],
+  ["Wes", "Moore", "D", 1978, "M", 5, "Governor of Maryland", { influence: 48, legis: 40, pop: 55, profile: 64, integrity: 68, cash: 400 }],
+  ["Kathy", "Hochul", "D", 1958, "F", 0, "Governor of New York", { influence: 50, legis: 45, pop: 44, profile: 55, integrity: 60, cash: 600 }],
+  ["Abigail", "Spanberger", "D", 1979, "F", 0, "Governor of Virginia", { influence: 40, legis: 35, pop: 52, profile: 52, integrity: 72, cash: 200 }],
+  ["Mikie", "Sherrill", "D", 1972, "F", 0, "Governor of New Jersey", { influence: 40, legis: 35, pop: 50, profile: 50, integrity: 70, cash: 200 }],
+  ["Amy", "Klobuchar", "D", 1960, "F", 0, "Governor-elect of Minnesota", { influence: 45, legis: 70, pop: 52, profile: 66, integrity: 70, cash: 600 }],
+  ["Marsha", "Blackburn", "R", 1952, "F", 0, "Governor-elect of Tennessee", { influence: 40, legis: 50, pop: 50, profile: 55, integrity: 55, cash: 500 }],
+  ["Gina", "Hinojosa", "D", 1973, "F", 2, "Governor-elect of Texas", { influence: 48, legis: 25, pop: 52, profile: 58, integrity: 70, cash: 300 }],
+  ["Byron", "Donalds", "R", 1978, "M", 5, "Governor-elect of Florida", { influence: 48, legis: 25, pop: 48, profile: 62, integrity: 58, cash: 500 }],
+  ["Xavier", "Becerra", "D", 1958, "M", 2, "Governor-elect of California", { influence: 52, legis: 50, pop: 47, profile: 52, integrity: 62, cash: 400 }],
+  ["Keisha Lance", "Bottoms", "D", 1970, "F", 5, "Governor-elect of Georgia", { influence: 42, legis: 20, pop: 50, profile: 52, integrity: 64, cash: 200 }],
+  ["Amy", "Acton", "D", 1965, "F", 0, "Governor-elect of Ohio", { influence: 40, legis: 15, pop: 52, profile: 48, integrity: 72, cash: 200 }],
+  ["Jocelyn", "Benson", "D", 1977, "F", 0, "Governor-elect of Michigan", { influence: 40, legis: 25, pop: 50, profile: 46, integrity: 70, cash: 200 }],
+  ["Deb", "Haaland", "D", 1960, "F", 3, "Governor-elect of New Mexico", { influence: 35, legis: 35, pop: 52, profile: 56, integrity: 70, cash: 100 }],
+  ["Rob", "Sand", "D", 1982, "M", 0, "Governor-elect of Iowa", { influence: 32, legis: 15, pop: 52, profile: 42, integrity: 72, cash: 100 }],
   ["Glenn", "Youngkin", "R", 1966, "M", 0, "Former Governor of Virginia", { influence: 40, legis: 30, pop: 48, profile: 55, integrity: 65, cash: 800 }],
 ];
 // National profile for members whose fame outruns their seniority (0-100), and the people already running for 2028.
 const FAME = { "Ocasio-Cortez NY": 96, "Sanders VT": 95, "Warren MA": 86, "Cruz TX": 88, "Omar MN": 78, "Jordan OH": 80, "Hawley MO": 72, "Fetterman PA": 78, "Booker NJ": 78, "Paul KY": 76, "Schiff CA": 76,
   "Raskin MD": 70, "Murphy CT": 72, "Kennedy LA": 70, "Lee UT": 66, "Murkowski AK": 66, "Tlaib MI": 66, "Khanna CA": 68, "Talarico TX": 72, "Boebert CO": 70, "Luna FL": 62, "Moskowitz FL": 56, "Slotkin MI": 62, "Gallego AZ": 62,
   "Kelly AZ": 70, "Ossoff GA": 68, "Warnock GA": 66, "Crenshaw TX": 60, "Brown OH": 72, "Cotton AR": 64, "Scott SC": 66, "Johnson LA": 80, "Jeffries NY": 88, "Schumer NY": 90, "Thune SD": 72, "Pressley MA": 60, "Frost FL": 56, "Waters CA": 66 };
-const CONTENDER = new Set(["Vance", "Rubio", "Newsom", "Shapiro", "Pritzker", "Whitmer", "DeSantis", "Ocasio-Cortez", "Harris", "Buttigieg", "Booker", "Kelly", "Ossoff", "Cruz", "Hawley", "Youngkin"]);
+const CONTENDER = new Set(["Vance", "Rubio", "Newsom", "Shapiro", "Pritzker", "Whitmer", "DeSantis", "Ocasio-Cortez", "Harris", "Buttigieg", "Booker", "Kelly", "Ossoff", "Cruz", "Hawley", "Youngkin", "Beshear", "Moore", "Haley", "Klobuchar"]);
 // Hand adjustments for standing the numbers miss: movement leaders with outsized followings, and newcomers still building a record.
 const STANDING = { "Ocasio-Cortez": 38, "Cruz": 38, "Mamdani": -22 };
 export const RANK_GROUPS = [["all", "Everyone"], ["H", "House"], ["S", "Senate"], ["X", "White House and Cabinet"], ["J", "Supreme Court"], ["F", "Former officials and governors"]];
@@ -2578,7 +2610,7 @@ export function allRankings(s) {
   const base = rankings(s), byId = {}; for (const r of base) byId[r.m.id] = r;
   const sponsored = {}; for (const b of s.bills) if (b.stage === "law") sponsored[b.sponsor] = (sponsored[b.sponsor] || 0) + 1;
   // The office you hold or held is most of a career's weight: a presidency outranks any senator's resume.
-  const PRESTIGE = (t) => !t ? 0 : /^President$/.test(t) ? 160 : /Former President/.test(t) ? 160 : /Chief Justice/.test(t) ? 100 : /Former Vice President/.test(t) ? 70 : /Vice President/.test(t) ? 160 : /Speaker Emerita/.test(t) ? 60 : /^Speaker/.test(t) ? 125 : /Senate Majority Leader/.test(t) ? 85 : /Senate Minority Leader|Former Senate Leader/.test(t) ? 65 : /House (Majority|Minority) Leader|Republican Leader|Democratic Leader/.test(t) ? 60 : /Associate Justice/.test(t) ? 60 : /Secretary of State/.test(t) ? 50 : /Governor of (California|Florida|Pennsylvania|Illinois|Michigan)/.test(t) ? 40 : /Mayor of New York/.test(t) ? 30 : /Secretary|Attorney General|Chief of Staff/.test(t) ? 30 : /Governor/.test(t) ? 30 : /Whip/.test(t) ? 35 : /Director|Administrator|Ambassador|Representative/.test(t) ? 15 : /Pro Tempore/.test(t) ? 10 : 0;
+  const PRESTIGE = (t) => !t ? 0 : /^President$/.test(t) ? 160 : /Former President/.test(t) ? 160 : /Chief Justice/.test(t) ? 100 : /Former Vice President/.test(t) ? 70 : /Vice President/.test(t) ? 160 : /Speaker Emerita/.test(t) ? 60 : /^Speaker/.test(t) ? 125 : /Senate Majority Leader/.test(t) ? 85 : /Senate Minority Leader|Former Senate Leader/.test(t) ? 65 : /House (Majority|Minority) Leader|Republican Leader|Democratic Leader/.test(t) ? 60 : /Associate Justice/.test(t) ? 60 : /Former Secretary of State/.test(t) ? 40 : /Secretary of State/.test(t) ? 50 : /Former Speaker/.test(t) ? 30 : /Former Governor/.test(t) ? 22 : /Governor(-elect)? of (California|Florida|Texas|New York|Pennsylvania|Illinois|Michigan|Ohio|Georgia)/.test(t) ? 40 : /Mayor of New York/.test(t) ? 30 : /Former (Secretary|Attorney General|Director|UN)/.test(t) ? 15 : /Secretary|Attorney General|Chief of Staff/.test(t) ? 30 : /Governor/.test(t) ? 30 : /Former/.test(t) ? 12 : /Whip/.test(t) ? 35 : /Director|Administrator|Ambassador|Representative/.test(t) ? 15 : /Pro Tempore/.test(t) ? 10 : 0;
   const row = (m, me, x, title) => ({ m, me, ...x, prestige: PRESTIGE(title || m.lead?.[0]), score: Math.round(0.7 * (x.influence * 1.2 + x.legis * 1.1 + (x.pop - 40) * 0.8 + Math.min(40, x.cash / 60) + x.integrity * 0.3 + x.profile * 1.1) + PRESTIGE(title || m.lead?.[0]) + (CONTENDER.has(m.last) && !me ? 20 : 0) + Math.max(0, x.profile - 60) * 0.7 + Math.max(0, x.profile - 80) * 1.5) });
   const rows = [];
   // Every member of both chambers. Seniority counts, but national profile counts more.

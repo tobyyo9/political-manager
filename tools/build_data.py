@@ -254,6 +254,16 @@ for st, old, fn, ln, party, house_seat, x, born in OPEN:
     s.update({"id": hr["id"] if not est else f"W{st}{ln[:3].upper()}", "first": fn, "last": ln, "p": party, "x": x, "y": hr["y"] if not est else 0.1, "born": born,
               "since": 2027, "comm": inherit(s), "lead": [], "new": True, "est": est, "ind": False})
 
+# Senators elected governor in Nov 2026 leave the Senate in January; each appoints their own successor.
+# Neither appointee had been named by Nov 11, 2026, so the seat holds an invented placeholder until the real name is known.
+APPOINT = [("MN", "Klobuchar", "Governor-elect of Minnesota"), ("TN", "Blackburn", "Governor-elect of Tennessee")]
+for st, old, why in APPOINT:
+    s_ = next((m for m in senate if m["st"] == st and m["last"] == old), None)
+    if not s_: print("appointee seat not found", st, old); continue
+    fn, ln = newcomer_name("APPT" + st)
+    s_.update({"id": f"A{st}{old[:3].upper()}", "first": fn, "last": ln, "x": round(s_["x"] * 0.9, 3), "y": 0, "born": 1970, "since": 2027, "comm": inherit(s_), "lead": [],
+               "new": True, "est": True, "gen": True, "appointee": True, "appointNote": f"Appointed to replace {old}, now {why}. Placeholder: the real appointee had not been named."})
+
 # Control flipped in both chambers: majority and minority titles trade places, and so do chairs and ranking members.
 def flip_title(t):
     return t.replace("Majority", "\0").replace("Minority", "Majority").replace("\0", "Minority")
