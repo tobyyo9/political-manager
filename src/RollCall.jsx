@@ -18,7 +18,7 @@ function steps(ev) {
     filibustered: ["FILIBUSTERED", `${ev.first === "S" ? "In the Senate," : "It passed the House, but"} ${ev.senate?.yes} senators is short of the 60 needed to end debate.`, "no"],
     signed: ["SIGNED INTO LAW", ev.auto === false ? "You sign it at the Resolute Desk." : "The President signs it.", "ok"],
     overridden: ["OVERRIDDEN", "Two-thirds of both chambers defy the President. It's law.", "ok"],
-    vetoed: ["VETO SUSTAINED", `The President vetoes it. On the override, some of his party who voted yes won't defy him: ${ev.over?.house.yes} House, ${ev.over?.senate.yes} Senate.`, "veto"],
+    vetoed: ["VETO SUSTAINED", S.presPron(`The President vetoes it. On the override, some of his party who voted yes won't defy him:`) + ` ${ev.over?.house.yes} House, ${ev.over?.senate.yes} Senate.`, "veto"],
     states: ["SENT TO THE STATES", "Two-thirds of both chambers passed it. Now 38 states must ratify.", "ok"],
   }[ev.result];
   out.push({ type: "verdict", stamp: V[0], line: V[1], tone: V[2] });

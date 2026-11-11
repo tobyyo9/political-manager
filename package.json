@@ -7,7 +7,7 @@
     "build": "vite build && node scripts/postbuild.mjs",
     "data": "python3 tools/build_data.py",
     "test": "node tests/run.mjs",
-    "calibrate": "python3 scripts/calibrate.py"
+    "calibrate": "node tests/calibrate-run.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

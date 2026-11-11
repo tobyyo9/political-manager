@@ -25,7 +25,7 @@ export function voiceOf(m, presParty = "R") {
   // Well-known members: set by hand from their public style. Devotees only while their party holds the White House.
   const set = !m.fictional && !m.custom && PERSONA[m.id];
   if (set) return set === "devotee" && m.p !== presParty ? "firebrand" : set;
-  if (m.id === "POTUS") return m.fictional ? pick(["pro", "folksy", "dodger", "bombast"], () => hashN(m.first + m.last)) : "bombast";
+  if (m.id === "POTUS") return m.fictional ? pick(["pro", "folksy", "dodger", "firebrand"], () => hashN(m.first + m.last)) : "bombast";   // the riffs are written for the real one
   const t = m.t || {}, h = hashN(m.id + ":voice"), x = Math.abs(m.x || 0), sen = (m.seniority || 0);
   let v = "pro";
   if (m.p === "R" && presParty === "R" && (t.label === "follower" || (m.x > 0.55 && t.loyalty > 0.6)) && h < 0.8) v = "devotee";

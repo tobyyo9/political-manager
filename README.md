@@ -140,3 +140,12 @@ The Senate and the President as full characters, committees and amendments as pl
   - Your spouse on the campaign payroll, or your spouse's consulting firm taking lobbying clients (both legal-gray and risky).
   - For the President, foreign deals for the family business.
   - When your career ends, you choose a path for the next ten years: lobbying after the cooling-off period, boards, speeches, or going home. It's added to your total and the hall of fame.
+
+## Sixteenth pass: fixes
+- **A woman as President.** Every line about the President (news, posts, inbox, toasts, the White House page, roll calls) now uses the right pronouns when a fictional successor is a woman. Fictional Presidents no longer get the real one's riffs, and the scramble after a reversal names the President's own party.
+- **Scenes vary over long careers.** TV interviews, press briefings, oversight hearings and debates rotate in alternative questions, about 4 to 5 per slot, so the same scene type rarely plays the same way twice. Debates now put you against your actual campaign opponent.
+- **Swing seats are harder.** Personal approval now counts for at most +5 or -8 points of margin (it was 0.45 per point, uncapped). A well-liked member in a seat that leans the other way can still lose.
+- **The vote formula is checked against real 2025-26 roll calls** (`npm run calibrate`): the SAVE Act, both Canada tariff votes, the ACA subsidy discharge, Iran war powers, the rescissions package and the reconciliation bill.
+  - Known crossovers by members still serving are in `src/data/record.json` and count as a new "their record on this issue" term: Paul on tariffs, war and the big bill; Murkowski on tariffs and rescissions; Fetterman on Iran; Case, Cuellar and Gluesenkamp Perez on the SAVE Act; Hurd on tariffs.
+  - The out-party now resists the President's priorities about twice as hard.
+  - The squared error against real party crossover rates fell by half.

@@ -210,7 +210,7 @@ export function WhiteHouse({ s, act }) {
         </section>
         <h2 className="pm-h">What the President is saying</h2>
         <ul className="pm-wh-feed">{(s.pres || []).map((x, i) => <li key={i} className={x.text.startsWith("REVERSAL") ? "flip" : x.text.startsWith("EXECUTIVE") ? "eo" : ""}><small>{S.fmtDate(x.week)}</small>{x.text}</li>)}</ul>
-        {!(s.pres || []).length && <p className="muted">Nothing yet. He'll weigh in on every bill, sooner or later.</p>}
+        {!(s.pres || []).length && <p className="muted">Nothing yet. {S.presPron("He'll")} weigh in on every bill, sooner or later.</p>}
       </section>
       <aside className="stack">
         <h2 className="pm-h">Where he stands</h2>
@@ -221,8 +221,8 @@ export function WhiteHouse({ s, act }) {
             <small className={v.signs ? "ok" : "no"}>{v.signs ? "Would sign" : "Would veto"}{v.firm ? " · firm" : " · movable"}{b.flipped ? " · has flipped once" : ""}</small>
             <button type="button" className="ghost" disabled={!S.can(s, "wh")} onClick={() => act("wh", { bill: b.id })}>Lobby him on it (8 hours)</button>
           </div>); })}
-        <section className="panel"><h3>His approval</h3><Trend s={s} keys={[["p", "President", "#c8443a"]]} h={130} /></section>
-        <p className="muted small">His party's members feel his pull on every vote, and twice as hard on a veto override. {you.p === "R" ? "As a Republican you get meetings more easily." : "As a Democrat, you need a real national profile before he takes your calls."}</p>
+        <section className="panel"><h3>{S.presPron("His")} approval</h3><Trend s={s} keys={[["p", "President", "#c8443a"]]} h={130} /></section>
+        <p className="muted small">{S.presPron("His party's members feel his pull on every vote, and twice as hard on a veto override.")} {you.p === "R" ? "As a Republican you get meetings more easily." : "As a Democrat, you need a real national profile before he takes your calls."}</p>
       </aside>
     </div>
   );

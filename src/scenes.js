@@ -103,7 +103,7 @@ function build(s, msg, real) {
       headline: (score, tags) => tags.includes("refuse") ? `${S.nameOf(you, real)} won't commit on ${bill}, leadership sources say` : `${S.nameOf(you, real)} cuts a deal with leadership on ${bill}` };
   }
   if (sc.type === "debate") {
-    const mod = anchor(MODS, msg.id), oppFace = { id: "opp" + sc.opp, g: /a$|e$/.test(sc.opp.split(" ")[0]) ? "F" : "M", born: 1978, p: other(you.p) };
+    const mod = anchor(MODS, msg.id), oppFace = { id: sc.oppId || "opp" + sc.opp, g: sc.oppG || (/a$|e$/.test(sc.opp.split(" ")[0]) ? "F" : "M"), born: 1972, p: other(you.p) };
     const boss = MEMBERS_TOP(you);
     return { setting: "debate", network: `Debate · ${sc.ch === "S" ? `U.S. Senate, ${you.st}` : you.seat}`, lower: [mod.name, "Moderator"], cast: [{ name: sc.opp, title: `${other(you.p)} challenger`, face: oppFace, stat: 12 }, { name: yourName, title: `${you.p}-${you.seat}`, face: you, you: true }, { name: mod.name, title: "Moderator", face: mod.face, mod: true }],
       intro: `Two podiums, one camera each, ninety minutes. ${sc.opp} has been waiting for this.`,
@@ -229,7 +229,78 @@ function build(s, msg, real) {
 }
 const MEMBERS_TOP = (you) => { const boss = S.MEMBERS.find((m) => m.ch === you.ch && m.p === you.p && /Leader|Speaker/.test(m.lead?.[0] || "")); return boss ? (boss.lead[0].includes("Speaker") ? "the Speaker" : "party leaders") : "party leaders"; };
 
-export function stageScene(s, msg, real) { return build(s, msg, real); }
+// Variety for long careers: alternative middle beats (and openers) rotate in, so the same scene type
+// rarely plays the same way twice. n = how many of this scene type you've had before.
+const C = (label, stat, aud, good, bad, risk) => ({ label, stat, aud, good, bad, ...(risk ? { risk: true } : {}) });
+const EXTRA = {
+  tv: [
+    (x) => ({ who: 0, line: `"Your opponents back home are already cutting an ad out of this vote. What do you say to the people who'll see it?"`, choices: [
+      C("Look into the camera and explain", "Integrity", { swing: 1.2 }, "Plain words, straight to camera. It's the clip your district director wanted.", "You look at the wrong camera for the first ten seconds."),
+      C("Dare them to run it", "Media", { base: 1.4, profile: 1.5, swing: -0.3 }, "'Run it. I'll pay for the airtime.' The host laughs.", "Bravado on cable reads as arrogance back home.", true),
+      C("Talk about what's in the bill", "Policy", { swing: 0.8 }, "Section by section, without notes. Impressive.", "Too much detail. Viewers drift.") ] }),
+    (x) => ({ who: 0, line: `"Some of your own colleagues say privately that you're grandstanding. Are you?"`, choices: [
+      C("Name the colleagues' real gripe", "Negotiation", { swing: 0.6, base: 0.4 }, "You make it about policy, not personalities. Smart.", "You end up arguing with people who aren't in the room."),
+      C("Laugh it off", "Media", { profile: 1.5, swing: 0.3 }, "Easy, warm, unbothered. It plays.", "The laugh goes on a beat too long.", true),
+      C("Say they should say it to your face", "Media", { base: 1.6, profile: 2, swing: -0.5 }, "A line every cable producer replays.", "Now it's a feud story, and you started it.", true) ] }),
+    (x) => ({ who: 0, line: `"Let me read you a post from a constituent: 'I voted for you and I feel betrayed.' Your response?"`, choices: [
+      C("Thank them and explain", "Integrity", { swing: 1.2, base: -0.2 }, "Respectful, specific, human. The host softens.", "It sounds like a form letter."),
+      C("Point to what you delivered at home", "Policy", { swing: 0.9 }, "You have a list of local wins ready.", "The list is thin, and the host notices."),
+      C("Say you can't please everyone", "Media", { base: 0.8 }, "Honest enough. It moves on.", "It sounds dismissive of a real person.") ] }),
+    (x) => ({ who: 0, line: `"Is there anything about this vote you'd do differently?"`, choices: [
+      C("No, and here's why", "Policy", { base: 0.8, swing: 0.4 }, "Firm, reasoned, done.", "Firm, and a little defensive."),
+      C("Admit one thing", "Integrity", { swing: 1.2, base: -0.3 }, "A rare moment of candor on cable. It stands out.", "The chyron reads 'Has regrets.'"),
+      C("Turn it back on the host", "Media", { base: 1, profile: 1 }, "'Would you have done better?' It lands, barely.", "It's rude, and the host gets the last word.", true) ] }),
+  ],
+  briefing: [
+    (x) => ({ who: 0, line: `"Mr. President, ${x.s.econ.inflation > 3.2 ? `prices are still up ${x.s.econ.inflation.toFixed(1)} percent` : `growth is at ${x.s.econ.growth.toFixed(1)} percent`}. Is your economic plan working?"`, choices: [
+      C("Yes, and here's the proof", "Policy", { swing: 1 }, "You have three numbers and a chart. It holds up.", "One of your numbers is from last year."),
+      C("Blame the last Congress", "Media", { base: 1.4, swing: -0.4 }, "A clean pivot. Your side cheers.", "Reporters point out you signed those bills.", true),
+      C("It's not working fast enough", "Integrity", { swing: 1.3, base: -0.5 }, "Candor from the podium. It leads the evening news.", "Your own party winces.") ] }),
+    (x) => ({ who: 0, line: `"Will you rule out a government shutdown?"`, choices: [
+      C("Rule it out", "Negotiation", { swing: 1 }, "Calm and firm. Markets like it.", "You just gave away your leverage."),
+      C("Nothing's off the table", "Media", { base: 1.3 }, "Your base hears strength.", "Federal workers hear a threat.", true),
+      C("That's up to Congress", "Policy", { swing: 0.4 }, "Technically true.", "Technically true and obviously evasive.") ] }),
+    (x) => ({ who: 0, line: `"Did you know about the report before it was published?"`, choices: [
+      C("No, and I want answers", "Integrity", { swing: 1 }, "It sounds sincere.", "Nobody believes it."),
+      C("Attack the reporter's outlet", "Media", { base: 1.5, profile: 1, swing: -0.6 }, "A two-minute riff. The base loves it.", "The outlet's subscriptions spike. Thanks to you.", true),
+      C("Refer it to counsel", "Policy", { swing: 0.3 }, "Lawyerly. It stops the follow-ups.", "Lawyerly. It invites ten more.") ] }),
+  ],
+  hearingA: [
+    (x) => ({ who: 0, line: `"I've already answered that question in my written testimony."`, choices: [
+      C("Read the written answer back", "Policy", { swing: 0.6, base: 0.8 }, "It doesn't answer the question, and now everyone sees that.", "It actually does answer it. Awkward."),
+      C("Ask it again, slower", "Media", { base: 1.4, profile: 1.5 }, "The pause before their answer is the clip.", "They answer it again, slower. Now you look petty.", true),
+      C("Ask for the documents instead", "Negotiation", { swing: 0.4, base: 0.4 }, "A records request on the spot. Staff love you.", "It's a reasonable ask nobody will remember.") ] }),
+    (x) => ({ who: 0, line: `"With respect, ${x.you.ch === "S" ? "Senator" : x.you.g === "F" ? "Congresswoman" : "Congressman"}, you've never run anything this large."`, choices: [
+      C("No, but I read the inspector general's report", "Policy", { swing: 0.8, base: 0.8 }, "Then you quote page 14. Silence.", "You quote the wrong page."),
+      C("That's not an answer", "Media", { base: 1.5, profile: 2 }, "It's exactly the line people will share.", "It sounds rehearsed because it was.", true),
+      C("Fair. Then help me understand", "Integrity", { swing: 1 }, "Disarming. They relax and say too much.", "They take the opening and run out your clock.") ] }),
+  ],
+  debate: [
+    (x) => ({ who: 2, line: `"Would you support your party's leader for another term?"`, choices: [
+      C("Yes, without hesitation", "Loyalty", { base: 1, swing: -0.5 }, "Clear. Your party's voters like it.", "Your opponent says 'There it is.'"),
+      C("I'll decide after the election", "Negotiation", { swing: 1 }, "Independent-minded. Swing voters notice.", "It sounds like a dodge, because it is."),
+      C("I answer to this district", "Integrity", { swing: 1.2, base: -0.2 }, "Applause from the room. The moderator moves on.", "Applause from your opponent's side too, sarcastically.") ] }),
+    (x) => ({ who: 2, line: `"Name one thing your opponent has done that you admire."`, choices: [
+      C("Name something real", "Integrity", { swing: 1.4 }, "Gracious and specific. The best moment of the night.", "You struggle for a beat too long."),
+      C("Joke your way through it", "Media", { swing: 0.6, profile: 1 }, "The room laughs, including your opponent.", "The joke lands as a dig.", true),
+      C("Pivot to a contrast", "Policy", { base: 0.8 }, "Polite, then pointed.", "The moderator says 'That wasn't the question.'") ] }),
+    (x) => ({ who: 0, line: `${x.sc.opp}: "You've taken more from special interests than anyone in this race."`, choices: [
+      C(x.s.pledge ? "I took the no-corporate-PAC pledge" : "Every dollar is disclosed", "Integrity", { swing: x.s.pledge ? 1.4 : 0.6 }, x.s.pledge ? "Your opponent didn't know. It shows." : "Transparent, if not exciting.", "The numbers on the screen don't help you."),
+      C("Turn it on their donors", "Media", { base: 1.4, profile: 1.2 }, "You name their biggest donor. They freeze.", "You get the donor's name wrong.", true),
+      C("Talk about your small donors", "Policy", { swing: 0.8 }, "Thousands of people at twenty dollars each. Good line.", "They point out it's a fraction of your total.") ] }),
+  ],
+};
+const EXTRA_KEY = (sc) => sc.type === "hearing" ? (sc.mine ? "hearingA" : null) : sc.type;
+export function stageScene(s, msg, real) {
+  const scene = build(s, msg, real), key = EXTRA_KEY(msg.scene), pool = key && EXTRA[key];
+  if (!pool || !scene || scene.beats.length < 3) return scene;
+  const n = msg.scene.n || 0, you = S.memberById[s.youId], x = { s, you, real, sc: msg.scene };
+  const mids = [scene.beats[1], ...pool.map((f) => f(x))];
+  scene.beats = [scene.beats[0], mids[n % mids.length], ...scene.beats.slice(2)];
+  // Every other time, a second fresh beat replaces the opener too (briefings and hearings, whose openers are generic).
+  if ((key === "briefing" || key === "hearingA") && n % 2 === 1) scene.beats[0] = mids[(n + 2) % mids.length] === scene.beats[1] ? scene.beats[0] : mids[(n + 2) % mids.length];
+  return scene;
+}
 // Roll one choice. Your stat: blend of who you are and what you've built; prep with your communications director helps.
 export function roll(s, msg, scene, beatIdx, choiceIdx) {
   const ch = scene.beats[beatIdx].choices[choiceIdx], mine = S.yourAttrs(s), base = S.attrs(S.memberById[s.youId]);

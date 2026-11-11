@@ -5,6 +5,7 @@ import RAW from "./data/members.json";
 import GENDER from "./data/gender.json";
 import CAUCUS from "./data/caucuses.json";
 import TIES from "./data/ties.json";
+import RECORD from "./data/record.json";
 import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import { PRESIDENT_STANCE } from "./shared/data/president.js";
@@ -219,6 +220,9 @@ function factionC(bill, sponsor, faction, ch) {
 function conviction(m, bill) { return clamp(-m.x * bill.dir * 2.1 + 0.25 * bill.pop, -1, 1); }
 
 // ctx: { sponsor: "D"|"R", kind: "passage"|"override", route, seed, deals: {memberId: K}, trust: {memberId: T} }
+// Real crossover votes from 2025-26 (src/data/record.json): a member who broke with their party on an issue tends to again.
+const REC = {}; for (const [ch, last, st, pid, v] of RECORD.votes) { const m = MEMBERS.find((x) => x.ch === ch && x.last === last && x.st === st); if (m) (REC[m.id] = REC[m.id] || {})[pid] = v; }
+export const recordOf = (id) => REC[id] || {};
 export function lean(m, pid, ctx) {
   const bill = billInfo(pid, ctx.sponsor);
   const own = m.p === ctx.sponsor;
@@ -230,7 +234,7 @@ export function lean(m, pid, ctx) {
   const lam = 0.45 + 0.75 * m.t.loyalty;
   const A = m.p === PP ? clamp(0.45 + 0.5 * Math.abs(m.x), 0.3, 0.95) : 0;
   const presS = clamp(bill.pres * PSIGN() + (ctx.wh || 0), -1, 1);
-  const X = m.p === PP ? presS * A * (ctx.kind === "override" ? 2 : 1) : bill.bipartisan || bill.mustPass ? 0 : -bill.pres * PSIGN() * 0.3;
+  const X = m.p === PP ? presS * A * (ctx.kind === "override" ? 2 : 1) : bill.bipartisan || bill.mustPass ? 0 : -bill.pres * PSIGN() * 0.6;
   const F = factionC(bill, ctx.sponsor, m.faction, m.ch);
   const pledge = bill.tax && m.signer ? -1 : 0;
   const gp = groupPull(m, pid, noise);
@@ -239,11 +243,13 @@ export function lean(m, pid, ctx) {
   const T = ctx.trust?.[m.id] || 0;
   const K = ctx.deals?.[m.id] || 0;
   const eps = noise(`${ctx.seed}:${m.id}:${pid}:${ctx.kind || "p"}`) * W.eps * 2;
-  const terms = { C: W.C * C, D: W.D * m.vuln * bill.sal * D, P: W.P * m.prisk * P, L: W.L * lam * Y, X: W.X * X, F: W.F * F, G: W.G * G + (pledge ? -0.22 : 0), T: W.T * T, K, B, eps };
+  const Rv = (REC[m.id]?.[pid] || 0) * (memberById[m.id] === m && !m.fictional ? 0.8 : 0);
+  const terms = { R: Rv, C: W.C * C, D: W.D * m.vuln * bill.sal * D, P: W.P * m.prisk * P, L: W.L * lam * Y, X: W.X * X, F: W.F * F, G: W.G * G + (pledge ? -0.22 : 0), T: W.T * T, K, B, eps };
   const L = Object.values(terms).reduce((a, b) => a + b, 0);
   return { L, p: sig(W.k * L), terms, raw: { C, D, P, Y, X, F, pledge, G }, groups: gp.who };
 }
 export const REASONS = {
+  R: ["they broke with their party on this before", "they broke with their party against this before"],
   C: ["their own record points to yes", "their own record points to no"], D: ["their district likes it", "their district dislikes it"], P: ["their primary voters like it", "their primary voters would punish it"],
   L: ["party leaders want a yes", "party leaders are whipping against"], X: ["the President's position helps", "the President's position hurts"], F: ["their faction is for it", "their faction is against it"],
   G: ["groups they rely on back it", "groups they rely on oppose it"], B: ["public pressure after recent events", "public pressure against it"], T: ["they trust you", "they don't trust you"], K: ["you made a deal", ""],
@@ -304,8 +310,13 @@ export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom 
   return s;
 }
 const R = (s, tag) => rng(hash(`${s.seed}:${tag}:${s.week}:${s.n++}`));
-function pushInbox(s, msg) { s.inbox.unshift({ id: `m${s.week}-${s.inbox.length}-${s.n++}`, week: s.week, done: false, ...msg }); }
-function pushNews(s, text, tone = "") { s.news.unshift({ week: s.week, text, tone }); if (s.news.length > 120) s.news.pop(); }
+function pushInbox(s, msg) { if (aboutPres(msg.body) || aboutPres(msg.title) || /White House|Situation Room|Staff secretary/.test(msg.from || "")) msg = { ...msg, title: presPron(msg.title), body: presPron(msg.body) }; s.inbox.unshift({ id: `m${s.week}-${s.inbox.length}-${s.n++}`, week: s.week, done: false, ...msg }); }
+// The President's pronouns: the real one is a man; a fictional successor may be a woman.
+const PRON = { he: "she", He: "She", him: "her", Him: "Her", his: "her", His: "Her", himself: "herself", Himself: "Herself" };
+export const presPron = (t) => (PRES_M.g !== "F" || !t ? t : t.replace(/\b(he|He|him|Him|his|His|himself|Himself)\b/g, (w) => PRON[w]));
+const aboutPres = (t) => /\bPresident\b|White House/.test(t || "");
+const pName = (p) => (p === "D" ? "Democrats" : "Republicans");
+function pushNews(s, text, tone = "") { if (aboutPres(text)) text = presPron(text); s.news.unshift({ week: s.week, text, tone }); if (s.news.length > 120) s.news.pop(); }
 
 // What each party's leaders want on the floor first.
 const AGENDA_D = ["aca", "medicaid_restore", "war_powers", "tariff_repeal", "min_wage", "kids_online", "ratepayer", "drug_neg", "ctc", "stock_ban", "pardon_reform", "background_checks", "voting_rights", "price_gouging", "childcare", "corp_rate", "pbm", "permitting", "debt_limit", "codify_roe", "ethics"];
@@ -397,10 +408,10 @@ export function doAction(s0, act, arg = {}) {
     const firm = Math.abs(PRESIDENT_STANCE[b.pid] ?? 0);                    // he barely moves where he has a fixed view
     const odds = clamp(0.25 + s.clout / 250 + s.profile / 300 + 0.3 * s.rapport + (you.p === "R" ? 0.2 : 0) - 0.25 * firm, 0.05, 0.85);
     const x = r();
-    if (x < odds * 0.5) { b.wh = (b.wh || 0) + 0.3 * (1 - 0.7 * firm); s.rapport = clamp(s.rapport + 0.2, -1, 1); s.toast = { title: "The President is charmed", text: `The meeting runs long. He tells reporters ${byId[b.pid].name} "could be a very good bill."`, tone: "good" }; }
-    else if (x < odds) { b.wh = (b.wh || 0) + 0.15 * (1 - 0.7 * firm); s.rapport = clamp(s.rapport + 0.08, -1, 1); s.toast = { title: "He's open to it", text: "No commitment, but his staff says he is listening.", tone: "good" }; }
-    else if (x < odds + (1 - odds) * 0.7) s.toast = { title: "No commitment", text: you.p === "D" ? "You get fifteen minutes with a deputy. Building a name in Washington would get you further." : "He talks about other things. You leave with a photo.", tone: "" };
-    else { b.wh = (b.wh || 0) - 0.1; s.rapport = clamp(s.rapport - 0.15, -1, 1); pushNews(s, `The President attacks ${byId[b.pid].name} after a meeting with ${nameOf(you)}.`, "bad"); s.toast = { title: "It blew up", text: "He posts about the meeting that night. His allies in Congress take note.", tone: "bad" }; }
+    if (x < odds * 0.5) { b.wh = (b.wh || 0) + 0.3 * (1 - 0.7 * firm); s.rapport = clamp(s.rapport + 0.2, -1, 1); s.toast = { title: "The President is charmed", text: presPron(`The meeting runs long. He tells reporters ${byId[b.pid].name} "could be a very good bill."`), tone: "good" }; }
+    else if (x < odds) { b.wh = (b.wh || 0) + 0.15 * (1 - 0.7 * firm); s.rapport = clamp(s.rapport + 0.08, -1, 1); s.toast = { title: presPron("He's open to it"), text: presPron("No commitment, but his staff says he is listening."), tone: "good" }; }
+    else if (x < odds + (1 - odds) * 0.7) s.toast = { title: "No commitment", text: you.p === "D" ? "You get fifteen minutes with a deputy. Building a name in Washington would get you further." : presPron("He talks about other things. You leave with a photo."), tone: "" };
+    else { b.wh = (b.wh || 0) - 0.1; s.rapport = clamp(s.rapport - 0.15, -1, 1); pushNews(s, `The President attacks ${byId[b.pid].name} after a meeting with ${nameOf(you)}.`, "bad"); s.toast = { title: "It blew up", text: presPron("He posts about the meeting that night. His allies in Congress take note."), tone: "bad" }; }
     void info;
   }
   if (act === "hire") {
@@ -958,21 +969,21 @@ export function presView(s, b) {
   const bar = b.party !== PP && !info.bipartisan ? 0.1 : -0.05;
   return { score, signs: info.mustPass || info.amendment || score >= bar, gap: score - bar, firm: Math.abs(PRESIDENT_STANCE[b.pid] ?? 0) > 0.6 };
 }
-export const RAPPORT = (r) => (r <= -0.3 ? "Hostile" : r < -0.05 ? "Cold" : r < 0.15 ? "He barely knows you" : r < 0.45 ? "Friendly" : "Charmed");
+export const RAPPORT = (r) => (r <= -0.3 ? "Hostile" : r < -0.05 ? "Cold" : r < 0.15 ? presPron("He barely knows you") : r < 0.45 ? "Friendly" : "Charmed");
 
 // ── The President: reactions, non sequiturs and sudden reversals ──
 const P_LOVE = ["calls it \"a beautiful bill, maybe the best ever written\"", "says he will sign it \"so fast your head will spin\"", "takes credit for the idea"];
 const P_HATE = ["calls it \"a disaster, a total disaster\"", "says whoever wrote it \"should be ashamed\"", "promises a veto \"on day one, maybe sooner\""];
 const P_MEH = ["says he \"hasn't read it, but people are saying things\"", "says he \"could go either way, we'll see what happens\"", "says he will decide \"in two weeks\""];
 const P_ODD = ["Then he spends ten minutes on the White House ballroom.", "He adds that the bill should be named after him.", "He also says the Senate \"should be bigger, much bigger, or maybe smaller.\"", "He closes by floating a military parade for his birthday.", "He then rates the Speaker's suit a six out of ten.", "He ends with a long story about a golf course in Scotland."];
-function presPost(s, text, pid) { s.pres.unshift({ week: s.week, text, pid }); if (s.pres.length > 40) s.pres.pop(); }
+function presPost(s, text, pid) { text = presPron(text); s.pres.unshift({ week: s.week, text, pid }); if (s.pres.length > 40) s.pres.pop(); }
 function whiteHouse(s, r) {
   for (const b of s.bills) {
     if (b.dead || b.stage !== "committee" || b.presSaid) continue;
     b.presSaid = true;
     const v = presView(s, b), pick = (a) => a[Math.floor(r() * a.length)];
-    const line = v.score > 0.3 ? pick(P_LOVE) : v.score < -0.2 ? pick(P_HATE) : pick(P_MEH);
-    presPost(s, `On ${byId[b.pid].name}, the President ${line}.${r() < 0.35 ? ` Then, unprompted: "${presRiff(r).quote}"` : ""}`, b.pid);
+    const plain = PRES_M.fictional, line = v.score > 0.3 ? pick(plain ? ["says it's a good bill and urges Congress to pass it", "endorses it in a written statement"] : P_LOVE) : v.score < -0.2 ? pick(plain ? ["says it goes too far and signals a veto", "calls it the wrong approach"] : P_HATE) : pick(plain ? ["says the White House is still reviewing it", "won't commit either way"] : P_MEH);
+    presPost(s, `On ${byId[b.pid].name}, the President ${line}.${r() < 0.35 && voiceOf(PRES_M) === "bombast" ? ` Then, unprompted: "${presRiff(r).quote}"` : ""}`, b.pid);
   }
   // Executive orders: he acts without Congress, and members feel it.
   if (r() < 0.05) { const opts = POLICIES.filter((p) => (PRESIDENT_STANCE[p.id] || 0) > 0.5 && !s.laws.includes(p.id)); const p = opts[Math.floor(r() * opts.length)];
@@ -984,8 +995,8 @@ function whiteHouse(s, r) {
     b.flipped = true; b.wh = (b.wh || 0) + (up ? 0.45 : -0.45);
     const why = up ? ["after a phone call with a donor", "after seeing a poll on TV", "after a senator praised him at dinner"] : ["after a cable segment criticized it", "after an aide told him Democrats would get the credit", "for reasons nobody in the building can explain"];
     presPost(s, `REVERSAL: the President now ${up ? "supports" : "opposes"} ${byId[b.pid].name}, ${why[Math.floor(r() * why.length)]}.`, b.pid);
-    pushNews(s, `The President reverses himself on ${byId[b.pid].name}. Republicans scramble to adjust.`, "event");
-    pushInbox(s, { kind: "staff", from: `${s.staff[0].name}, chief of staff`, title: `He flipped on ${byId[b.pid].name}`, body: `The President ${up ? "came out for it" : "turned against it"} overnight. Every Republican count on that bill just changed. Look at the whip board again.`, done: true });
+    pushNews(s, `The President reverses himself on ${byId[b.pid].name}. ${pName(PP)} scramble to adjust.`, "event");
+    pushInbox(s, { kind: "staff", from: `${s.staff[0].name}, chief of staff`, title: `He flipped on ${byId[b.pid].name}`, body: `The President ${up ? "came out for it" : "turned against it"} overnight. Every ${PP === "R" ? "Republican" : "Democratic"} count on that bill just changed. Look at the whip board again.`, done: true });
   }
 }
 
@@ -1631,7 +1642,8 @@ function pushScene(s, type, ctx, title, from) {
   if (s.inbox.some((m) => m.kind === "scene" && !m.done && m.scene.type === type)) return null;
   const COOL = { tv: 7, hearing: 9, leader: 6, briefing: 4, oval: 5, debate: 0, sotu: 0, confirm: 0 }; s.sceneAt = s.sceneAt || {};
   if (s.week - (s.sceneAt[type] ?? -99) < COOL[type]) return null; s.sceneAt[type] = s.week;
-  const msg = { kind: "scene", scene: { type, ...ctx }, from, title, body: "", due: s.week + SCENE_DUE };
+  s.sceneN = s.sceneN || {}; const nth = s.sceneN[type] = (s.sceneN[type] || 0) + 1;
+  const msg = { kind: "scene", scene: { type, n: nth - 1, ...ctx }, from, title, body: "", due: s.week + SCENE_DUE };
   pushInbox(s, msg); return s.inbox[0];
 }
 function sceneWeek(s, r) {
@@ -1655,7 +1667,7 @@ function sceneWeek(s, r) {
   const b = s.bills.find((x) => x.stage === "committee" && x.party === you.p && x.floorWeek - s.week === 1 && x.yourVote === null);
   if (b && lean(you, b.pid, billCtx(s, b)).L < 0.3 && r() < 0.6) { const boss = MEMBERS.find((m) => m.ch === you.ch && m.p === you.p && /Whip|Leader|Speaker/.test(m.lead?.[0] || "")) || null; if (boss && boss.id !== s.youId) pushScene(s, "leader", { bill: b.id, boss: boss.id }, `The whip wants a word about ${byId[b.pid].name}`, "The whip's office"); }
   // The debate before your general election.
-  if (upThisTerm(s, you) && rw === ELECTION_WEEK - 5) { const opp = `${PF[Math.floor(r() * PF.length)]} ${PL[Math.floor(r() * PL.length)]}`; pushScene(s, "debate", { opp, ch: s.runFor ? "S" : you.ch }, `Debate night against ${opp}`, "Your campaign manager"); }
+  if (upThisTerm(s, you) && rw === ELECTION_WEEK - 5) { const opp = s.opp && !s.runFor ? `${s.opp.first} ${s.opp.last}` : `${PF[Math.floor(r() * PF.length)]} ${PL[Math.floor(r() * PL.length)]}`; pushScene(s, "debate", { opp, ch: s.runFor ? "S" : you.ch, ...(s.opp && !s.runFor ? { oppG: s.opp.g, oppId: `opp${s.seed}${s.opp.first}${s.opp.last}` } : {}) }, `Debate night against ${opp}`, "Your campaign manager"); }
 }
 export function prepScene(s0, id) { const s = structuredClone(s0); const m = s.inbox.find((x) => x.id === id); if (m && !m.prep && s.hours >= 4) { m.prep = true; s.hours -= 4; } return s; }
 // Apply a played scene. out: { score (-6..6), base, swing, profile, rel: {id: d}, tags }
@@ -1705,7 +1717,7 @@ export function fameEntry(s, real) {
 // ════════ Personalities and the press ════════
 export const voiceOf = (m) => voiceOf0(m, PP);
 export { VOICES };
-function pushWire(s, a) { (s.wire = s.wire || []).unshift({ week: s.week, ...a }); if (s.wire.length > 80) s.wire.pop(); pushNews(s, `${a.outlet}: ${a.headline}`, a.tone || ""); s.news[0].ids = [a.who, a.target].filter(Boolean); }
+function pushWire(s, a) { if (a.voice === "devotee" || (a.who === "POTUS" && !a.target)) a = { ...a, quote: presPron(a.quote), headline: presPron(a.headline), dek: presPron(a.dek) }; (s.wire = s.wire || []).unshift({ week: s.week, ...a }); if (s.wire.length > 80) s.wire.pop(); pushNews(s, `${a.outlet}: ${a.headline}`, a.tone || ""); s.news[0].ids = [a.who, a.target].filter(Boolean); }
 // Every week the papers fill up: the President riffs, members say things in their own voice, votes get reactions.
 function wireWeek(s, r) {
   const role = roleOf(s), outlet = () => OUTLETS[Math.floor(r() * OUTLETS.length)], P = PRES_M, pv = voiceOf(P);
@@ -1833,7 +1845,8 @@ const addAid = (s, id, p, amt) => { s.aid = s.aid || {}; const a = (s.aid[id] = 
 // Your margin on election night, before luck. Polls are this plus sampling error.
 export function projMargin(s) {
   const you = memberById[s.youId], env = you.p === "D" ? s.mood : -s.mood, gg = groupElection(s, "general");
-  return (you.own - 50) * 2 + env * 0.9 + 3 + (s.approval - 50) * 0.45 + Math.min(2, s.cash / 1200) + gg.net * 0.5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2
+  // Personal popularity matters, but only so much: even a well-liked member in a district that leans the other way rarely wins by double digits.
+  return (you.own - 50) * 2 + env * 0.9 + 3 + clamp((s.approval - 50) * 0.3, -8, 5) + Math.min(2, s.cash / 1200) + gg.net * 0.5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2
     + campPts(s) - oppPts(s) + (you.p === "D" ? 1 : -1) * aidPts(s, you);
 }
 const OPP_BIO = { strong: ["a state senator with a big donor list", "a former federal prosecutor", "a self-funding businessman", "a decorated combat veteran", "the mayor of the district's biggest city", "a popular local TV anchor"],
@@ -2309,7 +2322,7 @@ function pardonWeek(s, r) {
   const used = new Set(s.pardonsUsed || []), pool = PARDONS.map((p, i) => ({ ...p, i })).filter((p) => !used.has(p.i)); if (!pool.length) return;
   const p = pool[Math.floor(r() * pool.length)]; s.pardonAt = s.week; (s.pardonsUsed = s.pardonsUsed || []).push(p.i);
   if (role === "P") { pushInbox(s, { kind: "pardon", pi: p.i, from: "White House Counsel", title: "A pardon request on your desk", body: `The request is for ${p.who}. The power is absolute and can't be undone. ${p.crony ? "Your critics will call it a reward for loyalty, and House Democrats will want hearings." : p.app > 0 ? "Reform groups on both sides have been pushing for it." : "Your base wants it. Most of the country doesn't."}`, choices: ["Grant a full pardon", "Commute the sentence", "Deny it"] }); return; }
-  if (p.crony || r() < 0.4) { pushNews(s, `The President pardons ${p.who.replace("your former", "his former").replace("your inaugural", "his inaugural").replace("your party", "his party")}.`, "event");
+  if (p.crony || r() < 0.4) { pushNews(s, `The President pardons ${p.who.replace(/\byour\b/g, "his")}.`, "event");
     pushInbox(s, { kind: "pardonreact", crony: !!p.crony, from: "Your communications director", title: "The President issued a controversial pardon", body: `He pardoned ${p.who.replace("your ", "his ")}. ${p.crony ? "Democrats are calling it pay-to-play." : "It's splitting people along the usual lines."} Do you say anything?`, choices: ["Condemn it", "Defend it", "Say nothing"] });
     if (p.crony) s.boost.pardon_reform = (s.boost.pardon_reform || 0) + 0.04; }
 }
