@@ -124,20 +124,53 @@ for (st, d), l in seats.items():
                   "x": round(dim1, 3), "y": round(float(n.get("nominate_dim2") or 0), 3), "born": int(float(n["born"])) if n.get("born") else None,
                   "since": first_year(l, "rep"), "comm": comm_list(bio, "house"), "lead": [r["title"] for r in l.get("leadership_roles", []) if not r.get("end") or r["end"] > "2026-06"]})
 
-# Members known to be leaving whose successors this file does not know: placeholder newcomers, same party.
-for m in house:
-    if m.get("last") == "Massie":
-        key = f"H{m['st']}{m['d']}"; fn, ln = newcomer_name(key)
-        m.update({"id": "N" + key, "first": fn, "last": ln, "x": 0.5, "born": 1975, "since": 2027, "comm": [], "lead": [], "gen": True})
-
-# The 2026 wave: flip the Republican seats that lean most Democratic until the House is 259 D.
-nD = sum(1 for m in house if m["p"] == "D")
-flips = sorted([m for m in house if m["p"] == "R"], key=lambda m: -m["dem"])[:max(0, HOUSE_D_TARGET - nD)]
-for m in flips:
-    key = f"H{m['st']}{m['d']}"
-    fn, ln = newcomer_name(key)
-    m.update({"id": "N" + key, "first": fn, "last": ln, "p": "D", "x": round(-0.12 - 0.22 * h(key, "x"), 3), "y": round(0.3 * h(key, "y") - 0.1, 3),
-              "born": 1968 + int(h(key, "b") * 24), "since": 2027, "comm": [], "lead": [], "gen": True, "flip": True})
+# ── The 2026 result, seat by seat ──
+# Winners from AP/network calls and projections reported Nov 4-10, 2026 (CBS News flips list, Nov 6;
+# NBC, KTVU, WGCU/WLRN, KUT, Press Herald/Maine Morning Star, California SOS). The game keeps the
+# 2024 district numbers; where a state redrew its map, winners sit in the matching old seat and
+# incumbents who moved districts move with them. "lead" = still uncalled, shown with the leader.
+# new: (first, last, party, ideology estimate, born or None, note)
+RESULTS = {
+  # Democratic flips
+  ("AZ",1): ("Amish","Shah","D",-0.28,1979,""), ("AZ",6): ("JoAnna","Mendoza","D",-0.2,None,""),
+  ("CA",1): ("Mike","McGuire","D",-0.3,1979,""), ("CA",6): ("Richard","Pan","D",-0.35,1966,""),
+  ("CA",22): ("Randy","Villegas","D",-0.4,None,""), ("CA",48): ("Marni","von Wilpert","D",-0.3,None,""),
+  ("CA",38): ("Hilda","Solis","D",-0.45,1957,""),
+  ("CO",5): ("Jessica","Killin","D",-0.22,None,""), ("CO",8): ("Manny","Rutinel","D",-0.3,None,""),
+  ("IA",1): ("Christina","Bohannan","D",-0.22,None,""), ("IA",2): ("Lindsay","James","D",-0.22,None,""), ("IA",3): ("Sarah","Trone Garriott","D",-0.25,None,""),
+  ("IN",5): ("J.D.","Ford","D",-0.25,None,""), ("KY",6): ("Zach","Dembo","D",-0.2,None,""),
+  ("MI",4): ("Sean","McCann","D",-0.25,None,""), ("MI",7): ("William","Lawrence","D",-0.22,None,""), ("MI",10): ("Christina","Hines","D",-0.22,None,""),
+  ("MO",2): ("Fred","Wellman","D",-0.18,None,""), ("MT",1): ("Sam","Forstag","D",-0.25,None,""),
+  ("NC",6): ("Cyril","Jefferson","D",-0.3,None,""), ("NC",9): ("Richard","Ojeda","D",-0.15,1970,""), ("NC",11): ("Jamie","Ager","D",-0.2,None,""),
+  ("NC",13): ("Paul","Barringer","D",-0.2,None,""), ("NC",14): ("Lakesha","Womack","D",-0.3,None,""),
+  ("NE",2): ("Denise","Powell","D",-0.22,None,""), ("NJ",2): ("Zack","Mullock","D",-0.2,None,""), ("NJ",7): ("Rebecca","Bennett","D",-0.2,None,""),
+  ("NV",2): ("Teresa","Benitez-Thompson","D",-0.25,None,""), ("NY",17): ("Cait","Conley","D",-0.2,None,""),
+  ("OH",7): ("Brian","Poindexter","D",-0.2,None,""), ("OH",10): ("Kristina","Knickerbocker","D",-0.2,None,""), ("OH",15): ("Don","Leonard","D",-0.2,None,""),
+  ("PA",1): ("Bob","Harvie","D",-0.2,None,""), ("PA",7): ("Bob","Brooks","D",-0.3,None,""), ("PA",8): ("Paige","Cognetti","D",-0.25,1981,""), ("PA",10): ("Janelle","Stelson","D",-0.22,None,""),
+  ("SC",1): ("Nancy","Lacore","D",-0.2,None,""), ("TX",15): ("Bobby","Pulido","D",-0.12,None,""), ("TX",23): ("Katy","Padilla Stout","D",-0.18,None,""),
+  ("UT",1): ("Ben","McAdams","D",-0.1,1974,""), ("VA",1): ("Shannon","Taylor","D",-0.2,None,""), ("VA",2): ("Elaine","Luria","D",-0.2,1975,""),
+  ("WI",1): ("Mitchell","Berman","D",-0.22,None,""), ("WI",3): ("Rebecca","Cooke","D",-0.22,None,""),
+  ("MN",1): ("Jake","Johnson","D",-0.2,None,"lead"),
+  # Republican flips
+  ("TX",32): ("Jace","Yarbrough","R",0.6,None,""), ("TN",9): ("Brent","Taylor","R",0.5,None,""), ("ME",2): ("Paul","LePage","R",0.6,1948,"lead"),
+  # Open seats, same party
+  ("CA",11): ("Scott","Wiener","D",-0.48,1970,""), ("TX",30): ("Frederick","Haynes","D",-0.5,1960,""), ("TX",33): ("Colin","Allred","D",-0.25,1983,""),
+  ("TX",21): ("Mark","Teixeira","R",0.55,1980,""), ("KY",4): ("Ed","Gallrein","R",0.6,None,""), ("FL",19): ("Jim","Schwartzel","R",0.5,None,""),
+  ("FL",7): ("Ryan","Elijah","R",0.5,None,"lead"), ("FL",22): ("Pia","Dandiya","D",-0.35,None,""), ("FL",24): ("Oliver","Gilbert","D",-0.4,1962,""),
+  ("NY",21): ("Anthony","Constantino","R",0.6,None,"lead"),
+}
+# Incumbents who won in a renumbered seat: (to) <- (from)
+MOVES = {("CA",3): ("CA",6), ("CA",40): ("CA",41), ("CA",41): ("CA",38), ("FL",20): ("FL",25), ("FL",25): ("FL",23), ("FL",23): ("FL",22)}
+idx = {(m["st"], m["d"]): m for m in house}
+before = {k: dict(v) for k, v in idx.items()}
+for to, frm in MOVES.items():
+    keep = {"st": to[0], "d": to[1], "dem": idx[to]["dem"]}
+    idx[to].clear(); idx[to].update({**before[frm], **keep})
+for (st, d), (fn, ln, party, x, born, note) in RESULTS.items():
+    m = idx[(st, d)]; keep = {"ch": "H", "st": st, "d": d, "dem": m["dem"]}
+    m.clear(); m.update({**keep, "id": f"E{st}{d}", "first": fn, "last": ln, "p": party, "x": x, "y": 0, "born": born, "since": 2027,
+                         "comm": [], "lead": [], "new": True, "est": True, "flip": party != before[(st, d)]["p"], "uncalled": note == "lead"})
+flips = [m for m in house if m.get("flip")]
 for m in house:
     if m.get("gen") and "first" not in m:
         fn, ln = newcomer_name(m["id"]); m.update({"first": fn, "last": ln, "born": 1970})

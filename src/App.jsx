@@ -74,7 +74,7 @@ export default function App() {
         {tab === "office" && <Office {...ctx} />}
         {tab === "rank" && <Rankings {...ctx} />}
         {tab === "news" && <News {...ctx} />}
-        <p className="pm-fine">Characters are fictionalized: names are altered, and personalities, words and actions in the game are invented. Voting records, districts and committee seats come from public data. House roster is the outgoing Congress adjusted to the projected 2026 result; newcomers in flipped and open seats are placeholders.</p>
+        <p className="pm-fine">Characters are fictionalized: names are altered, and personalities, words and actions in the game are invented. Voting records, districts and committee seats come from public data. House roster is the 2026 result as called by Nov 10, 2026: real winners in flipped and open seats, with a few close races shown with the current leader. District lines are the 2024 map.</p>
       </main>
       {card && <MemberCard id={card} {...ctx} onClose={() => setCard(null)} />}
       {billOpen && <BillBoard id={billOpen} {...ctx} onClose={() => setBillOpen(null)} />}
@@ -385,7 +385,7 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
       <div className="modal pm-card" role="dialog" aria-modal="true" aria-label={S.nameOf(m, real)} onClick={(e) => e.stopPropagation()}>
         <div className={`pm-cardtop ${pc(m.p)}`}>
           <Face m={m} size={84} />
-          <div><h2>{S.titleOf(m)} {S.nameOf(m, real)}</h2><p>{m.p === "D" ? "Democrat" : "Republican"} · {m.seat} · in office since {m.since}{m.placeholder ? " · placeholder: this seat's real 2026 winner isn't in the data yet" : m.gen ? " · newcomer" : ""}</p>{m.lead?.[0] && <span className="cast-trait">{m.lead[0]}</span>}</div>
+          <div><h2>{S.titleOf(m)} {S.nameOf(m, real)}</h2><p>{m.p === "D" ? "Democrat" : "Republican"} · {m.seat} · in office since {m.since}{m.placeholder ? " · placeholder: this seat's real 2026 winner isn't in the data yet" : m.uncalled ? " · newcomer · race not yet called, leading" : m.new || m.gen ? " · newcomer" : ""}{m.flip ? " · flipped the seat" : ""}</p>{m.lead?.[0] && <span className="cast-trait">{m.lead[0]}</span>}</div>
         </div>
         <div className="modal-body">
           <dl className="pm-facts">
