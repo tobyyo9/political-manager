@@ -192,7 +192,7 @@ MOVES = {("CA",3): ("CA",6), ("CA",40): ("CA",41), ("CA",41): ("CA",38), ("FL",2
          ("UT",2): ("UT",1), ("UT",3): ("UT",2), ("UT",4): ("UT",3)}   # Utah's court-drawn map: McAdams took the Salt Lake seat
 # Redrawn seats where the 2024 number no longer fits: estimated 2024 presidential share on the new lines (Dem two-party %).
 NEW_LEAN = {("TX",9): 45.0, ("TX",35): 46.0, ("TX",34): 46.0, ("TX",28): 46.0, ("TX",15): 46.5, ("TX",23): 45.5, ("TX",32): 40.0,
-            ("LA",6): 42.0, ("UT",1): 54.0, ("NC",1): 47.0, ("MO",5): 41.0, ("OH",9): 45.0, ("OH",13): 47.0}
+            ("LA",6): 42.0, ("NY",21): 39.0, ("UT",1): 54.0, ("NC",1): 47.0, ("MO",5): 41.0, ("OH",9): 45.0, ("OH",13): 47.0}
 def inherit(prev):
     # A newcomer is expected to take the seats their predecessor held, at the bottom of the bench.
     return [{"c": c["c"], "n": c["n"], "rank": 90 + i, "title": "", "exp": True} for i, c in enumerate((prev or {}).get("comm", [])[:3])]
@@ -290,6 +290,53 @@ for ch, pool in (("H", house), ("S", senate)):
                 m, c = vice[0] if vice else min(mine, key=lambda r: (r[0].get("since") or 2027, r[1]["rank"]))
                 c["title"] = post; c["exp"] = True
 
+# Portrait skin tone and hair for real members (palette index 0 = lightest .. 6 = darkest), so faces aren't random.
+# Groups follow members' own public identification (Congressional Black Caucus, Hispanic and Asian Pacific American
+# caucuses, tribal citizenship, family background); everyone else defaults to the lighter end of the palette.
+import unicodedata
+def _n(x): return unicodedata.normalize("NFKD", x).encode("ascii", "ignore").decode().lower()
+LOOKS = {
+  "b": "Adams NC;Bishop GA;Beatty OH;Bell MO;Brown OH-11;Carson IN;Carter LA;Gilbert FL-24;Clarke NY;Cleaver MO;Clyburn SC;Figures AL;Frost FL;Hayes CT;Horsford NV;Ivey MD;Jackson IL;Jeffries NY;Johnson GA;Lee PA;Mfume MD;Moore WI;McClellan VA;McIver NJ;Meeks NY;Pressley MA;Scott VA;Sewell AL;Simon CA;Thompson MS;Williams GA;Kamlager-Dove CA;Waters CA;Omar MN;McBath GA;Menefee TX;Foushee NC;Davis NC;Sykes OH;Amo RI;Clark GA;Boafo MD;Miller IL-2;Ford IL;Haynes TX;Allred TX;Kiros CO;Womack NC;Jefferson NC;Rabb PA;Booker NJ;Warnock GA;Blunt Rochester DE;Alsobrooks MD;Scott SC;Stratton IL",
+  "al": "Torres NY;Avila Chevalier NY",
+  "h": "Aguilar CA;Barragan CA;Castro TX;Correa CA;Cuellar TX;Garcia CA;Garcia TX;Garcia IL;Gonzalez TX;Grijalva AZ;Leger Fernandez NM;Menendez NJ;Ramirez IL;Ruiz CA;Salinas OR;Sanchez CA;Soto FL;Torres CA;Vargas CA;Vasquez NM;Casar TX;Rivas CA;Escobar TX;Cisneros CA;Ocasio-Cortez NY;Diaz-Balart FL;Salazar FL;Gimenez FL;Luna FL;Padilla Stout TX;Pulido TX;Mendoza AZ;Rutinel CO;Solis CA;Villegas CA;Benitez-Thompson NV;Gutierrez TX;Gonzales-Torres CA;Padilla CA;Cortez Masto NV;Lujan NM;Gallego AZ;Cruz TX;Moreno OH;Talarico TX",
+  "a": "Chu CA;Meng NY;Matsui CA;Takano CA;Tokuda HI;Lieu CA;Tran CA;Min CA;Kim NJ;Hirono HI;Duckworth IL",
+  "s": "Dandiya FL;Bera CA;Jayapal WA;Khanna CA;Subramanyam VA",
+  "m": "Tlaib MI;Ansari AZ;Wahab CA;Hamawy NJ;El-Sayed MI;LaHood IL",
+  "n": "Davids KS;Peltola AK;Cole OK",
+}
+# Hand-set where a group's range would be wrong for a well-known face.
+SKIN_FIX = {(_n(k.rsplit(" ", 1)[0]), k.rsplit(" ", 1)[1]): v for k, v in {"Cruz TX": 1, "Moreno OH": 1, "Ocasio-Cortez NY": 1, "Talarico TX": 1, "Diaz-Balart FL": 1, "Gimenez FL": 1, "Salazar FL": 1, "Menendez NJ": 1, "Luna FL": 1,
+  "Cortez Masto NV": 1, "Lujan NM": 1, "Padilla CA": 2, "Gallego AZ": 2, "Castro TX": 2, "Aguilar CA": 2, "Cole OK": 1, "Duckworth IL": 1, "Booker NJ": 4, "Warnock GA": 5, "Jeffries NY": 5, "Clyburn SC": 5, "Stratton IL": 4, "Alsobrooks MD": 4, "Blunt Rochester DE": 5}.items()}
+TONES = {"b": [4, 5, 5, 6], "al": [3, 4], "h": [1, 2, 2, 3], "a": [1, 2], "s": [3, 4], "m": [1, 2], "n": [2, 3], "w": [0, 0, 1]}
+GROUP = {}
+for g, names in LOOKS.items():
+    for k in names.split(";"):
+        last, st = k.rsplit(" ", 1); GROUP[(_n(last), st)] = g
+# Gender and age for portraits: the legislators file for sitting members; first names for 2026 newcomers.
+BIO = {l["id"]["bioguide"]: l.get("bio", {}) for l in leg}
+FEMALE = set("JoAnna Jacqui Angela Hilda Marni Melat Jessica Anna Laurel Sydney Pia Jasmine Christina Lindsay Sarah Donna Patty Melissa Lakesha Denise Stefany Rebecca Teresa Claire Darializa Cait Kristina Paige Janelle Nancy Leticia Katy Shannon Elaine Amanda Juliana Mary Peggy Annie Harriet Julia".split())
+for m in house + senate:
+    b = BIO.get(m["id"], {})
+    if b.get("gender"): m["g"] = b["gender"]
+    elif not m.get("gen"): m["g"] = "F" if m["first"].split()[0] in FEMALE else "M"
+    if b.get("birthday"): m["born"] = int(b["birthday"][:4])
+    elif not m.get("born") and not m.get("gen"): m["born"] = 1977; m["bornEst"] = True   # age unknown: about a typical freshman's
+seen = set()
+for m in house + senate:
+    if m.get("gen"): continue
+    kd = (_n(m["last"]), f'{m["st"]}-{m["d"]}') if m["ch"] == "H" else None
+    key = kd if kd in GROUP else (_n(m["last"]), m["st"])
+    g = GROUP.get(key, "w") if not (key[1] == m["st"] and any(k2[0] == key[0] and "-" in k2[1] and k2[1].startswith(m["st"] + "-") for k2 in GROUP)) else "w"
+    if g != "w": seen.add(key)
+    tones = TONES[g]; i = int(h(m["id"], "skin") * len(tones)) % len(tones)
+    fixed = SKIN_FIX.get((_n(m["last"]), m["st"]))
+    if fixed is not None: tones, i = [fixed], 0
+    age = 2027 - (m.get("born") or 1970)
+    look = {"skin": tones[i]}
+    if g != "w": look["hair"] = "#d9d9d9" if age > 70 else "#9a9a9a" if age > 60 else ["#1f1a17", "#2b211b"][i % 2]
+    m["look"] = look
+missing = [k for k in GROUP if k not in seen]
+if missing: print("skin table names not found:", missing)
 out = []
 for m in house + senate:
     key = m["id"]

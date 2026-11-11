@@ -118,7 +118,7 @@ const PL = "Whitfield Navarro Okoye Brandt Castellano Pruitt Mbeki Halloran Vasq
 function buildMembers() {
   const ms = RAW.map((r, i) => ({ ...r, i }));
   // Placeholder newcomers (seats whose real 2026 winner is not published yet) each get a distinct invented name.
-  for (const m of ms) m.g = GENDER[m.id] || (noise(m.id + "g") > 0 ? "F" : "M");
+  for (const m of ms) m.g = m.g || GENDER[m.id] || (noise(m.id + "g") > 0 ? "F" : "M");
   ms.filter((m) => m.gen).forEach((m, k) => { m.first = m.sf = PF[(k * 7) % PF.length]; m.last = m.sl = PL[k % PL.length]; m.placeholder = true; });
   // Committee posts in the data are already set for the 120th Congress (Democrats chair).
   for (const m of ms) for (const c of m.comm || []) c.role = c.title || "";
