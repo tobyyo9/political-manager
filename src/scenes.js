@@ -154,6 +154,62 @@ function build(s, msg, real) {
       ],
       headline: (score) => score >= 3 ? "President commands the briefing room" : score <= -3 ? "Combative briefing leaves White House scrambling" : "President spars with press at briefing" };
   }
+  if (sc.type === "sotu") {
+    const spk = S.MEMBERS.find((m) => /^Speaker/.test(m.lead?.[0] || "")), opp = other(P);
+    return { setting: "chamber", network: `State of the Union · ${sc.year}`, lower: [`President ${S.nameOf(you, real)}`, "Joint session of Congress"], cast: [{ name: spk ? `Speaker ${S.nameOf(spk, real)}` : "The Speaker", title: spk ? `${spk.p}-${spk.seat}` : "Speaker", face: spk || { id: "spk", g: "M", born: 1970, p: opp }, stat: 13, id: spk?.id }, { name: `President ${S.nameOf(you, real)}`, title: "The President", face: you, you: true }],
+      intro: `"Madam Speaker, Mr. Vice President, members of Congress..." Half the chamber stands. The other half stays seated with arms folded.`,
+      beats: [
+        { who: 1, line: "Forty million people are watching. How do you open?",
+          choices: [
+            { label: "The state of our union is strong", stat: "Policy", aud: { swing: 1 }, good: "A clean opening, and a list of numbers that mostly hold up.", bad: "The fact-checkers are already typing." },
+            { label: "Call for unity", stat: "Integrity", aud: { swing: 1.3, base: -0.4 }, good: "Even some across the aisle applaud. The pundits call it presidential.", bad: "Nobody across the aisle moves. It looks naive." },
+            { label: "Go after the other party", stat: "Media", risk: true, aud: { base: 1.8, swing: -0.6, profile: 1 }, good: `Your side roars. ${partyName(opp)} sit stone-faced, which is the shot everyone shares.`, bad: "Someone shouts back from the floor. The heckle becomes the story." },
+          ] },
+        { who: 1, line: "Now the ask: what do you want from this Congress this year?",
+          choices: [
+            { label: "One bipartisan deal, by name", stat: "Negotiation", aud: { swing: 1, profile: 0.5 }, good: "Members from both parties stand. Leadership will have to schedule it.", bad: "Half-hearted applause. Nobody believes it's coming." },
+            { label: "Demand your agenda", stat: "Loyalty", aud: { base: 1.4 }, good: "Your party leaps up on every line.", bad: "It reads as a list of things that won't pass." },
+            { label: "Dare them to stop you", stat: "Media", risk: true, aud: { base: 1.6, profile: 1.5, swing: -0.3 }, good: "'Send me the bill or get out of the way.' It lands.", bad: "It sounds like a threat. Moderates in your party wince." },
+          ] },
+        { who: 1, line: "The gallery. Your guest is waiting for the camera.",
+          choices: [
+            { label: "Tell their story, quietly", stat: "Integrity", aud: { swing: 1.2 }, good: "The chamber goes silent, then stands. It's the moment of the night.", bad: "It runs long, and the camera cuts away early." },
+            { label: "Go off script", stat: "Media", risk: true, aud: { base: 1.2, profile: 2, swing: -0.2 }, good: "Twenty unplanned minutes, and they're the best of the speech.", bad: "Twenty unplanned minutes. The networks cut to commentary." },
+          ] },
+      ],
+      headline: (score) => score >= 3 ? "A State of the Union that moves the numbers" : score <= -3 ? "State of the Union falls flat; heckles steal the night" : "President delivers a combative State of the Union" };
+  }
+  if (sc.type === "confirm") {
+    const mine = you.p === sc.by, nom = { id: "nom" + sc.nom, g: /a$|i$|e$/.test(sc.nom.split(" ")[0]) ? "F" : "M", born: 1976, p: sc.by };
+    return { setting: "hearing", network: "Senate Judiciary Committee · Live", lower: [sc.nom, "Supreme Court nominee"], cast: [{ name: `Judge ${sc.nom}`, title: "Nominee", face: nom, stat: 14 - Math.round(sc.cont * 4) }, { name: yourName, title: `${you.p}-${you.st}`, face: you, you: true }],
+      intro: `The nominee sits alone at the witness table, family behind. You have ten minutes.`,
+      beats: mine ? [
+        { who: 0, line: `"Senator, I'm grateful for the chance to answer the committee's questions."`,
+          choices: [
+            { label: "Walk through the record", stat: "Policy", aud: { base: 0.6, swing: 0.6 }, good: "A careful tour of their best opinions. It looks bulletproof.", bad: "You land on an opinion that's harder to defend than you thought." },
+            { label: "Let them tell their story", stat: "Integrity", aud: { swing: 1 }, good: "Humble roots, hard work. Even critics soften.", bad: "It feels rehearsed." },
+            { label: "Attack the other side's tactics", stat: "Media", risk: true, aud: { base: 1.6, profile: 1.5, swing: -0.4 }, good: "You call out the smears. Your base loves it.", bad: "It turns the hearing into a food fight." },
+          ] },
+        { who: 0, line: `"I can't comment on cases that may come before the Court."`,
+          choices: [
+            { label: "Defend their silence", stat: "Policy", aud: { base: 0.6 }, good: "The Ginsburg rule, explained well.", bad: "It sounds like you're hiding something too." },
+            { label: "Ask an easy one on precedent", stat: "Negotiation", aud: { swing: 0.8 }, good: "A safe, warm answer about respecting precedent. Moderates relax.", bad: "Their answer is so careful it worries everyone." },
+          ] },
+      ] : [
+        { who: 0, line: `"Senator, I'm grateful for the chance to answer the committee's questions."`,
+          choices: [
+            { label: "Read their most extreme opinion back", stat: "Policy", aud: { base: 1, swing: 0.6 }, good: "They squirm, then try to explain. The clip runs everywhere.", bad: "They explain it calmly. You come off as the aggressor." },
+            { label: "Ask about the President", stat: "Media", risk: true, aud: { base: 1.6, profile: 2 }, good: "'Would you recuse in a case involving the man who nominated you?' They hesitate a beat too long.", bad: "They answer smoothly. Your moment fizzles." },
+            { label: "Ask a fair, hard question", stat: "Integrity", aud: { swing: 1.2 }, good: "Respectful and pointed. Moderates take note of the answer.", bad: "It's so fair that it's forgettable." },
+          ] },
+        { who: 0, line: `"I can't comment on cases that may come before the Court."`,
+          choices: [
+            { label: "Press them on precedent", stat: "Policy", aud: { swing: 0.8, base: 0.4 }, good: "You pin down an answer that will follow them.", bad: "They give nothing away." },
+            { label: "Make it about the stakes", stat: "Media", risk: true, aud: { base: 1.4, profile: 1 }, good: "You speak past the nominee to the cameras. It works.", bad: "It's a speech, not a question. The chair cuts you off." },
+          ] },
+      ],
+      headline: (score) => mine ? (score >= 2 ? "Senator gives the nominee a strong showing" : score <= -2 ? "Friendly questioning backfires on the nominee" : "Senator defends the nominee at hearing") : (score >= 2 ? "Senator lands blows on the Supreme Court nominee" : score <= -2 ? "Senator's grilling of the nominee falls flat" : "Senator presses the nominee at hearing") };
+  }
   if (sc.type === "oval") {
     const m = S.memberById[sc.who], b = s.bills.find((x) => x.id === sc.bill), bill = b ? S.byId[b.pid].name : "the bill";
     return { setting: "oval", network: "The Oval Office · Private", lower: [S.nameOf(m, real), `${m.p}-${m.seat}`], cast: [{ name: `${S.titleOf(m)} ${S.nameOf(m, real)}`, title: `${m.p}-${m.seat}`, face: m, stat: S.attrs(m).Negotiation, id: m.id }, { name: "The President", title: "The President", face: you, you: true }],

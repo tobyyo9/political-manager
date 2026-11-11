@@ -396,3 +396,15 @@ button.danger{color:#c8443a;border-color:#e8a093}
 .ghost.sm{padding:4px 8px;font-size:.8em}
 .pm-pet{margin:8px 0;padding:8px 10px;border-radius:10px;background:#fff8ec}.pm-pet .pm-money-bar{margin:6px 0}
 @media (max-width:600px){.pm-spend{flex-direction:column;align-items:flex-start}.pm-vs{grid-template-columns:1fr}}
+.set-chamber .sc-backdrop{background:linear-gradient(#5a1f24 0,#3d1418 50%,#2a1b10 50%,#1d130b 100%)}
+.set-chamber .sc-backdrop::after{content:"";position:absolute;left:10%;right:10%;top:8%;height:36%;background:repeating-linear-gradient(90deg,#c9a24a33 0 3px,transparent 3px 46px);border-top:4px solid #c9a24a88}
+.pm-justices{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.pm-justice{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:12px 8px;border-radius:12px;background:var(--soft,#f4f6f9);border-top:4px solid #c8443a}.pm-justice.dem{border-top-color:#3d7bd9}.pm-justice.gone{opacity:.55;border-top-style:dashed}
+.pm-justice small{color:var(--muted);font-size:.78em}
+.pm-lean{position:relative;width:100%;height:6px;border-radius:3px;background:linear-gradient(90deg,#3d7bd9,#d9dee6,#c8443a);margin-top:4px}.pm-lean i{position:absolute;top:-3px;width:4px;height:12px;margin-left:-2px;background:#0b1220;border-radius:2px}
+.pill.dem{background:#dfe9fb;color:#1f4fa0}.pill.rep{background:#fbe2df;color:#9c2c22}
+.pm-earn-total{font-size:2em;font-weight:800;margin:4px 0}.pm-earn-total small{font-size:.4em;font-weight:500;color:var(--muted)}
+.pm-earn-rows{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.88em;margin-bottom:6px}
+.pm-trade{display:flex;flex-wrap:wrap;gap:6px}.ghost.on{background:#0b1220;color:#fff}
+.pm-earnopts{display:flex;flex-direction:column;gap:10px;margin-top:6px}.pm-earnopts>div{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:10px;background:var(--soft,#f4f6f9)}.pm-earnopts small{color:var(--muted)}.pm-earnopts button{align-self:flex-start}
+.pm-after{margin:12px 0;text-align:left}

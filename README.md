@@ -124,3 +124,19 @@ The Senate and the President as full characters, committees and amendments as pl
 - **Party leaders steer a battleground fund.** The money goes to the closest races, members and challengers ask for it, and it moves the margin in those seats. Challengers you back are named, and if they win they arrive as allies who owe you. Funding people and paying dues help in leadership races.
 - **Discharge petitions.** A House petition needs 218 signatures. The minority files them on popular bills. Majority members who sign defy their leaders, and leaders may try to turn a petition off with a rule vote.
 - **Privileged resolutions.** Under the War Powers Resolution and the National Emergencies Act (tariff emergencies), any member can force a vote, and the Senate needs only 51.
+
+## Fifteenth pass: the courts, the President's toolkit, and your own money
+- **The Supreme Court as of Nov 2026.** Alito has said he'll stay through the term; Thomas has ruled out retiring. Retirements are most likely in early July, and only when the timing suits the justice's party; sudden vacancies are rare and depend on age.
+- **Filling a seat.** The President picks from a shortlist of judges often named on Republican lists, or a consensus pick. The outcomes are invented. Hearings come with a Judiciary scene for senators on the committee; the floor vote needs 51. An opposite-party Senate may refuse hearings in an election year.
+- **Lower courts and rulings.** Lower-court confirmations are a steady flow, slow when the other party runs the Senate, and senators decide on blue slips. The real docket is seeded: state assault weapons bans and the replacement tariffs. Laws you pass that are open to challenge get sued and decided the next June by the median justice. Blocked executive orders can be revived. Struck-down progressive laws boost court reform.
+- **Crises.** Seven crises: Taiwan, Iran, a Russian drone strike on NATO, a cartel ambush, hostages, a cyberattack and a North Korean missile. The President chooses force, talks, sanctions or waiting, and the outcome comes four weeks later. Members choose to back the President, criticize, or force a war powers vote.
+- **Pardons.** The President decides on nine kinds of pardon requests, from cronies to clemency cases; members react when the President issues one.
+- **State of the Union.** It's a scene each February.
+- **Your own money.** Lifetime earnings is a header stat.
+  - Salaries are real 2026 figures: $174K for members, $193.4K for leaders and the President pro tempore, $223.5K for the Speaker, $400K for the President.
+  - Investments: index funds, picking stocks, or trading on what you hear in closed briefings (big returns, with a chance of a story and an ethics complaint). A stock trading ban, if it becomes law, forces you to divest.
+  - A book deal (royalties are exempt from the $33,855 cap on outside income), with the option of your campaign bulk-buying copies.
+  - Teaching, up to the cap.
+  - Your spouse on the campaign payroll, or your spouse's consulting firm taking lobbying clients (both legal-gray and risky).
+  - For the President, foreign deals for the family business.
+  - When your career ends, you choose a path for the next ten years: lobbying after the cooling-off period, boards, speeches, or going home. It's added to your total and the hall of fame.

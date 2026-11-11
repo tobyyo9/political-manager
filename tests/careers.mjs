@@ -78,6 +78,23 @@ for (const you of [picks[0], picks[2], S.SENATE.find((m) => m.cls === 3 && m.p =
     if (seed === 1) console.log("campaigner", you.seat, "opp", s.opp && Math.round(s.opp.raised), "spent", Math.round(s.camp?.spent || 0), "polls", (s.polls || []).length, "ears", (s.ear || []).map((e) => e.status).join("/"), "dues", s.dues?.paid, "petitions", (s.petitions || []).map((p) => p.n + p.status).join(" "), "lpac", s.lpac && s.lpac.raised);
   } catch (e) { fail++; console.log("FAIL campaigner", you.seat, seed, "week", s.week, e.stack.split("\n").slice(0, 3).join(" | ")); }
 }
+// Money, courts and crises: every new inbox kind answered every way, every money option on.
+for (const [id, label] of [[S.SENATE.find((m) => m.last === "Booker").id, "Booker"], ["POTUS", "President"]]) for (let seed = 1; seed <= 3; seed++) {
+  let s = S.newCareer(id, seed), guard = 0;
+  try {
+    s = S.setMoney(s, id === "POTUS" ? "family" : "trade", id === "POTUS" ? true : "informed"); s = S.setMoney(s, "spousePay", seed === 2); s = S.setMoney(s, "spouseConsult", seed === 3); s = S.setMoney(s, "teach", seed === 1);
+    while (!s.over && guard++ < 200) {
+      for (const m of s.inbox.filter((x) => !x.done && x.kind !== "staff")) s = S.answer(s, m.id, (s.week + seed) % 3);
+      if (s.week === 8) s = S.bookDeal(s); if (s.week === 9) s = S.bookDeal(s, true);
+      s = S.advance(s);
+    }
+    if (!s.over) throw new Error("career never ended");
+    s = S.chooseAfter(s, S.afterPaths(s)[0][0]);
+    if (!(S.earnTotal(s) > 0)) throw new Error("no earnings");
+    if (seed === 1) console.log("world", label, "earned", Math.round(S.earnTotal(s)), "court", S.onBench(s).length, "decided", s.court.decided.length, "crises", (s.crises || []).length, "judges", s.bench.confirmed);
+    n++;
+  } catch (e) { fail++; console.log("FAIL world", label, seed, "week", s.week, e.stack.split("\n").slice(0, 3).join(" | ")); }
+}
 // Long careers: keep winning and keep going, through 2034.
 const longOut = [];
 for (const [id, seed] of [[S.HOUSE.filter((m) => m.p === "D").sort((a, b) => b.own - a.own)[0].id, 1], [S.HOUSE.filter((m) => m.p === "R").sort((a, b) => b.own - a.own)[0].id, 2], [S.SENATE.find((m) => m.cls === 1).id, 3], [S.HOUSE.find((m) => m.p === "D" && m.st === "GA").id, 4]]) {

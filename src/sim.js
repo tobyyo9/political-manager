@@ -294,7 +294,7 @@ export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom 
     rapport: 0, pres: [], staff: makeStaff(seed), diff: diff || { info: "normal", world: "normal" }, boost: {}, groups: {}, flags: {}, usedEvents: [], moments: [],
     role: you.ch === "S" ? "S" : "H", cab: freshCabinet(), noms: [], presHeat: 0.35, imp: [], term: 1, termStart: 0, edits: {}, pp: "R", career: [],
   };
-  mpSeed(s);
+  mpSeed(s); courtSeed(s); earnSeed(s);
   startRelations(s, you);
   s.money = { small: Math.round(s.cash * you.fund.small), large: Math.round(s.cash * you.fund.large), pac: Math.round(s.cash * you.fund.pac) }; s.pledge = !!you.fund.pledge; s.ties = {};
   for (const g of you.fund.sectors) if (!["labor", "lowtax"].includes(g) && !s.pledge) s.ties[g] = Math.round(s.cash * you.fund.pac / Math.max(1, you.fund.sectors.length));
@@ -509,6 +509,8 @@ export function answer(s0, msgId, choice) {
   if (m.kind === "lead") leaderRace(s, choice, m.comm);
   if (m.kind === "donor") donorAnswer(s, m, choice);
   if (m.kind === ATTACK_KEY) answerAttack(s, m, choice);
+  if (["crisis", "crisisreact", "pardon", "pardonreact", "scotusnom", "scotusvote", "blueslip", "ruling"].includes(m.kind)) answerWorld(s, m, choice);
+  if (m.kind === "moneyscandal") answerScandal(s, m, choice);
   if (m.kind === "fundask" || m.kind === "potask") answerMoney(s, m, choice);
   if (m.kind === "petask" && choice === 0) { const p = (s.petitions || []).find((x) => x.id === m.pet); if (p && !p.sigs[s.youId] && p.status === "open") { p.sigs[s.youId] = 1; p.n++; defyLeaders(s, 1); s.profile = clamp(s.profile + 1, 0, 100); } }
   if (m.kind === "higher" && choice === 0) { const seat = memberById[m.seat]; s.runFor = m.seat; s.runForDem = seat.dem; s.runForCls = seat.cls; pushNews(s, `${nameOf(you)} announces a run for the Senate in ${you.st}.`, "event"); s.toast = { title: "You're running statewide", text: `The race is in November ${electionYear(s)}. Your House seat goes to someone else either way. Statewide approval, money and the national mood decide it.`, tone: "good" }; }
@@ -602,6 +604,11 @@ export function advance(s0) {
   campaignWeek(s, R(s, "camp"));
   moneyWeek(s, R(s, "money"));
   if (roleOf(s) !== "P" || s.week % 2 === 0) petitionWeek(s, R(s, "pet"));
+  courtWeek(s, R(s, "court"));
+  crisisWeek(s, R(s, "crisis"));
+  pardonWeek(s, R(s, "pardon"));
+  sotuWeek(s, R(s, "sotu"));
+  earnWeek(s, R(s, "earn"));
   wireWeek(s, R(s, "wire"));
   { const rr = R(s, "react"); for (const ev of events.slice(0, 2)) voteReactions(s, ev, rr); }
   // 6. Primary and general.
@@ -665,7 +672,7 @@ function desk(s, b, signs, ev, forced = {}) {
   out.push(ev);
   return out;
 }
-function enact(s, b) { b.stage = "law"; s.laws.push(b.pid); if (b.sponsor === s.youId) { s.legis += 12; s.clout += 6; s.profile += 5; } else if (b.cos.includes(s.youId)) s.legis += 2; }
+function enact(s, b) { b.stage = "law"; s.laws.push(b.pid); docketLaw(s, b.pid, rng(hash(`${s.seed}:dock:${b.id}`))); if (b.sponsor === s.youId) { s.legis += 12; s.clout += 6; s.profile += 5; } else if (b.cos.includes(s.youId)) s.legis += 2; }
 function settle(s, b, passed) { if (b.sponsor === s.youId && !passed) s.clout -= 1; const whipped = Object.keys(b.deals).length; if (whipped && passed) s.clout += Math.min(4, whipped); }
 // How your own vote lands at home, with the base, and with your leaders.
 function cast(s, b, yv, mine) {
@@ -1193,7 +1200,7 @@ function newPresidency(seed, diff) {
     rapport: 0, pres: [], staff: makeStaff(seed), diff: diff || { info: "normal", world: "normal" }, boost: {}, groups: {}, flags: {}, usedEvents: [], moments: [],
     cab: freshCabinet(), noms: [], presHeat: 0.35, imp: [], eos: [], legacy: 0, vetoes: 0, signed: 0, term: 1, termStart: 0, edits: {}, pp: "R", career: [],
   };
-  mpSeed(s);
+  mpSeed(s); courtSeed(s); earnSeed(s);
   for (const m of MEMBERS) if (m.p === "R") s.rel[m.id] = clamp(0.1 + 0.3 * (m.t.label === "follower" ? 1 : 0) + 0.2 * m.x - (m.vuln > 0.7 ? 0.1 : 0), -1, 1);
   seedBills(s);
   pushInbox(s, { kind: "staff", from: "Susie Wiles, chief of staff", title: "Democrats run Congress now", body: `They hold ${HOUSE.filter((m) => m.p === "D").length} House seats and ${SENATE.filter((m) => m.p === "D").length} in the Senate. Their bills will land on your desk; you can sign or veto. They can override with 290 and 67, so every Republican you keep matters. You can't run again, so this is about your approval, your legacy and whether your party keeps the White House in November 2028.` });
@@ -1233,7 +1240,7 @@ export function decide(s0, billId, signs) {
 }
 const ASKS = ["wants you to headline a fundraiser in their district", "wants a federal grant for a bridge back home", "wants you to stay out of their primary", "wants a seat on Air Force One for the next trip home", "wants your endorsement before filing day"];
 function presWeek(s, r) {
-  for (const e of s.eos) if (e.alive && e.court === s.week) { e.alive = false; s.presApproval -= 0.8; s.presHeat = clamp(s.presHeat + 0.03, 0, 1); s.legacy -= 1; pushNews(s, `A federal judge blocks the President's order on ${byId[e.pid].name}.`, "bad"); presPost(s, `The President calls the judge who blocked his order on ${byId[e.pid].name} "a total disgrace."`, e.pid); }
+  for (const e of s.eos) if (e.alive && e.court === s.week) { e.alive = false; if (s.court && !s.court.docket.some((k) => k.pid === e.pid && !k.done)) { const y = gameYear(s), w = weekOfDate(s, y, 5, 27); s.court.docket.push({ id: `eo${e.pid}${s.week}`, name: `The President's order on ${byId[e.pid].name}`, pid: e.pid, kind: "eo", week: w - s.week >= 8 ? w : weekOfDate(s, y + 1, 5, 27) }); } s.presApproval -= 0.8; s.presHeat = clamp(s.presHeat + 0.03, 0, 1); s.legacy -= 1; pushNews(s, `A federal judge blocks the President's order on ${byId[e.pid].name}.`, "bad"); presPost(s, `The President calls the judge who blocked his order on ${byId[e.pid].name} "a total disgrace."`, e.pid); }
   s.presApproval = clamp(s.presApproval + (40 + (s.econ.growth - 1.6) * 2 - (s.econ.inflation - 3) * 2 - s.presApproval) * 0.05, 20, 70);   // pulled back toward the fundamentals
   s.baseApproval = clamp(s.baseApproval + (s.presApproval - 39) * 0.02 + (84 - s.baseApproval) * 0.03, 5, 99);
   s.clout = clamp(s.clout + (s.presApproval - 40) * 0.05, 0, 100);
@@ -1622,7 +1629,7 @@ export function houseMap() {
 const SCENE_DUE = 2;   // weeks before your staff handles it for you
 function pushScene(s, type, ctx, title, from) {
   if (s.inbox.some((m) => m.kind === "scene" && !m.done && m.scene.type === type)) return null;
-  const COOL = { tv: 7, hearing: 9, leader: 6, briefing: 4, oval: 5, debate: 0 }; s.sceneAt = s.sceneAt || {};
+  const COOL = { tv: 7, hearing: 9, leader: 6, briefing: 4, oval: 5, debate: 0, sotu: 0, confirm: 0 }; s.sceneAt = s.sceneAt || {};
   if (s.week - (s.sceneAt[type] ?? -99) < COOL[type]) return null; s.sceneAt[type] = s.week;
   const msg = { kind: "scene", scene: { type, ...ctx }, from, title, body: "", due: s.week + SCENE_DUE };
   pushInbox(s, msg); return s.inbox[0];
@@ -1664,6 +1671,8 @@ export function finishScene(s0, id, out) {
   if (sc.type === "hearing") { const c = s.cab.find((x) => x.id === sc.cab); if (c) c.heat = clamp(c.heat + (sc.mine ? 0.08 * k + 0.03 : -0.06 * Math.max(0, k)), 0, 1); }
   if (sc.type === "leader") { const b = s.bills.find((x) => x.id === sc.bill); if (b && out.tags?.includes("deal")) { b.yourVote = true; s.loyalty += 2; s.clout += 2; } if (out.tags?.includes("refuse")) { s.loyalty -= 2; if (b) b.yourVote = false; } }
   if (sc.type === "debate") s.debateBonus = k * 3.5;
+  if (sc.type === "sotu") { s.mood = clamp(s.mood - PSIGN() * k * 0.4, -12, 12); s.clout += k * 4; for (const b of s.bills) if (!b.dead && b.party === PP) b.wh = (b.wh || 0) + 0.1 * Math.max(0, k); }
+  if (sc.type === "confirm" && s.court?.nom) { const opp = memberById[s.youId].p !== s.court.nom.by; s.court.nom.cont = clamp(s.court.nom.cont + (opp ? 0.12 : -0.08) * k, 0, 1); }
   if (sc.type === "oval") { const b = s.bills.find((x) => x.id === sc.bill); if (b && out.tags?.includes("won")) { b.deals[sc.who] = (b.deals[sc.who] || 0) - 0.5; s.know[sc.who] = Math.max(2, s.know[sc.who] || 0); } }
   pushNews(s, out.headline, out.score >= 2 ? "good" : out.score <= -2 ? "bad" : "");
   s.moments.push({ week: s.week, text: out.headline });
@@ -1690,7 +1699,7 @@ export function fameEntry(s, real) {
   const verdict = r.kind === "general" ? (r.won ? "Reelected" : "Defeated") : r.kind === "primary" ? "Lost the primary" : r.kind === "term" ? "Finished the term" : r.kind === "higher" ? (r.won ? "Won a Senate seat" : "Lost a Senate run") : r.kind === "pres" ? (r.won ? "Party held the White House" : "Party lost the White House") : r.kind === "removed" ? "Removed from office" : "Ended";
   const score = Math.round((r.won ? 40 : 0) + terms * 15 + laws * 6 + Math.max(0, s.clout) * 0.3 + (role === "P" ? (s.presApproval - 40) * 1.5 + (s.legacy || 0) * 2 : 0) + (you.lead?.length ? 15 : 0));
   return { id: `${s.seed}-${s.youId}`, upto: s.week, when: new Date().toISOString(), name: role === "P" ? `President ${nameOf(you, real)}` : `${titleOf(you)} ${nameOf(you, real)}`, real: `${you.first} ${you.last}`, alt: `${you.sf} ${you.sl}`,
-    role, party: you.p, seat: you.seat, terms, years: `2027-${electionYear(s)}`, verdict, won: !!r.won, laws, title: you.lead?.[0] || "", score, custom: !!s.custom };
+    role, party: you.p, seat: you.seat, terms, years: `2027-${electionYear(s)}`, verdict, won: !!r.won, laws, title: you.lead?.[0] || "", score, custom: !!s.custom, earned: Math.round(earnTotal(s)) };
 }
 
 // ════════ Personalities and the press ════════
@@ -2109,3 +2118,294 @@ function petitionWeek(s, r) {
     }
   }
 }
+
+// ════════ The Supreme Court and the federal bench ════════
+// The Court as of November 2026. Alito has said he'll stay through the end of the term (summer 2027);
+// Thomas has ruled out retiring. Leanings are rough placements for the game.
+const JUSTICES = [
+  { first: "John", skin: 0, last: "Roberts", born: 1955, by: "R", x: 0.3, since: 2005, g: "M", chief: true }, { first: "Clarence", skin: 5, last: "Thomas", born: 1948, by: "R", x: 0.95, since: 1991, g: "M" },
+  { first: "Samuel", skin: 1, last: "Alito", born: 1950, by: "R", x: 0.85, since: 2006, g: "M" }, { first: "Sonia", skin: 2, last: "Sotomayor", born: 1954, by: "D", x: -0.75, since: 2009, g: "F" },
+  { first: "Elena", skin: 0, last: "Kagan", born: 1960, by: "D", x: -0.5, since: 2010, g: "F" }, { first: "Neil", skin: 0, last: "Gorsuch", born: 1967, by: "R", x: 0.6, since: 2017, g: "M" },
+  { first: "Brett", skin: 0, last: "Kavanaugh", born: 1965, by: "R", x: 0.4, since: 2018, g: "M" }, { first: "Amy Coney", skin: 0, last: "Barrett", born: 1972, by: "R", x: 0.42, since: 2020, g: "F" },
+  { first: "Ketanji Brown", skin: 5, last: "Jackson", born: 1970, by: "D", x: -0.8, since: 2022, g: "F" },
+];
+// Judges often named on Republican shortlists. Who gets picked, and what happens next, is invented. [first, last, contentiousness, lean, born]
+const SHORTLIST = [["Andrew", "Oldham", 0.42, 0.75, 1978], ["Amul", "Thapar", 0.36, 0.65, 1969], ["Neomi", "Rao", 0.46, 0.7, 1973], ["Kathryn", "Mizelle", 0.56, 0.75, 1987], ["James", "Ho", 0.66, 0.85, 1973], ["Emil", "Bove", 0.82, 0.8, 1981]];
+// How exposed a law is to a constitutional challenge (0-1).
+const VULN = { aw_ban: 0.7, codify_roe: 0.4, voting_rights: 0.5, wealth_tax: 0.75, term_limits: 0.9, court_expansion: 0.3, stock_ban: 0.25, ice_limits: 0.35, save_act: 0.45, voter_id: 0.3, abortion_15wk: 0.45,
+  gender_care: 0.35, dei: 0.35, red_flag: 0.35, carry_reciprocity: 0.4, public_option: 0.2, background_checks: 0.3, deport: 0.4, tariffs_up: 0.35, carbon: 0.35, ai_rules: 0.35, kids_online: 0.5, police: 0.15, marijuana: 0.1 };
+const gameYear = (s) => dateOf(s.week).getUTCFullYear();
+function courtSeed(s) {
+  s.court = { j: JUSTICES.map((j, i) => { const [sf, sl] = swapPair(j.first.split(" ")[0], j.last); return { ...j, id: `J${i}`, sf: j.first.includes(" ") ? `${sf} ${j.first.split(" ").slice(1).join(" ")}` : sf, sl }; }),
+    vac: null, nom: null, tries: 0, docket: [], decided: [], terms: {} };
+  s.bench = { confirmed: 0, slips: 0 };
+  // Already granted for the term ending June 2027.
+  const june = weekOfDate(s, 2027, 5, 25);
+  s.court.docket.push({ id: "aw27", name: "Challenge to state assault weapons bans", pid: "aw_ban", kind: "policy", week: june, tilt: 0.45, real: true },
+    { id: "tar27", name: "Challenge to the President's replacement tariffs", pid: "tariffs_up", kind: "policy", week: june, tilt: 0.35, real: true });
+}
+const weekOfDate = (s, y, m, d) => Math.round((Date.UTC(y, m, d) - dateOf(0).getTime()) / (7 * 86400000));
+export const onBench = (s) => (s.court?.j || []).filter((j) => !j.gone);
+export function courtMedian(s) { const xs = onBench(s).map((j) => j.x).sort((a, b) => a - b), n = xs.length; return n ? (n % 2 ? xs[(n - 1) / 2] : (xs[n / 2 - 1] + xs[n / 2]) / 2) : 0; }
+const senMaj = () => (SENATE.filter((m) => m.p === "D").length >= 51 ? "D" : "R");
+function newJusticeNom(s, pick, consensus) {
+  const [first, last, cont, x, born] = pick, [sf, sl] = swapPair(first, last);
+  s.court.nom = { first, last, sf: consensus ? first : sf, sl: consensus ? last : sl, cont, x: PP === "R" ? x : -x, born, g: /a$|i$|e$/.test(first) ? "F" : "M", consensus: !!consensus, hearing: s.week + 4, vote: s.week + 7, by: PP };
+  pushNews(s, `The President nominates ${s.court.nom.first} ${s.court.nom.last} to the Supreme Court. ${cont > 0.6 ? "Democrats call the pick a provocation." : cont < 0.2 ? "Senators in both parties sound open to it." : "A confirmation fight is coming."}`, "event");
+  if (senMaj() !== PP && rweek(s) >= 56 && rng(hash(`${s.seed}:garland:${s.week}`))() < 0.6) { s.court.nom.blocked = true; pushNews(s, `Senate ${senMaj() === "D" ? "Democrats" : "Republicans"} refuse to hold hearings in an election year: "Let the voters decide."`, "event"); return; }
+  if (roleOf(s) === "S") pushInbox(s, { kind: "scotusvote", from: "Your legislative director", title: `Supreme Court vote: ${s.court.nom.first} ${s.court.nom.last}`, body: `The floor vote is ${fmtDate(s.court.nom.vote)}; it takes a simple majority. ${cont > 0.6 ? "A combative pick with a thin record." : cont < 0.2 ? "A consensus pick with a long, moderate record." : "A conservative judge with a real record."} This vote will follow you for the rest of your career.`, choices: ["Vote to confirm", "Vote no"] });
+}
+function consensusPick(s, r) { return [PF[Math.floor(r() * PF.length)], PL[Math.floor(r() * PL.length)], 0.12, 0.25, 1966]; }
+function presNominates(s, r) {
+  if (roleOf(s) === "P") {
+    const used = new Set([...(s.court.used || [])]), picks = SHORTLIST.filter((x) => !used.has(x[1])).sort(() => r() - 0.5).slice(0, 3), c = consensusPick(s, r);
+    pushInbox(s, { kind: "scotusnom", picks: [...picks, c], from: "White House Counsel", title: "A seat on the Supreme Court is open", body: `It's the most lasting thing you'll do. ${senMaj() === PP ? "Your party runs the Senate, so a loyalist can get through." : `${senMaj() === "D" ? "Democrats" : "Republicans"} run the Senate with ${SENATE.filter((m) => m.p === senMaj()).length} seats. A favorite of the movement will probably fail; a consensus pick angers your base but gets the seat.`}`,
+      choices: [...picks.map(([f, l, cont]) => `${f} ${l} (${cont > 0.6 ? "a brawl" : cont > 0.4 ? "a fight" : "confirmable with effort"})`), `${c[0]} ${c[1]}, a consensus pick (base will hate it)`] });
+    return;
+  }
+  const used = new Set(s.court.used || []), pool = SHORTLIST.filter((x) => !used.has(x[1]));
+  const pick = s.court.tries >= 2 || !pool.length ? null : pool.sort((a, b) => (senMaj() === PP ? b[3] - a[3] : a[2] - b[2]) + (r() - 0.5) * 0.3)[0];
+  if (PP !== "R") { const [f, l] = [PF[Math.floor(r() * PF.length)], PL[Math.floor(r() * PL.length)]]; newJusticeNom(s, [f, l, 0.3 + r() * 0.3, 0.55, 1975], true); return; }
+  if (pick) (s.court.used = s.court.used || []).push(pick[1]);
+  newJusticeNom(s, pick || consensusPick(s, r), !pick);
+}
+function scotusVote(s) {
+  const n = s.court.nom; let yes = 0;
+  for (const m of SENATE) {
+    const same = m.p === n.by, rel = roleOf(s) === "P" ? (s.rel[m.id] || 0) * 0.3 : 0;
+    const p = same ? sig(8 * (0.85 - n.cont * 0.55 - (s.presApproval < 35 ? 0.1 : 0) + rel)) : sig(8 * (-0.62 + (0.5 - n.cont) * 1.5 + (m.p === "D" ? m.x + 0.2 : 0.2 - m.x) * 0.9 + rel));
+    const v = m.id === s.youId && n.yourVote !== undefined ? n.yourVote : noise(`${s.seed}:sc:${n.last}:${m.id}`) * 0.5 + 0.5 < p; if (v) yes++;
+    if (m.id === s.youId && roleOf(s) === "S") n.mine = v;
+  }
+  return yes;
+}
+function courtWeek(s, r) {
+  if (!s.court) courtSeed(s);
+  const c = s.court, year = gameYear(s), d = dateOf(s.week), role = roleOf(s), you = memberById[s.youId];
+  // Retirements at the end of the term (early July), and the odd sudden vacancy.
+  if (!c.vac) {
+    const july = d.getUTCMonth() === 6 && d.getUTCDate() <= 7 && !c.terms[`ret${year}`];
+    for (const j of onBench(s)) {
+      const age = year - j.born, friendly = j.by === PP ? (senMaj() === PP ? 4 : 0.6) : 0.15;
+      const pr = july ? (age >= 75 ? 0.09 : age >= 70 ? 0.03 : 0.005) * friendly : age >= 80 ? 0.0012 : age >= 75 ? 0.0006 : 0.00005;
+      if (r() < pr) { j.gone = true; j.left = year; c.vac = { i: c.j.indexOf(j), since: s.week, who: j.id }; c.tries = 0;
+        pushNews(s, `${july ? `Justice ${j.sl} announces retirement` : `Justice ${j.sl} dies`}, opening a seat on the Supreme Court.`, "event");
+        if (role !== "P") pushInbox(s, { kind: "staff", from: "Your legislative director", title: "A Supreme Court seat is open", body: `${role === "S" ? "The Senate confirms the replacement, and you'll get a vote. Every group you know is about to call." : "The House has no vote on it, but your base will want to hear from you."} The President will name someone within weeks.`, done: true });
+        c.nomDue = s.week + 2; break; }
+    }
+    if (july) c.terms[`ret${year}`] = true;
+  }
+  if (c.vac && !c.nom && s.week >= (c.nomDue || 0)) presNominates(s, r);
+  const n = c.nom;
+  if (n && !n.blocked) {
+    if (s.week === n.hearing) { pushNews(s, `Confirmation hearings open for ${n.first} ${n.last}.`, "event");
+      if (role === "S" && (you.comm || []).some((x) => x.c === "SSJU")) pushScene(s, "confirm", { nom: `${n.first} ${n.last}`, cont: n.cont, by: n.by }, `Judiciary hearing: questioning ${n.first} ${n.last}`, "Judiciary Committee staff");
+      if (role === "P") pushInbox(s, { kind: "staff", from: "White House Counsel", title: "Hearings are under way", body: `Your nominee needs ${51 - SENATE.filter((m) => m.p === PP).length > 0 ? 51 - SENATE.filter((m) => m.p === PP).length : 0} senators from the other party if every one of yours holds. Calls to wavering senators from the Chamber tab help.`, done: true }); }
+    if (s.week >= n.vote) {
+      const yes = scotusVote(s), ok = yes >= 51 || (yes === 50 && n.by === PP);
+      if (ok) { const j = c.j[c.vac.i]; Object.assign(j, { first: n.first, last: n.last, sf: n.sf, sl: n.sl, born: n.born, by: n.by, x: n.x, since: year, g: n.g, gone: false, chief: false });
+        pushNews(s, `The Senate confirms ${n.first} ${n.last} to the Supreme Court, ${yes}-${100 - yes}.`, "good"); c.vac = null; c.nom = null; if (role === "P") { s.legacy += 5; s.baseApproval = clamp(s.baseApproval + (n.consensus ? -4 : 4), 5, 99); } }
+      else { pushNews(s, `The Senate rejects ${n.first} ${n.last} for the Supreme Court, ${yes}-${100 - yes}.`, "bad"); c.nom = null; c.tries++; c.nomDue = s.week + 2; if (role === "P") { s.presApproval = clamp(s.presApproval - 1.5, 20, 70); s.clout -= 6; } }
+      if (role === "S" && n.mine !== undefined) { const aligned = n.mine === (you.p === n.by); s.baseApproval = clamp(s.baseApproval + (aligned ? 2 : -4), 5, 99); if (n.consensus && n.mine) s.approval = clamp(s.approval + 1, 5, 95); s.moments.push({ week: s.week, text: `You voted ${n.mine ? "to confirm" : "against"} ${n.first} ${n.last} for the Supreme Court.` }); }
+    }
+  }
+  // Lower courts: a steady flow of nominations; a Senate run by the other party slows it to a trickle.
+  if (s.week % 4 === 0) { const k = Math.round((2 + r() * 4) * (senMaj() === PP ? 1.6 : 0.5)); s.bench.confirmed += k; if (role === "P") s.legacy += k * 0.12; if (k && r() < 0.4) pushNews(s, `The Senate confirms ${k} federal judge${k > 1 ? "s" : ""} this month. ${s.bench.confirmed} this Congress.`); }
+  if (role === "S" && r() < 0.025) {
+    const nq = r() < 0.25, [f, l] = [PF[Math.floor(r() * PF.length)], PL[Math.floor(r() * PL.length)]];
+    pushInbox(s, { kind: "blueslip", nq, from: "Senate Judiciary Committee", title: `Blue slip: ${f} ${l} for a district court in ${you.st}`, body: `The President nominated ${f} ${l} to a federal district court in your state. By Senate custom, the nominee doesn't get a hearing unless both home-state senators return a "blue slip." ${nq ? "The American Bar Association rated the nominee Not Qualified." : "The ABA rated the nominee Well Qualified."}`, choices: ["Return the blue slip", "Withhold it"] });
+  }
+  // Decision days in late June.
+  for (const k of c.docket.filter((x) => !x.done && s.week >= x.week)) decideCase(s, k, r);
+}
+function decideCase(s, k, r) {
+  k.done = true; const med = courtMedian(s), role = roleOf(s), you = memberById[s.youId];
+  const left = billInfo(k.pid, "D").dir > 0 ? 1 : -1;        // which side wrote it
+  let cons;                                                   // true: the conservative outcome
+  if (k.kind === "law") { const strikeP = (VULN[k.pid] || 0.2) * sig(3.5 * med * left + 0.2); cons = left > 0 ? r() < strikeP : r() > strikeP; k.struck = left > 0 ? cons : !cons; }
+  else if (k.kind === "eo") { cons = r() < 0.35 + med * 0.45; k.struck = !cons; }
+  else cons = r() < sig(4 * med + (k.tilt || 0) - 1.2);
+  const vote = (() => { const xs = onBench(s).map((j) => j.x), lean = cons ? 1 : -1, maj = xs.filter((x) => x * lean > -0.35 + (r() - 0.5) * 0.3).length; return `${Math.max(maj, Math.ceil(xs.length / 2 + 0.5))}-${xs.length - Math.max(maj, Math.ceil(xs.length / 2 + 0.5))}`; })();
+  k.vote = vote; k.cons = cons;
+  let text;
+  if (k.kind === "law") { text = k.struck ? `The Supreme Court strikes down ${byId[k.pid].name}, ${vote}.` : `The Supreme Court upholds ${byId[k.pid].name}, ${vote}.`; if (k.struck) { s.laws = s.laws.filter((p) => p !== k.pid); if (left > 0) { s.mood = clamp(s.mood + 0.35, -12, 12); s.boost.court_expansion = (s.boost.court_expansion || 0) + 0.06; s.boost.term_limits = (s.boost.term_limits || 0) + 0.04; } } }
+  else if (k.kind === "eo") { const e = (s.eos || []).find((x) => x.pid === k.pid); text = k.struck ? `The Supreme Court leaves the block on the President's order on ${byId[k.pid].name} in place, ${vote}.` : `The Supreme Court revives the President's order on ${byId[k.pid].name}, ${vote}.`; if (e && !k.struck) { e.alive = true; s.legacy += 1; s.presApproval = clamp(s.presApproval + 0.4, 20, 70); } }
+  else text = `${k.name}: the Supreme Court sides with ${cons ? "the conservative side" : "the liberal side"}, ${vote}.`;
+  if (k.pid === "aw_ban" && k.kind === "policy") text = cons ? `The Supreme Court strikes down state assault weapons bans, ${vote}.` : `The Supreme Court upholds state assault weapons bans, ${vote}.`;
+  if (k.pid === "tariffs_up" && k.kind === "policy") text = cons ? `The Supreme Court lets the President's replacement tariffs stand, ${vote}.` : `The Supreme Court strikes down the President's replacement tariffs, ${vote}.`;
+  pushNews(s, text, "event"); s.court.decided.unshift({ ...k, text, week: s.week }); if (s.court.decided.length > 20) s.court.decided.pop();
+  if (role !== "P") pushInbox(s, { kind: "ruling", cons, from: "Your communications director", title: text.replace("The Supreme Court", "The Court"), body: `${cons === (you.p === "R") ? "Your side won this one." : "Your side lost this one."} Reporters want a statement.`, choices: ["Praise the decision", "Blast the Court", "Say nothing"] });
+}
+// Laws passed this Congress draw lawsuits; the Court rules the next June.
+function docketLaw(s, pid, r) {
+  if (!s.court || !VULN[pid] || r() > VULN[pid] + 0.15) return;
+  const y = gameYear(s), w = weekOfDate(s, y, 5, 26), when = w - s.week >= 16 ? w : weekOfDate(s, y + 1, 5, 26);
+  if (!s.court.docket.some((k) => k.pid === pid && !k.done)) { s.court.docket.push({ id: `law${pid}${s.week}`, name: `Challenge to ${byId[pid].name}`, pid, kind: "law", week: when }); pushNews(s, `Opponents sue to block ${byId[pid].name}. The Supreme Court agrees to hear the case.`); }
+}
+
+// ════════ Crises abroad and at home, pardons, the State of the Union ════════
+const CRISES = [
+  { id: "taiwan", title: "Chinese warships encircle Taiwan", news: "China calls it a drill. Shipping through the strait has stopped.", force: "Send a carrier group and warn Beijing", risk: 0.2, econ: 0.5 },
+  { id: "iran", title: "Iran is weeks from a bomb, intelligence says", news: "Inspectors were expelled and centrifuges are spinning.", force: "Order airstrikes on the nuclear sites", risk: 0.35, econ: 0.6, war: true },
+  { id: "baltic", title: "Russian drones strike a NATO ally", news: "A warehouse in Lithuania burns; Moscow calls it a mistake.", force: "Send troops and jets to the Baltics", risk: 0.2, econ: 0.3 },
+  { id: "cartel", title: "A cartel ambush kills Americans near the border", news: "Four U.S. citizens are dead; the video is everywhere.", force: "Order strikes on cartel camps in Mexico", risk: 0.3, econ: 0.3, war: true },
+  { id: "hostage", title: "Americans are taken hostage abroad", news: "Eleven aid workers are held by an armed group.", force: "Order a rescue raid", risk: 0.4, econ: 0 },
+  { id: "cyber", title: "A cyberattack blacks out three states", news: "Millions lose power; investigators point to a foreign government.", force: "Order a cyber strike back", risk: 0.25, econ: 0.4 },
+  { id: "korea", title: "North Korea fires a missile over Japan", news: "Tokyo issues shelter alerts; Seoul raises its readiness level.", force: "Move bombers and missile defenses into the region", risk: 0.15, econ: 0.2 },
+];
+export const CRISIS_OPTS = ["force", "talk", "sanction", "wait"];
+const optLabel = (c) => [c.force, "Open talks through back channels", "Hit them with sanctions", "Stay out of it for now"];
+function crisisWeek(s, r) {
+  const role = roleOf(s), you = memberById[s.youId];
+  for (const c of s.crises || []) if (!c.done && c.choice != null && s.week >= c.resolve) resolveCrisis(s, c, r);
+  for (const m of s.inbox) if (m.kind === "crisis" && !m.done && m.week < s.week - 1) { m.done = true; m.choice = 3; pickCrisis(s, m.cid, 3); }
+  if ((s.crises || []).some((c) => !c.done) || s.week - (s.crisisAt ?? -99) < 10 || r() > 0.05) return;
+  const used = new Set((s.crises || []).map((c) => c.id)), pool = CRISES.filter((c) => !used.has(c.id)); if (!pool.length) return;
+  const t = pool[Math.floor(r() * pool.length)], c = { id: t.id, cid: `cr${s.week}`, week: s.week, choice: null, done: false };
+  (s.crises = s.crises || []).push(c); s.crisisAt = s.week;
+  pushNews(s, `BREAKING: ${t.title}. ${t.news}`, "event");
+  if (role === "P") pushInbox(s, { kind: "crisis", cid: c.cid, from: "The Situation Room", title: t.title, body: `${t.news} The National Security Council is waiting. Force can rally the country or start something you can't stop. Talks look weak if they fail. Sanctions cost Americans at the pump. Waiting is a choice too.`, choices: optLabel(t) });
+  else { const pick = r() < 0.4 ? 0 : r() < 0.6 ? 2 : r() < 0.75 ? 1 : 3; pickCrisis(s, c.cid, pick); }
+}
+function pickCrisis(s, cid, choice) {
+  const c = (s.crises || []).find((x) => x.cid === cid); if (!c || c.choice != null) return;
+  const t = CRISES.find((x) => x.id === c.id), role = roleOf(s), you = memberById[s.youId], kind = CRISIS_OPTS[choice];
+  c.choice = choice; c.kind = kind; c.resolve = s.week + 4;
+  const fx = { force: [2.5, 2], talk: [0, -2], sanction: [0.8, 1], wait: [-0.8, -2.5] }[kind];
+  s.presApproval = clamp(s.presApproval + fx[0], 20, 70); if (role === "P") s.baseApproval = clamp(s.baseApproval + fx[1], 5, 99);
+  if (kind === "sanction") s.econ.inflation = clamp(s.econ.inflation + t.econ * 0.3, 1, 7);
+  if (kind === "force" && t.war) s.boost.war_powers = (s.boost.war_powers || 0) + 0.08;
+  const what = ["orders the military to act", "opens back-channel talks", "announces sweeping sanctions", "holds off for now"][choice];
+  pushNews(s, `${t.title}: the President ${what}.`, "event");
+  if (role !== "P") pushInbox(s, { kind: "crisisreact", cid, force: kind === "force", from: "Your communications director", title: `The President ${what}`, body: `${t.title}. Reporters want to know where you stand.${kind === "force" ? " Some members want a vote under the War Powers Resolution before this goes further." : ""}`, choices: kind === "force" ? ["Back the President", "Criticize the decision", "Demand a war powers vote"] : ["Back the President", "Criticize the decision", "Say nothing"] });
+}
+function resolveCrisis(s, c, r) {
+  c.done = true; const t = CRISES.find((x) => x.id === c.id), risk = { force: t.risk, talk: 0.45, sanction: 0.3, wait: 0.4 }[c.kind], ok = r() > risk;
+  c.ok = ok;
+  const good = { force: [1, "The show of force works. The other side backs down."], talk: [2, "The talks produce a deal. Critics who called it weakness go quiet."], sanction: [0.8, "The sanctions bite, and the pressure works."], wait: [0.5, "It burns out on its own."] }[c.kind];
+  const bad = { force: [-3, "It escalates. American casualties, and oil prices spike."], talk: [-2, "The talks collapse, and the President looks weak."], sanction: [-1.2, "The sanctions hurt us more than them; prices rise."], wait: [-2.2, "It gets worse while Washington watched."] }[c.kind];
+  const [d, txt] = ok ? good : bad;
+  s.presApproval = clamp(s.presApproval + d, 20, 70);
+  if (!ok && (c.kind === "force" || c.kind === "sanction")) { s.econ.inflation = clamp(s.econ.inflation + t.econ * 0.5, 1, 7); s.econ.growth = clamp(s.econ.growth - t.econ * 0.4, -2.5, 4); }
+  if (!ok) s.mood = clamp(s.mood + 0.4 * PSIGN(), -12, 12);
+  c.text = txt; pushNews(s, `${t.title}: ${txt}`, ok ? "good" : "bad");
+  if (roleOf(s) === "P") { s.legacy += ok ? 2 : -2; pushInbox(s, { kind: "staff", from: "The Situation Room", title: ok ? "It worked" : "It went wrong", body: txt, done: true }); }
+  // Members who took a side are judged on how it turned out.
+  const st = c.stance; if (st != null && roleOf(s) !== "P") { const backed = st === 0; s.approval = clamp(s.approval + (backed === ok ? 1 : -1) * 0.8, 5, 95); }
+}
+const PARDONS = [
+  { who: "your former campaign chairman, convicted of tax fraud and lying to investigators", base: 1.5, app: -2.5, heat: 0.08, crony: true },
+  { who: "a major donor's son, convicted of securities fraud", base: 0, app: -2, heat: 0.07, crony: true },
+  { who: "a grandmother serving life for a nonviolent drug offense", base: -0.3, app: 1.2, heat: 0, legacy: 1 },
+  { who: "a police officer convicted of excessive force in a case caught on video", base: 2, app: -1.5, heat: 0.02 },
+  { who: "a crypto founder who gave millions to your inaugural committee", base: 0.4, app: -2.2, heat: 0.1, crony: true },
+  { who: "a decorated veteran convicted over a shooting in a war zone", base: 2, app: -0.4, heat: 0 },
+  { who: "a former governor from your party, convicted of bribery", base: 0.5, app: -2, heat: 0.06, crony: true },
+  { who: "a whistleblower who leaked surveillance documents", base: -1, app: 0.4, heat: 0, legacy: 1 },
+  { who: "protesters convicted of blocking a clinic entrance", base: 1.5, app: -0.8, heat: 0.01 },
+];
+function pardonWeek(s, r) {
+  const role = roleOf(s); if (r() > 0.07 || s.week - (s.pardonAt ?? -99) < 8) return;
+  const used = new Set(s.pardonsUsed || []), pool = PARDONS.map((p, i) => ({ ...p, i })).filter((p) => !used.has(p.i)); if (!pool.length) return;
+  const p = pool[Math.floor(r() * pool.length)]; s.pardonAt = s.week; (s.pardonsUsed = s.pardonsUsed || []).push(p.i);
+  if (role === "P") { pushInbox(s, { kind: "pardon", pi: p.i, from: "White House Counsel", title: "A pardon request on your desk", body: `The request is for ${p.who}. The power is absolute and can't be undone. ${p.crony ? "Your critics will call it a reward for loyalty, and House Democrats will want hearings." : p.app > 0 ? "Reform groups on both sides have been pushing for it." : "Your base wants it. Most of the country doesn't."}`, choices: ["Grant a full pardon", "Commute the sentence", "Deny it"] }); return; }
+  if (p.crony || r() < 0.4) { pushNews(s, `The President pardons ${p.who.replace("your former", "his former").replace("your inaugural", "his inaugural").replace("your party", "his party")}.`, "event");
+    pushInbox(s, { kind: "pardonreact", crony: !!p.crony, from: "Your communications director", title: "The President issued a controversial pardon", body: `He pardoned ${p.who.replace("your ", "his ")}. ${p.crony ? "Democrats are calling it pay-to-play." : "It's splitting people along the usual lines."} Do you say anything?`, choices: ["Condemn it", "Defend it", "Say nothing"] });
+    if (p.crony) s.boost.pardon_reform = (s.boost.pardon_reform || 0) + 0.04; }
+}
+function answerPardon(s, m, choice) {
+  const p = PARDONS[m.pi], k = [1, 0.5, 0][choice];
+  if (choice === 2) { s.baseApproval = clamp(s.baseApproval - Math.max(0, p.base) * 0.4, 5, 99); s.toast = { title: "Denied", text: "The request goes back in the file.", tone: "" }; return; }
+  s.baseApproval = clamp(s.baseApproval + p.base * k, 5, 99); s.presApproval = clamp(s.presApproval + p.app * k, 20, 70); s.presHeat = clamp(s.presHeat + p.heat * k, 0, 1); s.legacy += (p.legacy || 0) * k;
+  if (p.crony) s.boost.pardon_reform = (s.boost.pardon_reform || 0) + 0.05 * k;
+  pushNews(s, `The President ${choice === 0 ? "pardons" : "commutes the sentence of"} ${p.who.replace("your ", "his ")}.`, p.app > 0 ? "good" : "bad");
+  s.toast = { title: choice === 0 ? "Pardoned" : "Commuted", text: p.crony ? "The story leads every newscast. Democrats announce an investigation." : p.app > 0 ? "Even some of your critics call it the right thing." : "Your base cheers. Everyone else is furious.", tone: p.app > 0 ? "good" : "" };
+}
+function sotuWeek(s, r) {
+  const rw = rweek(s); if (rw !== 5 && rw !== 57) return;
+  if (roleOf(s) === "P") pushScene(s, "sotu", { year: gameYear(s) }, "The State of the Union is tonight", "Speechwriters");
+  else pushNews(s, `The President delivers the State of the Union, ${PP === "R" ? "Republicans" : "Democrats"} cheering and the other side sitting on its hands.`, "event");
+}
+function answerWorld(s, m, choice) {
+  const you = memberById[s.youId];
+  if (m.kind === "crisis") pickCrisis(s, m.cid, choice);
+  if (m.kind === "crisisreact") { const c = (s.crises || []).find((x) => x.cid === m.cid); if (c) c.stance = choice; const mine = you.p === PP;
+    if (choice === 0) { s.baseApproval = clamp(s.baseApproval + (mine ? 1.5 : -1.5), 5, 99); s.rapport = clamp(s.rapport + 0.08, -1, 1); }
+    if (choice === 1) { s.baseApproval = clamp(s.baseApproval + (mine ? -2 : 1.5), 5, 99); s.profile = clamp(s.profile + 1, 0, 100); if (mine) s.rapport = clamp(s.rapport - 0.12, -1, 1); }
+    if (choice === 2 && m.force) { s.profile = clamp(s.profile + 3, 0, 100); s.baseApproval = clamp(s.baseApproval + (mine ? -2.5 : 2), 5, 99); let b = s.bills.find((x) => x.pid === "war_powers" && !x.dead);
+      if (!b && !s.laws.includes("war_powers")) b = addBill(s, "war_powers", s.youId, 3);
+      if (b && !b.privileged && b.stage === "committee") { b.privileged = b.discharged = b.marked = true; b.floorWeek = s.week + 2; }
+      s.toast = { title: "You forced a war powers vote", text: "Under the War Powers Resolution it comes to the floor in two weeks, and the Senate needs only 51. Everyone goes on the record.", tone: "good" }; } }
+  if (m.kind === "pardon") answerPardon(s, m, choice);
+  if (m.kind === "pardonreact") { const mine = you.p === PP; if (choice === 0) { s.baseApproval = clamp(s.baseApproval + (mine ? -1.5 : 1.5), 5, 99); s.integrity += 2; if (mine) s.rapport = clamp(s.rapport - 0.1, -1, 1); }
+    if (choice === 1) { s.baseApproval = clamp(s.baseApproval + (mine ? 1.2 : -2), 5, 99); s.approval = clamp(s.approval - (m.crony ? 1 : 0.3), 5, 95); if (m.crony) s.integrity -= 3; } }
+  if (m.kind === "scotusnom") { const pick = m.picks[choice]; if (pick) { const cons = choice === m.picks.length - 1; if (!cons) (s.court.used = s.court.used || []).push(pick[1]); newJusticeNom(s, pick, cons); } }
+  if (m.kind === "scotusvote" && s.court?.nom) s.court.nom.yourVote = choice === 0;
+  if (m.kind === "blueslip") { const mine = you.p === PP; s.bench.slips++;
+    if (choice === 0) { s.rapport = clamp(s.rapport + 0.08, -1, 1); s.baseApproval = clamp(s.baseApproval + (mine ? 0.5 : m.nq ? -2 : -0.6), 5, 99); if (m.nq) s.integrity -= 3; }
+    else { s.rapport = clamp(s.rapport - (mine ? 0.15 : 0.05), -1, 1); s.baseApproval = clamp(s.baseApproval + (mine ? -1 : 1), 5, 99); if (m.nq) s.integrity += 2; } }
+  if (m.kind === "ruling") { const liked = m.cons === (you.p === "R");
+    if (choice === 0) s.baseApproval = clamp(s.baseApproval + (liked ? 1.2 : -2.5), 5, 99);
+    if (choice === 1) { s.baseApproval = clamp(s.baseApproval + (liked ? -2.5 : 1.5), 5, 99); s.profile = clamp(s.profile + 1, 0, 100); if (!liked) s.approval = clamp(s.approval - 0.3, 5, 95); } }
+}
+
+// ════════ Your own money: salary, investments, a book, and the things that get people in trouble ════════
+// Real numbers (CRS, 2026): $174,000 for members, $193,400 for party leaders and the President pro tempore,
+// $223,500 for the Speaker, $400,000 for the President. Honoraria are banned for members (since 1991);
+// outside earned income is capped at $33,855; book royalties from an established publisher are exempt.
+export const OUTSIDE_CAP = 33.855;
+export function salaryOf(s) { if (roleOf(s) === "P") return 400; const l = memberById[s.youId]?.lead?.[0] || ""; return /^Speaker/.test(l) ? 223.5 : /Majority Leader|Minority Leader|Republican Leader|Democratic Leader|Pro Tempore/.test(l) && !/Assistant/.test(l) ? 193.4 : 174; }
+export const TRADE = { none: { label: "Cash and bonds", mu: 0.0007, sd: 0.001 }, index: { label: "Index funds", mu: 0.0015, sd: 0.02 }, active: { label: "Pick individual stocks", mu: 0.0016, sd: 0.032 }, informed: { label: "Trade on what you hear in closed briefings", mu: 0.0055, sd: 0.03 } };
+export const earnTotal = (s) => Object.values(s.earn || {}).reduce((a, v) => a + (typeof v === "number" ? v : 0), 0);
+function earnSeed(s) { const you = memberById[s.youId]; s.earn = { salary: 0, invest: 0, book: 0, outside: 0, spouse: 0, family: 0, after: 0 }; s.port = roleOf(s) === "P" ? 0 : Math.round(150 + (you?.seniority || 0) * 70 + (you?.lead?.length ? 500 : 0) + (2027 - (you?.born || 1975)) * 8); s.trade = "index"; }
+function scandal(s, title, body, choices, kind = "money") { pushInbox(s, { kind: "moneyscandal", sub: kind, from: "Your communications director", title, body, choices }); }
+function earnWeek(s, r) {
+  if (!s.earn) earnSeed(s);
+  const e = s.earn, role = roleOf(s), you = memberById[s.youId], banned = s.laws.includes("stock_ban");
+  e.salary += salaryOf(s) / 52.18;
+  if (role !== "P") {
+    if (banned && (s.trade === "active" || s.trade === "informed") && !s.divested) { s.divested = true; s.trade = "index"; pushInbox(s, { kind: "staff", from: "Your chief of staff", title: "The stock trading ban is law", body: "Members can't hold or trade individual stocks anymore. Your portfolio was moved into index funds.", done: true }); }
+    const t = TRADE[s.trade] || TRADE.index, g = s.port * (t.mu + noise(`${s.seed}:mkt:${s.week}`) * t.sd * 0.8 + (s.trade !== "index" && s.trade !== "none" ? noise(`${s.seed}:pick:${s.week}`) * t.sd * 0.5 : 0));
+    s.port += g; e.invest += g;
+    if (s.trade === "informed" && r() < 0.011 * (1 + s.profile / 100) * (onApprops(you) || (you.comm || []).some((c) => ["HSAS", "SSAS", "HSIF", "HSBA", "SSBK", "SSIN", "HLIG"].includes(c.c)) ? 1.3 : 1))
+      scandal(s, "A trading tracker flags your well-timed trades", "A website that follows congressional stock disclosures noticed you bought shares days before a closed-door briefing turned into public news. Legal under the STOCK Act only if you didn't use what you heard. Reporters are calling.", ["Sell everything and apologize", "Blame your financial adviser", "Attack the reporters"], "stock");
+    if (s.teach) { e.outside += OUTSIDE_CAP / 52.18; s.hours = Math.max(0, s.hours - 3); }
+    if (s.book && s.book.until > s.week) e.book += s.book.roy;
+    if (s.spousePay) { const x = Math.min(s.cash, 2.5); s.cash -= x; e.spouse += x; if (r() < 0.004 + s.profile / 30000) scandal(s, "Your spouse is on the campaign payroll", "A local paper reports your campaign has paid your spouse about $130,000 a year as a 'senior adviser.' Legal if it's real work at a fair rate. It doesn't look that way in print.", ["Take them off the payroll", "Defend it", "Ignore it"], "spouse"); }
+    if (s.spouseConsult) { e.spouse += 4; s.integrity -= 0.08; if (r() < 0.006 + s.profile / 25000) scandal(s, "Your spouse's clients have business before your committee", "An investigation finds companies lobbying your committee hired your spouse's consulting firm. No law clearly bars it. The story writes itself anyway.", ["Have your spouse drop those clients", "Say you're walled off", "Attack the reporters"], "consult"); }
+  } else if (s.family) { e.family += 55; s.presHeat = clamp(s.presHeat + 0.004, 0, 1); if (r() < 0.012) { s.presHeat = clamp(s.presHeat + 0.06, 0, 1); s.presApproval = clamp(s.presApproval - 1.2, 20, 70); pushNews(s, "Report: a foreign government's fund put money into a venture run by the President's family.", "bad"); } }
+}
+function answerScandal(s, m, choice) {
+  const k = m.sub;
+  if (k === "stock") { if (choice === 0) { s.approval = clamp(s.approval - 2, 5, 95); s.integrity -= 4; s.trade = "index"; s.toast = { title: "You sold it all", text: "Index funds from here on. The story fades in a week.", tone: "" }; }
+    else if (choice === 1) { s.approval = clamp(s.approval - 3.5, 5, 95); s.integrity -= 8; s.toast = { title: "Nobody believes it", text: "Your disclosures show the trades were in your own account.", tone: "bad" }; }
+    else { s.approval = clamp(s.approval - 4.5, 5, 95); s.baseApproval = clamp(s.baseApproval + 1, 5, 99); s.integrity -= 10; s.toast = { title: "You went after the press", text: "Your base cheers. A watchdog files an ethics complaint.", tone: "bad" }; pushInbox(s, { kind: "ethics", from: "The Office of Congressional Ethics", title: "A complaint over your stock trades", body: "A watchdog asks the ethics office to investigate whether you traded on nonpublic information.", choices: ["Fight it (10 hours, $150K)", "Ignore it", "Give back the money"] }); }
+    if (s.laws.includes("stock_ban")) s.approval = clamp(s.approval - 2, 5, 95);
+    pushNews(s, `${nameOf(memberById[s.youId])} faces questions over well-timed stock trades.`, "bad"); }
+  if (k === "spouse") { if (choice === 0) { s.spousePay = false; s.approval = clamp(s.approval - 0.8, 5, 95); } else if (choice === 1) { s.approval = clamp(s.approval - 1.8, 5, 95); s.integrity -= 4; } else { s.approval = clamp(s.approval - 2.5, 5, 95); s.integrity -= 5; } }
+  if (k === "consult") { if (choice === 0) { s.spouseConsult = false; s.approval = clamp(s.approval - 1, 5, 95); } else if (choice === 1) { s.approval = clamp(s.approval - 2.5, 5, 95); s.integrity -= 6; } else { s.approval = clamp(s.approval - 3.5, 5, 95); s.baseApproval = clamp(s.baseApproval + 0.8, 5, 99); s.integrity -= 8; } }
+}
+export function setMoney(s0, key, val) {
+  const s = structuredClone(s0); if (!s.earn) earnSeed(s);
+  if (key === "trade" && TRADE[val]) { if (s.laws.includes("stock_ban") && (val === "active" || val === "informed")) { s.toast = { title: "Not allowed", text: "The stock trading ban is law: members can't trade individual stocks.", tone: "bad" }; return s; } s.trade = val; }
+  if (["teach", "spousePay", "spouseConsult", "family"].includes(key)) s[key] = !!val;
+  return s;
+}
+export function bookDeal(s0, bulk = false) {
+  const s = structuredClone(s0), you = memberById[s.youId]; if (!s.earn) earnSeed(s);
+  if (bulk) { if (!s.book || s.cash < 100) return s; s.cash -= 100; s.earn.book += 15; s.integrity -= 6; if (rng(hash(`${s.seed}:bulk:${s.week}`))() < 0.3) { s.approval = clamp(s.approval - 1.5, 5, 95); pushNews(s, `${nameOf(you)}'s campaign spent $100,000 buying copies of ${nameOf(you)}'s own book.`, "bad"); } s.toast = { title: "Your campaign bought 4,000 copies", text: "Legal, and common. It also pads your royalties with your donors' money, and reporters look for it.", tone: "" }; return s; }
+  if (s.book?.term === (s.term || 1) || s.profile < 25 || s.hours < 10) return s;
+  s.hours -= 10; const adv = Math.round(15 + Math.pow(s.profile / 10, 2.6) * 4);
+  s.earn.book += adv; s.book = { term: s.term || 1, adv, roy: Math.round(adv / 60), until: s.week + 52 };
+  pushNews(s, `${titleOf(you)} ${nameOf(you)} signs a book deal.`);
+  s.toast = { title: `A $${adv}K advance`, text: "Book royalties from an established publisher are exempt from the cap on outside income, with the ethics committee's sign-off. Royalties will trickle in for a year.", tone: "good" };
+  return s;
+}
+// After Washington: what the next ten years are worth, roughly.
+export function afterPaths(s) {
+  const you = memberById[s.youId], role = roleOf(s), cl = s.clout || 0, pr = s.profile || 0, lead = !!you?.lead?.length;
+  if (role === "P") return [["book", "Memoirs and the speaking circuit", Math.round(20000 + pr * 300)], ["boards", "A foundation, boards and private deals", Math.round(25000 + s.legacy * 400)], ["home", "Go home and stay out of it", 2000]];
+  return [["lobby", `K Street lobbyist (after a ${you.ch === "S" ? "two-year" : "one-year"} cooling-off period)`, Math.round(Math.min(2500, 300 + Math.max(0, cl) * 4 + (lead ? 700 : 0)) * (you.ch === "S" ? 8 : 9))],
+    ["boards", "Corporate boards and consulting", Math.round(Math.min(1500, 150 + Math.max(0, cl) * 4 + you.seniority * 15) * 10)], ["speak", "Speeches, a memoir and cable TV", Math.round(Math.min(3000, 60 + Math.pow(pr / 10, 2.2) * 10) * 10)], ["home", "Go home: a law practice or teaching", 1800]];
+}
+export function chooseAfter(s0, key) { const s = structuredClone(s0); if (!s.earn) earnSeed(s); const p = afterPaths(s).find((x) => x[0] === key); if (p) { s.earn.after = p[2]; s.afterPath = p[1]; } return s; }

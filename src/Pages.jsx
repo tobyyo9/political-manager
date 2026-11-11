@@ -141,7 +141,7 @@ export function Network({ s, real, setCard }) {
 }
 
 // ── Your office: your attributes and your staff ──
-export function Office({ s, real, act, setS }) {
+export function Office({ s, real, act, setS, setToast }) {
   const you = S.memberById[s.youId], a = S.yourAttrs(s);
   return (
     <div className="pm-two">
@@ -153,6 +153,7 @@ export function Office({ s, real, act, setS }) {
             <p className="small">{(you.comm || []).map((c) => c.n + (c.role ? ` (${c.role}${c.exp ? ", expected" : ""})` : c.exp ? " (expected)" : "")).join(", ") || "No committee seats yet"}</p></div>
         </section>
         <section className="panel"><h3>Attributes</h3><p className="muted small">On a 1 to 20 scale, like Football Manager. They rise with use: TV builds Media, call time builds Fundraising, kept promises build Integrity.</p><Attrs a={a} know={3} /></section>
+        {setS && <Earnings s={s} setS={setS} setToast={setToast} />}
         <section className="panel"><h3>Your numbers over time</h3><Trend s={s} keys={[["a", "Approval at home", "#2fbf71"], ["b", "Your base", "#3d7bd9"], ["p", "The President", "#c8443a"]]} /></section>
       </section>
       <aside className="stack">
@@ -471,5 +472,78 @@ export function Campaign({ s, setS, real, setCard, setToast }) {
         <p className="muted small">The rules are real: a campaign can give another candidate $2,000 per election and a leadership PAC $5,000 (FEC, 2025-26). Transfers to the party committees are unlimited. Dues goals follow the DCCC's 2026 targets.</p>
       </aside>
     </div>
+  );
+}
+
+// ── The Supreme Court and the federal bench ──
+export function Court({ s, real }) {
+  const c = s.court; if (!c) return <p className="muted">The Court opens its term soon.</p>;
+  const yr = S.dateOf(s.week).getUTCFullYear(), med = S.courtMedian(s), n = c.nom, docket = c.docket.filter((k) => !k.done).sort((a, b) => a.week - b.week);
+  const bar = (x) => <div className="pm-lean"><i style={{ left: `${(x + 1) * 50}%` }} /></div>;
+  return (
+    <div className="pm-two">
+      <section className="stack">
+        <h2 className="pm-h">The Supreme Court</h2>
+        <p className="muted small">The median justice decides close cases. Today that's a {med > 0.35 ? "solid conservative" : med > 0.1 ? "center-right" : med > -0.1 ? "true swing" : "liberal"} vote. Leanings are the game's rough placements.</p>
+        <div className="pm-justices">{c.j.map((j) => (
+          <div key={j.id} className={`pm-justice ${j.gone ? "gone" : ""} ${j.by === "D" ? "dem" : "rep"}`}>
+            <Portrait id={"jus" + j.last + j.since} g={j.g} born={j.born} p={j.by} size={58} fix={j.skin != null ? { skin: j.skin } : undefined} />
+            <strong>{j.gone ? "Vacant" : `${j.chief ? "Chief Justice " : ""}${real ? `${j.first} ${j.last}` : `${j.sf} ${j.sl}`}`}</strong>
+            <small>{j.gone ? `Seat left by ${j.last} in ${j.left}` : `Age ${yr - j.born} · since ${j.since} · named by a ${j.by === "D" ? "Democrat" : "Republican"}`}</small>
+            {!j.gone && bar(j.x)}
+          </div>))}</div>
+        {c.vac && <section className="panel pm-vacancy"><h3>An open seat</h3>
+          {!n ? <p className="small">The President is choosing a nominee.</p>
+            : <p className="small"><strong>{real ? `${n.first} ${n.last}` : `${n.sf} ${n.sl}`}</strong> {n.consensus ? "(a consensus pick)" : ""}. {n.blocked ? "The Senate majority refuses to hold hearings before the election." : `Hearings ${S.fmtDate(n.hearing)}, floor vote ${S.fmtDate(n.vote)}. Needs 51 votes.`} {n.cont > 0.6 ? "A brawl." : n.cont > 0.35 ? "A real fight." : "Confirmable."}</p>}
+        </section>}
+      </section>
+      <aside className="stack">
+        <section className="panel"><h3>On the docket</h3>
+          {docket.length ? <ul className="pm-cab-pending">{docket.map((k) => <li key={k.id}><span className="pill">{S.fmtDate(k.week)}</span> {k.name}{k.real ? " (granted for real)" : ""}</li>)}</ul> : <p className="small muted">Nothing pending. Laws you pass that are open to a constitutional challenge will land here.</p>}
+        </section>
+        <section className="panel"><h3>Decided</h3>
+          {c.decided.length ? <ul className="pm-cab-pending">{c.decided.map((k) => <li key={k.id}><span className={`pill ${k.cons ? "rep" : "dem"}`}>{k.cons ? "Conservative" : "Liberal"}</span> {k.text}</li>)}</ul> : <p className="small muted">Big decisions come down in late June.</p>}
+        </section>
+        <section className="panel"><h3>The lower courts</h3><p className="small"><b>{s.bench?.confirmed || 0}</b> federal judges confirmed this Congress. {S.presParty() === (S.SENATE.filter((m) => m.p === "D").length >= 51 ? "D" : "R") ? "The President's party runs the Senate, so they move quickly." : "The other party runs the Senate, so nominations crawl."} Senators decide on "blue slips" for district judges from their states.</p></section>
+      </aside>
+    </div>
+  );
+}
+
+// ── Your own money ──
+export function Earnings({ s, setS, setToast }) {
+  const role = S.roleOf(s), e = s.earn || {}, ban = s.laws.includes("stock_ban"), total = S.earnTotal(s);
+  const run = (n) => { if (n.toast && setToast) setToast(n.toast); n.toast = null; setS(n); };
+  const rows = [["Salary", e.salary], ["Investments", e.invest], ["Book", e.book], ["Teaching", e.outside], ["Spouse", e.spouse], ["Family business", e.family], ["After office (est.)", e.after]].filter(([, v]) => Math.abs(v || 0) >= 0.5);
+  return (
+    <section className="panel pm-earn">
+      <h3>Your own money</h3>
+      <p className="pm-earn-total">{fmtK(total)} <small>earned so far</small></p>
+      <div className="pm-earn-rows">{rows.map(([l, v]) => <span key={l}>{l} <b className={v < 0 ? "no" : ""}>{fmtK(v)}</b></span>)}</div>
+      <p className="small muted">{role === "P" ? "The President earns $400,000 a year." : `Your salary is ${fmtK(S.salaryOf(s))} a year. Campaign money is not yours: spending it on yourself is a crime. Members can't take speaking fees, and other outside earned income is capped at $33,855 a year. Book royalties are the big exception.`}</p>
+      {role !== "P" && <>
+        <h4>Your portfolio: {fmtK(s.port || 0)}</h4>
+        <div className="pm-trade">{Object.entries(S.TRADE).map(([k, t]) => { const off = ban && (k === "active" || k === "informed"); return <button key={k} type="button" className={`ghost sm ${s.trade === k ? "on" : ""} ${k === "informed" ? "danger" : ""}`} disabled={off} onClick={() => run(S.setMoney(s, "trade", k))}>{t.label}</button>; })}</div>
+        <p className="small muted">{ban ? "The stock trading ban is law: no individual stocks." : s.trade === "informed" ? "Members can legally own and trade stocks, but not on nonpublic information. Trackers watch every disclosure. The returns are real; so is the risk of a story, or worse." : "Members can trade stocks if they disclose within 45 days. Most trade a little; a few trade a lot."}</p>
+        <h4>Ways to earn</h4>
+        <div className="pm-earnopts">
+          <div><strong>Write a book</strong><small>Royalties from an established publisher are exempt from the cap. Needs a national profile (25+). 10 hours.</small>
+            {s.book?.term === (s.term || 1) ? <><span className="pill pos2">Advance {fmtK(s.book.adv)}</span><button type="button" className="ghost sm danger" disabled={s.cash < 100} onClick={() => run(S.bookDeal(s, true))} title="Legal and common. Frowned on.">Have your campaign buy copies ($100K)</button></> : <button type="button" className="ghost sm" disabled={s.profile < 25 || s.hours < 10} onClick={() => run(S.bookDeal(s))}>Sign a book deal</button>}</div>
+          <div><strong>Teach a class</strong><small>Allowed, up to the $33,855 cap. Costs 3 hours a week.</small><button type="button" className={`ghost sm ${s.teach ? "on" : ""}`} onClick={() => run(S.setMoney(s, "teach", !s.teach))}>{s.teach ? "Teaching (stop)" : "Start teaching"}</button></div>
+          <div><strong>Put your spouse on the campaign payroll</strong><small>Legal if it's real work at a fair rate. It moves donors' money into your household, and reporters check.</small><button type="button" className={`ghost sm danger ${s.spousePay ? "on" : ""}`} onClick={() => run(S.setMoney(s, "spousePay", !s.spousePay))}>{s.spousePay ? "On the payroll (stop)" : "Hire them"}</button></div>
+          <div><strong>Your spouse's consulting firm takes lobbying clients</strong><small>No law clearly bars it. Companies with business before your committee would love to hire them.</small><button type="button" className={`ghost sm danger ${s.spouseConsult ? "on" : ""}`} onClick={() => run(S.setMoney(s, "spouseConsult", !s.spouseConsult))}>{s.spouseConsult ? "Taking clients (stop)" : "Let them"}</button></div>
+        </div></>}
+      {role === "P" && <div className="pm-earnopts"><div><strong>Let the family business take foreign deals</strong><small>Presidents are exempt from most conflict-of-interest law. The emoluments clause isn't, and the press is watching.</small><button type="button" className={`ghost sm danger ${s.family ? "on" : ""}`} onClick={() => run(S.setMoney(s, "family", !s.family))}>{s.family ? "Deals on (stop)" : "Allow it"}</button></div></div>}
+    </section>
+  );
+}
+export function AfterOffice({ s, setS }) {
+  const paths = S.afterPaths(s);
+  return (
+    <section className="panel pm-after"><h3>After Washington</h3>
+      <p className="small muted">What will the next ten years be worth? Rough estimates, added to your lifetime earnings and the hall of fame. Former members face a lobbying ban of one year (House) or two (Senate).</p>
+      <div className="pm-earnopts">{paths.map(([k, l, v]) => <button key={k} type="button" className={`pm-row ${s.afterPath === l ? "on" : ""}`} onClick={() => setS(S.chooseAfter(s, k))}><span><strong>{l}</strong><small>about {fmtK(v)} over ten years</small></span></button>)}</div>
+      <p className="small">Lifetime earnings: <b>{fmtK(S.earnTotal(s))}</b></p>
+    </section>
   );
 }

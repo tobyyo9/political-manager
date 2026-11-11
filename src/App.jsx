@@ -4,7 +4,7 @@ import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import RollCall from "./RollCall.jsx";
 import Scene from "./Scene.jsx";
-import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight , Campaign } from "./Pages.jsx";
+import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight , Campaign, Court, Earnings, AfterOffice } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
@@ -56,8 +56,8 @@ export default function App() {
   const finishScene = (out, mode) => { if (mode === "prep") { setS(S.prepScene(s, scene)); return; } setS(S.finishScene(s, scene, out)); setScene(null); };
   const desk = s.bills.filter((b) => b.stage === "desk").length;
   const TABS = role === "P"
-    ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
-    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["campaign", "Campaign"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
+    ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["court", "Court"], ["office", "Office"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
+    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["campaign", "Campaign"], ["court", "Court"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
 
   return (
     <div className="pm">
@@ -73,12 +73,14 @@ export default function App() {
             <Meter label="Approval" num={s.presApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.presApproval >= 42 ? "ok" : "no"} />
             <Meter label="Republicans approve" num={s.baseApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.baseApproval >= 80 ? "ok" : "no"} />
             <Meter label="Political capital" num={s.clout} fmt={(v) => Math.round(v)} />
+            <Meter label="Lifetime earnings" num={S.earnTotal(s)} fmt={money} />
             <Meter label="Scandal heat" num={s.presHeat * 100} fmt={(v) => Math.round(v)} invert tone={s.presHeat < 0.6 ? "ok" : "no"} />
           </> : <>
           <Meter label="War chest" num={s.cash} fmt={money} />
           <Meter label={role === "S" ? "Approval in your state" : "Approval at home"} num={s.approval} fmt={(v) => `${Math.round(v)}%`} tone={s.approval >= 50 ? "ok" : "no"} />
           <Meter label="Your base" num={s.baseApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.baseApproval >= 60 ? "ok" : "no"} />
           <Meter label="Clout" num={s.clout} fmt={(v) => Math.round(v)} />
+          <Meter label="Lifetime earnings" num={S.earnTotal(s)} fmt={money} />
           </>}
         </div>
         {!s.over && <button type="button" className="cold-go pm-next" onClick={next}>End the week →</button>}
@@ -106,9 +108,10 @@ export default function App() {
         {tab === "network" && <Network {...ctx} />}
         {tab === "office" && <Office {...ctx} />}
         {tab === "campaign" && <Campaign {...ctx} />}
+        {tab === "court" && <Court {...ctx} />}
         {tab === "rank" && <Rankings {...ctx} />}
         {tab === "news" && <News {...ctx} />}
-        <p className="pm-fine">Characters are fictionalized: names are altered, and personalities, words and actions in the game are invented. Voting records, districts and committee seats come from public data. House roster is the 2026 result as called by Nov 10, 2026: real winners in flipped and open seats, with a few close races shown with the current leader. District lines are the 2024 map.</p>
+        <p className="pm-fine">Characters are fictionalized: names are altered, and personalities, words and actions in the game are invented. Voting records, districts and committee seats come from public data. House roster is the 2026 result as called by Nov 10, 2026: real winners in flipped and open seats, with a few close races shown with the current leader. Redrawn districts use estimated leans on the new lines.</p>
       </main>
       {card && <MemberCard id={card} {...ctx} onClose={() => setCard(null)} />}
       {billOpen && <BillBoard id={billOpen} {...ctx} onClose={() => setBillOpen(null)} />}
@@ -180,7 +183,7 @@ function HallOfFame({ real }) {
           <span className="pm-fame-rank">{i + 1}</span>
           <span className={`pm-fame-party ${e.party === "D" ? "dem" : "rep"}`}>{e.party}</span>
           <span className="pm-fame-who"><strong>{real ? e.name.replace(e.alt, e.real) : e.name.replace(e.real, e.alt)}</strong><small>{e.role === "P" ? "The White House" : e.seat} · {e.years} · {e.terms} term{e.terms > 1 ? "s" : ""}{e.title ? ` · ${e.title}` : ""}{e.custom ? " · created" : ""}</small></span>
-          <span className="pm-fame-verdict">{e.verdict}<small>{e.laws} law{e.laws === 1 ? "" : "s"}</small></span>
+          <span className="pm-fame-verdict">{e.verdict}<small>{e.laws} law{e.laws === 1 ? "" : "s"}{e.earned ? ` · earned ${money(e.earned)}` : ""}</small></span>
           <b className="pm-fame-score">{e.score}</b>
         </li>))}</ol>
       <p className="muted small">Kept in this browser. Scores reward winning, terms served, laws passed, clout and leadership posts.</p>
@@ -782,6 +785,7 @@ function End({ s, you, real, setS }) {
       <div className="desk-verdict">
         <span className="rc-stamp">{r.kind === "primary" ? "DEFEATED IN THE PRIMARY" : won ? "REELECTED" : "DEFEATED"}</span>
         <p>{r.kind === "primary" ? `Your own party's voters chose someone else. You took ${r.share}%.` : `${S.nameOf(you, real)} ${won ? "wins" : "loses"} ${you.seat} by ${Math.abs(r.margin)} points. The national mood ran ${r.env >= 0 ? "with" : "against"} your party by ${Math.abs(r.env)}. Democrats will hold ${r.houseD} House seats.`}</p>
+        <AfterOffice s={s} setS={setS} />
         {r.opp && <p className="small muted">Your opponent, {r.opp.name}, raised {money(r.opp.raised)}. Your campaign spent {money(r.spent)}.</p>}
       </div>
       {s.night && <ElectionNight night={s.night} real={real} />}
@@ -810,6 +814,7 @@ function EndOther({ s, you, real, setS, role }) {
     <section className={`desk pm-end ${r.won ? "won" : "lost"}`}>
       <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? `January 3, ${S.electionYear(s) + 1}` : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>
       <div className="desk-verdict"><span className="rc-stamp">{stamp}</span><p>{line}</p></div>
+      <AfterOffice s={s} setS={setS} />
       {s.night && <ElectionNight night={s.night} real={real} />}
       <div className="grades">
         {role === "P" ? <>
