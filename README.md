@@ -170,3 +170,15 @@ The Senate and the President as full characters, committees and amendments as pl
   - **Network:** a corkboard of pinned photos with string to your 16 strongest ties. Thickness shows strength, and red dashed string shows enemies.
   - **Office:** a brass nameplate.
 - Fixed real names on the President's posts about you and on poll headlines.
+
+## Nineteenth pass: everyone ranked, and everyone who wants something
+- **Rankings cover all of Washington** (about 585 people): both chambers, the President, the Vice President and the Cabinet, the Supreme Court, and former officials and governors (Obama, Biden, Bush, Clinton, Harris, Pence, Hillary Clinton, Pelosi, McConnell, Romney, Cheney, Durbin, Newsom, Shapiro, Pritzker, Whitmer, DeSantis, Youngkin).
+  - You can filter by group, sort by any measure, search, scroll through the full list and jump to your own row.
+  - Ratings for people outside Congress are the game's estimates.
+- **The Donors & groups tab** (`src/orgs.js`): 29 outside players. Each shows an invented name, or the real one when real names are on.
+  - **Megadonors:** Elon Musk and America PAC (the biggest donor of 2026, about $366M for Republicans), Miriam Adelson, Michael Bloomberg, Reid Hoffman.
+  - **PACs and industries,** linked to the existing interest-group scorecards: PhRMA, AIPAC/UDP, Club for Growth, API, Fairshake, the Chamber, AFL-CIO, NRA, Everytown, Planned Parenthood, LCV, EMILY's List and more.
+  - **Movement groups:** DSA, Indivisible, Sunrise, Turning Point USA (led by Erika Kirk), Heritage, Americans for Prosperity, AARP, NumbersUSA, Justice Democrats.
+  - You can request meetings, ask for support or endorsements, or cut ties.
+- **They come to you.** Meeting requests (take it, send a staffer, or decline), offers of money or super PAC spending, endorsements, and threats from megadonors in your own party. Offers often come with a vote they'd like from you; accepting with a promise locks your vote. Endorsements from groups far to the left or right help with your base and hurt in swing seats.
+- **Influence from abroad,** shown generically: a Gulf monarchy's registered lobbyists, a state-linked trade delegation, a "friendship society". They offer unapproved trips, "consulting" for your spouse, or straw-donor schemes. Accepting is a crime and can surface months later as a scandal, an FBI investigation, or an indictment that ends your career. Reporting it to the FBI helps your integrity.

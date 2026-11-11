@@ -6,6 +6,7 @@ import GENDER from "./data/gender.json";
 import CAUCUS from "./data/caucuses.json";
 import TIES from "./data/ties.json";
 import RECORD from "./data/record.json";
+import { ORGS, orgById } from "./orgs.js";
 import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import { PRESIDENT_STANCE } from "./shared/data/president.js";
@@ -522,6 +523,7 @@ export function answer(s0, msgId, choice) {
   if (m.kind === ATTACK_KEY) answerAttack(s, m, choice);
   if (["crisis", "crisisreact", "pardon", "pardonreact", "scotusnom", "scotusvote", "blueslip", "ruling"].includes(m.kind)) answerWorld(s, m, choice);
   if (m.kind === "moneyscandal") answerScandal(s, m, choice);
+  if (m.kind === "orgmeet" || m.kind === "orgoffer" || m.kind === "foreign") answerOrg(s, m, choice);
   if (m.kind === "fundask" || m.kind === "potask") answerMoney(s, m, choice);
   if (m.kind === "petask" && choice === 0) { const p = (s.petitions || []).find((x) => x.id === m.pet); if (p && !p.sigs[s.youId] && p.status === "open") { p.sigs[s.youId] = 1; p.n++; defyLeaders(s, 1); s.profile = clamp(s.profile + 1, 0, 100); } }
   if (m.kind === "higher" && choice === 0) { const seat = memberById[m.seat]; s.runFor = m.seat; s.runForDem = seat.dem; s.runForCls = seat.cls; pushNews(s, `${nameOf(you)} announces a run for the Senate in ${you.st}.`, "event"); s.toast = { title: "You're running statewide", text: `The race is in November ${electionYear(s)}. Your House seat goes to someone else either way. Statewide approval, money and the national mood decide it.`, tone: "good" }; }
@@ -620,6 +622,8 @@ export function advance(s0) {
   pardonWeek(s, R(s, "pardon"));
   sotuWeek(s, R(s, "sotu"));
   earnWeek(s, R(s, "earn"));
+  orgWeek(s, R(s, "org"));
+  foreignWeek(s, R(s, "foreign"));
   wireWeek(s, R(s, "wire"));
   { const rr = R(s, "react"); for (const ev of events.slice(0, 2)) voteReactions(s, ev, rr); }
   // 6. Primary and general.
@@ -1708,7 +1712,7 @@ export function fameEntry(s, real) {
   const you = memberById[s.youId], r = s.result || {}, role = roleOf(s);
   const laws = s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length + (s.career || []).reduce((a, c) => a + (c.laws || 0), 0);
   const terms = (s.career || []).length + 1;
-  const verdict = r.kind === "general" ? (r.won ? "Reelected" : "Defeated") : r.kind === "primary" ? "Lost the primary" : r.kind === "term" ? "Finished the term" : r.kind === "higher" ? (r.won ? "Won a Senate seat" : "Lost a Senate run") : r.kind === "pres" ? (r.won ? "Party held the White House" : "Party lost the White House") : r.kind === "removed" ? "Removed from office" : "Ended";
+  const verdict = r.kind === "general" ? (r.won ? "Reelected" : "Defeated") : r.kind === "primary" ? "Lost the primary" : r.kind === "term" ? "Finished the term" : r.kind === "higher" ? (r.won ? "Won a Senate seat" : "Lost a Senate run") : r.kind === "pres" ? (r.won ? "Party held the White House" : "Party lost the White House") : r.kind === "removed" ? "Removed from office" : r.kind === "indicted" ? "Indicted and resigned" : "Ended";
   const score = Math.round((r.won ? 40 : 0) + terms * 15 + laws * 6 + Math.max(0, s.clout) * 0.3 + (role === "P" ? (s.presApproval - 40) * 1.5 + (s.legacy || 0) * 2 : 0) + (you.lead?.length ? 15 : 0));
   return { id: `${s.seed}-${s.youId}`, upto: s.week, when: new Date().toISOString(), name: role === "P" ? `President ${nameOf(you, real)}` : `${titleOf(you)} ${nameOf(you, real)}`, real: `${you.first} ${you.last}`, alt: `${you.sf} ${you.sl}`,
     role, party: you.p, seat: you.seat, terms, years: `2027-${electionYear(s)}`, verdict, won: !!r.won, laws, title: you.lead?.[0] || "", score, custom: !!s.custom, earned: Math.round(earnTotal(s)) };
@@ -2422,3 +2426,168 @@ export function afterPaths(s) {
     ["boards", "Corporate boards and consulting", Math.round(Math.min(1500, 150 + Math.max(0, cl) * 4 + you.seniority * 15) * 10)], ["speak", "Speeches, a memoir and cable TV", Math.round(Math.min(3000, 60 + Math.pow(pr / 10, 2.2) * 10) * 10)], ["home", "Go home: a law practice or teaching", 1800]];
 }
 export function chooseAfter(s0, key) { const s = structuredClone(s0); if (!s.earn) earnSeed(s); const p = afterPaths(s).find((x) => x[0] === key); if (p) { s.earn.after = p[2]; s.afterPath = p[1]; } return s; }
+
+// ════════ Outside players: donors, PACs, movement groups, foreign influence ════════
+export { ORGS, orgById };
+export const orgName = (o, real) => (real ? o.real : o.name);
+const caresOf = (o) => o.cares || groupById[o.gid]?.cares || {};
+// How well you fit what they want: your party, where you sit, and how you've voted on their issues.
+export function orgFit(s, o) {
+  const you = memberById[s.youId]; if (!you) return 0;
+  const party = o.party === "any" ? 0 : o.party === you.p ? 0.35 : -0.6;
+  const ideo = o.kind === "foreign" ? 0 : 0.45 - Math.abs((you.x || 0) - o.x) * 0.6;
+  const c = caresOf(o); let v = 0, n = 0;
+  for (const vc of s.votesCast || []) if (c[vc.pid]) { v += (vc.vote ? 1 : -1) * c[vc.pid]; n++; }
+  return clamp(party + ideo + (n ? (v / n) * 0.5 : 0), -1, 1);
+}
+const orgState = (s, id) => ((s.orgs = s.orgs || {})[id] = s.orgs[id] || { rel: 0, given: 0, met: 0, last: -99, endorsed: false });
+const MEET_WHY = {
+  pac: ["want to walk you through their priorities for the year", "want to talk about the bill coming up in your committee", "are hosting a lunch for a few members and want you there"],
+  donor: ["want to get to know you over dinner", "have some thoughts about your race", "are thinking about where to put their money this cycle"],
+  org: ["want to talk about where you stand", "want you to speak at their next event", "want to share what their members are hearing"],
+};
+function orgWeek(s, r) {
+  if (roleOf(s) === "P") return;
+  const you = memberById[s.youId];
+  for (const m of s.inbox) if ((m.kind === "orgmeet" || m.kind === "orgoffer" || m.kind === "foreign") && !m.done && m.week < s.week - 1) { m.done = true; m.choice = -1; if (m.kind === "orgmeet") orgState(s, m.org).rel -= 0.03; }
+  if (s.week - (s.orgAt ?? -99) < 2) return;
+  // Foreign influence is rare and gets more likely as your profile grows.
+  if (r() < 0.012 + s.profile / 8000) { const fs = ORGS.filter((o) => o.kind === "foreign"), o = fs[Math.floor(r() * fs.length)], k = Math.floor(r() * 3); s.orgAt = s.week;
+    const offers = [
+      { t: "An all-expenses-paid trip abroad", b: `${o.name} invites you and your spouse on a week-long "fact-finding" trip, five-star hotels included. Some foreign-government-paid travel is allowed if the ethics committee approves it in advance. This one hasn't been approved.`, amt: 0, risk: 0.2 },
+      { t: "A generous 'consulting' arrangement", b: `A middleman for ${o.name.toLowerCase()} suggests your spouse's firm could do some "consulting" for $250,000 a year. Nobody mentions your committee. Nobody has to.`, amt: 250, risk: 0.35 },
+      { t: "An offer to 'help your campaign'", b: `Someone tied to ${o.name.toLowerCase()} says a group of American donors could each give the maximum to your campaign, and they'd be reimbursed. That's a straw-donor scheme with foreign money: two federal crimes.`, amt: 400, risk: 0.5 },
+    ][k];
+    pushInbox(s, { kind: "foreign", org: o.id, k, amt: offers.amt, risk: offers.risk, from: o.name, title: offers.t, body: offers.b, choices: ["Accept", "Decline politely", "Decline and report it to the FBI"] });
+    return; }
+  if (r() > 0.32 + s.profile / 300) return;
+  const pool = ORGS.filter((o) => o.kind !== "foreign" && !(o.id === "emily" && you.g !== "F")).map((o) => ({ o, f: orgFit(s, o) + (orgState(s, o.id).rel) * 0.5 }));
+  // Groups reach out to people they like, and to people they want to scare.
+  const c = pool.filter((x) => x.f > 0.15 || (x.f < -0.2 && x.o.kind === "donor" && x.o.party === you.p)).sort(() => r() - 0.5)[0]; if (!c) return;
+  const o = c.o, st = orgState(s, o.id); s.orgAt = s.week;
+  const live = s.bills.find((b) => b.stage === "committee" && !b.dead && caresOf(o)[b.pid] && b.floorWeek > s.week && b.yourVote == null);
+  if (c.f < 0) { // a threat
+    pushInbox(s, { kind: "orgoffer", org: o.id, threat: true, bill: live?.id, want: live ? caresOf(o)[live.pid] > 0 : null, from: o.name, title: o.mega ? `${o.name} is watching your votes` : `${o.name} has a warning`, body: `${o.mega ? "A post goes up overnight: members who vote the wrong way \"will be primaried.\" Your name is in the replies." : "Their lobbyist says your record is noticed, and not kindly."}${live ? ` They want a ${caresOf(o)[live.pid] > 0 ? "yes" : "no"} on ${byId[live.pid].name}.` : ""}`, choices: live ? [`Vote ${caresOf(o)[live.pid] > 0 ? "yes" : "no"} to keep the peace`, "Ignore it", "Hit back publicly"] : ["Ignore it", "Hit back publicly"] });
+    return; }
+  if (st.met >= 1 && (o.budget > 0 || o.kind === "org") && r() < 0.55) { // an offer
+    const amt = o.kind === "org" ? 0 : Math.round(o.mega ? (you.p === o.party ? 300 + r() * 900 : 0) : o.budget * (0.6 + r() * 0.8));
+    if (o.mega && you.p !== o.party) return;
+    pushInbox(s, { kind: "orgoffer", org: o.id, amt, bill: live?.id, want: live ? caresOf(o)[live.pid] > 0 : null, from: o.name,
+      title: o.kind === "org" ? `${o.name} wants to endorse you` : o.mega ? `${o.name} wants to spend in your race` : `${o.name} wants to back you`,
+      body: o.kind === "org" ? `Their endorsement comes with volunteers and an audience.${live ? ` They'd like to see you ${caresOf(o)[live.pid] > 0 ? "vote yes" : "vote no"} on ${byId[live.pid].name}.` : " They'll expect you to stay with them on the issues they care about."}` : o.mega ? `A super PAC funded by ${o.name} would spend about $${(amt / 1000).toFixed(1)}M for you. You can't coordinate with it, but everyone knows who it answers to.${live ? ` Word is they'd like a ${caresOf(o)[live.pid] > 0 ? "yes" : "no"} on ${byId[live.pid].name}.` : ""}` : `Their PAC would give $${amt}K this cycle, and they'd bundle more from their executives.${live ? ` They mention ${byId[live.pid].name} is coming up, and what they hope you'll do.` : ""}`,
+      choices: ["Accept", "Accept, but promise nothing", "Decline"] });
+    return; }
+  const why = MEET_WHY[o.kind === "pac" ? "pac" : o.kind][Math.floor(r() * 3)];
+  pushInbox(s, { kind: "orgmeet", org: o.id, from: o.name, title: `${o.name} would like a meeting`, body: `They ${why}. ${o.note}`, choices: ["Take the meeting (3 hours)", "Send a staffer", "Decline"] });
+}
+function answerOrg(s, m, choice) {
+  const o = orgById[m.org], st = orgState(s, o.id), you = memberById[s.youId];
+  if (m.kind === "orgmeet") {
+    if (choice === 0 && s.hours >= 3) { s.hours -= 3; st.rel = clamp(st.rel + 0.2, -1, 1); st.met++; st.last = s.week; s.toast = { title: `You met with ${o.name}`, text: o.kind === "org" ? "They leave with your number, and you leave with a sense of what they could do for you." : "Coffee, talking points and a folder of one-pagers. They'll be back.", tone: "good" }; }
+    else if (choice === 1) { st.rel = clamp(st.rel + 0.05, -1, 1); st.met += 0.5; }
+    else st.rel = clamp(st.rel - 0.08, -1, 1);
+  }
+  if (m.kind === "orgoffer" && m.threat) {
+    const b = s.bills.find((x) => x.id === m.bill), opts = m.bill ? ["give", "ignore", "fight"] : ["ignore", "fight"], c = opts[choice] || "ignore";
+    if (c === "give") { if (b) b.yourVote = m.want; s.integrity -= 3; st.rel = clamp(st.rel + 0.25, -1, 1); }
+    if (c === "ignore" && o.mega && o.party === you.p) { s.rivals = (s.rivals || 0) + 0.5; }
+    if (c === "fight") { s.profile = clamp(s.profile + 3, 0, 100); s.baseApproval = clamp(s.baseApproval + (o.party === you.p ? -1 : 2), 5, 99); st.rel = clamp(st.rel - 0.3, -1, 1); if (o.mega && o.party === you.p) s.rivals = (s.rivals || 0) + 1;
+      s.toast = { title: `You took on ${o.name}`, text: o.party === you.p ? "Your base is split. Expect money against you in the primary." : "Your base loves it. The clip does well.", tone: "" }; pushNews(s, `${nameOf(you)} hits back at ${o.name}.`, "event"); }
+  }
+  else if (m.kind === "orgoffer") {
+    if (choice === 0 || choice === 1) {
+      st.rel = clamp(st.rel + (choice === 0 ? 0.3 : 0.12), -1, 1); st.endorsed = o.kind === "org" || st.endorsed;
+      if (o.kind === "org") { s.baseApproval = clamp(s.baseApproval + 2.5, 5, 99); if (Math.abs(o.x) > 0.7) s.approval = clamp(s.approval - (you.vuln > 0.6 ? 1.5 : 0.3), 5, 95); s.toast = { title: `Endorsed by ${o.name}`, text: you.vuln > 0.6 && Math.abs(o.x) > 0.7 ? "Your base is thrilled. Your opponent is already putting it in a mailer." : "Volunteers sign up, and your base notices.", tone: "good" }; }
+      else if (o.mega) { addAid(s, you.id, you.p, m.amt); st.given += m.amt; s.toast = { title: `${o.name}'s super PAC is in`, text: `About $${(m.amt / 1000).toFixed(1)}M will be spent in your race. You'll hear about it if you cross them.`, tone: "good" }; }
+      else { s.cash += m.amt; addMoney(s, "pac", m.amt); st.given += m.amt; if (o.gid) { s.ties = s.ties || {}; s.ties[o.gid] = (s.ties[o.gid] || 0) + m.amt; } s.tookMoney += m.amt; s.toast = { title: `$${m.amt}K from ${o.name}`, text: choice === 0 ? "They consider you a friend now, and friends take calls." : "You took the check and said you'd vote your conscience. They heard 'yes' anyway.", tone: "good" }; }
+      if (choice === 0 && m.bill) { const b = s.bills.find((x) => x.id === m.bill); if (b) { b.yourVote = m.want; s.promises.push({ pid: b.pid, group: o.name, vote: m.want }); } s.integrity -= 3; }
+      if (s.pledge && o.kind === "pac") { s.baseApproval = clamp(s.baseApproval - 3, 5, 99); pushNews(s, `${nameOf(you)}, who swore off corporate PAC money, takes a check from ${o.name}.`, "bad"); }
+    } else { st.rel = clamp(st.rel - 0.15, -1, 1); s.integrity += 1; }
+  }
+  if (m.kind === "foreign") {
+    if (choice === 0) {
+      st.given += m.amt; if (m.amt) { if (m.k === 1) { s.earn = s.earn || {}; s.earn.spouse = (s.earn.spouse || 0) + m.amt; } else { s.cash += m.amt; addMoney(s, "large", m.amt); } }
+      s.integrity -= 18; (s.foreignRisk = s.foreignRisk || []).push({ week: s.week, risk: m.risk, k: m.k });
+      s.toast = { title: "You took it", text: m.k === 2 ? "The checks start arriving from people you've never met. Each one is a crime." : "Nothing happens. For now.", tone: "bad" };
+    } else if (choice === 2) { s.integrity += 6; s.profile = clamp(s.profile + 2, 0, 100); s.toast = { title: "You called the FBI", text: "Agents take a statement. Months later, a quiet thank-you, and a story about the case that makes you look good.", tone: "good" }; }
+    else s.integrity += 2;
+  }
+}
+// Foreign money catches up with people.
+function foreignWeek(s, r) {
+  for (const f of s.foreignRisk || []) {
+    if (f.caught || f.cleared) continue;
+    if (s.week - f.week > 60) { f.cleared = true; continue; }
+    if (r() < f.risk / 30) { f.caught = true; const you = memberById[s.youId];
+      s.approval = clamp(s.approval - (f.k === 2 ? 14 : 7), 5, 95); s.integrity -= 15; s.baseApproval = clamp(s.baseApproval - 8, 5, 99);
+      pushNews(s, f.k === 2 ? `FBI investigating straw donations to ${nameOf(you)}'s campaign linked to a foreign government.` : `${nameOf(you)} accepted undisclosed benefits from foreign-linked interests, records show.`, "bad");
+      pushInbox(s, { kind: "staff", from: "Your lawyer", title: f.k === 2 ? "The FBI is investigating your campaign" : "It's out", body: f.k === 2 ? "Agents have subpoenaed your campaign's donor records. Straw donations with foreign money are felonies. This could end your career, or worse." : "A reporter has the documents. The ethics committee will open an inquiry. Say as little as possible.", done: true });
+      if (f.k === 2 && r() < 0.5 && !s.over) { s.over = true; s.result = { kind: "indicted", won: false }; pushNews(s, `${nameOf(you)} is indicted and resigns from Congress.`, "bad"); }
+    }
+  }
+}
+// What you can do from the Donors & groups tab.
+export function orgAction(s0, id, act) {
+  const s = structuredClone(s0), o = orgById[id], st = orgState(s, id), you = memberById[s.youId];
+  if (act === "meet") { if (s.hours < 3) return s; s.hours -= 3; st.met++; st.last = s.week; st.rel = clamp(st.rel + 0.12 + orgFit(s, o) * 0.1, -1, 1); s.toast = { title: `Meeting with ${o.name}`, text: orgFit(s, o) > 0.2 ? "It goes well. They'll be in touch." : "Polite, and a little cold. You're not their kind of member.", tone: "" }; }
+  if (act === "ask") { if (s.hours < 2 || s.week - (st.asked ?? -99) < 8) return s; s.hours -= 2; st.asked = s.week;
+    const ok = st.rel + orgFit(s, o) > 0.45 && (o.party === "any" || o.party === you.p);
+    if (!ok) { s.toast = { title: "Not yet", text: "They want to see more from you first: your votes, or more time together.", tone: "" }; st.rel = clamp(st.rel - 0.03, -1, 1); return s; }
+    if (o.kind === "org") { st.endorsed = true; s.baseApproval = clamp(s.baseApproval + 2, 5, 99); s.toast = { title: `${o.name} endorses you`, text: "Their members will knock doors for you.", tone: "good" }; }
+    else if (o.mega) { const amt = 500; addAid(s, you.id, you.p, amt); st.given += amt; s.toast = { title: `${o.name} is in`, text: "A super PAC will spend about $500K for you. Don't cross them.", tone: "good" }; }
+    else { const amt = Math.round(o.budget * 0.8); s.cash += amt; addMoney(s, "pac", amt); st.given += amt; if (o.gid) { s.ties = s.ties || {}; s.ties[o.gid] = (s.ties[o.gid] || 0) + amt; } s.toast = { title: `$${amt}K from ${o.name}`, text: "Easy money. It comes with a phone number that you'll be expected to answer.", tone: "good" }; } }
+  if (act === "cut") { if (st.given) { const back = Math.min(s.cash, Math.round(st.given * 0.5)); s.cash -= back; } st.rel = -0.5; st.given = 0; if (o.gid && s.ties) s.ties[o.gid] = 0; s.integrity += 3; s.baseApproval = clamp(s.baseApproval + (o.party === you.p ? -0.5 : 1.5), 5, 99);
+    pushNews(s, `${nameOf(you)} cuts ties with ${o.name}.`); s.toast = { title: "Ties cut", text: "You return what you can and say so publicly. They won't forget.", tone: "" }; }
+  return s;
+}
+export const orgRows = (s) => ORGS.map((o) => ({ o, st: (s.orgs || {})[o.id] || { rel: 0, given: 0, met: 0 }, fit: orgFit(s, o) }));
+
+// ════════ Rankings: everyone in Washington, and the people who used to run it ════════
+// Former officials and governors: rough game ratings (0-100) from public standing; favorability is approximate.
+const FORMER = [
+  ["Barack", "Obama", "D", 1961, "M", 4, "Former President", { influence: 92, legis: 70, pop: 58, profile: 99, integrity: 82, cash: 1500 }],
+  ["Joe", "Biden", "D", 1942, "M", 0, "Former President", { influence: 40, legis: 85, pop: 38, profile: 80, integrity: 66, cash: 200 }],
+  ["George W.", "Bush", "R", 1946, "M", 0, "Former President", { influence: 30, legis: 60, pop: 50, profile: 70, integrity: 68, cash: 100 }],
+  ["Bill", "Clinton", "D", 1946, "M", 0, "Former President", { influence: 35, legis: 65, pop: 42, profile: 72, integrity: 40, cash: 150 }],
+  ["Kamala", "Harris", "D", 1964, "F", 3, "Former Vice President", { influence: 55, legis: 30, pop: 42, profile: 88, integrity: 66, cash: 900 }],
+  ["Mike", "Pence", "R", 1959, "M", 0, "Former Vice President", { influence: 22, legis: 30, pop: 33, profile: 55, integrity: 70, cash: 50 }],
+  ["Hillary", "Clinton", "D", 1947, "F", 0, "Former Secretary of State", { influence: 40, legis: 40, pop: 40, profile: 78, integrity: 50, cash: 100 }],
+  ["Nancy", "Pelosi", "D", 1940, "F", 0, "Speaker Emerita, retired", { influence: 70, legis: 92, pop: 36, profile: 80, integrity: 50, cash: 400 }],
+  ["Mitch", "McConnell", "R", 1942, "M", 0, "Former Senate Leader, retired", { influence: 45, legis: 80, pop: 24, profile: 55, integrity: 45, cash: 200 }],
+  ["Mitt", "Romney", "R", 1947, "M", 0, "Former Senator", { influence: 25, legis: 45, pop: 42, profile: 50, integrity: 78, cash: 100 }],
+  ["Liz", "Cheney", "R", 1966, "F", 0, "Former Representative", { influence: 20, legis: 25, pop: 38, profile: 55, integrity: 85, cash: 300 }],
+  ["Dick", "Durbin", "D", 1944, "M", 0, "Former Senate Whip, retired", { influence: 30, legis: 75, pop: 45, profile: 35, integrity: 72, cash: 50 }],
+  ["Gavin", "Newsom", "D", 1967, "M", 0, "Governor of California", { influence: 70, legis: 50, pop: 46, profile: 90, integrity: 55, cash: 1200 }],
+  ["Josh", "Shapiro", "D", 1973, "M", 0, "Governor of Pennsylvania", { influence: 55, legis: 45, pop: 57, profile: 70, integrity: 70, cash: 800 }],
+  ["JB", "Pritzker", "D", 1965, "M", 0, "Governor of Illinois", { influence: 55, legis: 45, pop: 50, profile: 65, integrity: 60, cash: 3000 }],
+  ["Gretchen", "Whitmer", "D", 1971, "F", 0, "Governor of Michigan", { influence: 50, legis: 40, pop: 52, profile: 65, integrity: 68, cash: 500 }],
+  ["Ron", "DeSantis", "R", 1978, "M", 0, "Governor of Florida", { influence: 55, legis: 50, pop: 47, profile: 75, integrity: 55, cash: 900 }],
+  ["Glenn", "Youngkin", "R", 1966, "M", 0, "Former Governor of Virginia", { influence: 40, legis: 30, pop: 48, profile: 55, integrity: 65, cash: 800 }],
+];
+export const RANK_GROUPS = [["all", "Everyone"], ["H", "House"], ["S", "Senate"], ["X", "White House and Cabinet"], ["J", "Supreme Court"], ["F", "Former officials and governors"]];
+export function allRankings(s) {
+  const base = rankings(s), byId = {}; for (const r of base) byId[r.m.id] = r;
+  const sponsored = {}; for (const b of s.bills) if (b.stage === "law") sponsored[b.sponsor] = (sponsored[b.sponsor] || 0) + 1;
+  const row = (m, me, x) => ({ m, me, ...x, score: Math.round(x.influence * 1.2 + x.legis * 1.5 + (x.pop - 40) * 0.8 + Math.min(40, x.cash / 60) + x.integrity * 0.3 + x.profile * 0.5) });
+  const rows = [];
+  // Every member of both chambers, scored the same way the chamber ranking does.
+  for (const m of MEMBERS) {
+    if (byId[m.id]) { rows.push({ ...byId[m.id], grp: m.ch }); continue; }
+    const me = m.id === s.youId;
+    rows.push({ ...row(m, me, { influence: me ? s.clout : m.base.influence + (sponsored[m.id] || 0) * 6, legis: me ? s.legis : (sponsored[m.id] || 0) * 12 + Math.round(m.seniority * 0.4 + (m.chair ? 6 : 0)), pop: me ? s.approval : Math.round(50 + (m.own - 50) * 0.5 + noise(m.id + "pop") * 6), cash: me ? s.cash : m.base.cash, integrity: me ? s.integrity : Math.round(45 + m.t.ethics * 50), profile: me ? s.profile : Math.round(5 + m.seniority * 1.2 + (m.lead?.length ? 50 : 0) + m.t.ego * 20) }), grp: m.ch });
+  }
+  // The President, the Vice President and the Cabinet.
+  const P = PRES_M, meP = roleOf(s) === "P";
+  rows.push({ ...row(P, meP, { influence: Math.round(60 + s.clout * 0.4), legis: Math.round(40 + (s.laws || []).length * 2), pop: Math.round(s.presApproval), cash: 3000, integrity: Math.round(70 - s.presHeat * 50), profile: 100 }), grp: "X", title: "President" });
+  for (const c of s.cab || []) { if (c.vacant) continue; const m = { id: "cab-" + c.id, first: c.first, last: c.last, sf: c.sf, sl: c.sl, p: PP, born: c.born, g: /Susie|Brooke|Linda|Pam|Jeanine|Kari|Tulsi|Kristi|Lori/.test(c.first) ? "F" : "M", look: c.tone !== undefined ? { skin: c.tone } : undefined, seat: c.short };
+    rows.push({ ...row(m, false, { influence: Math.round(c.id === "vp" ? 75 : c.id === "cos" ? 70 : 35 + c.loyal * 25), legis: 10, pop: Math.round(c.id === "vp" ? 40 : 35 + (1 - c.heat) * 12), cash: c.id === "vp" ? 500 : 0, integrity: Math.round(80 - c.heat * 60), profile: Math.round(30 + c.heat * 30 + (c.id === "vp" ? 40 : 0)) }), grp: "X", title: c.post }); }
+  // The Court.
+  for (const j of onBench(s)) { const m = { id: j.id, first: j.first, last: j.last, sf: j.sf, sl: j.sl, p: j.by, born: j.born, g: j.g, look: j.skin != null ? { skin: j.skin } : undefined, seat: "Supreme Court" };
+    const med = Math.abs(j.x - courtMedian(s)) < 0.12; rows.push({ ...row(m, false, { influence: med ? 85 : j.chief ? 80 : 60, legis: 20, pop: 45, cash: 0, integrity: 70, profile: j.chief ? 70 : 45 }), grp: "J", title: j.chief ? "Chief Justice" : "Associate Justice" }); }
+  // Former officials and governors: they still move money, voters and members.
+  for (const [first, last, p, born, g, skin, title, st] of FORMER) { const [sf, sl] = swapPair(first.split(" ")[0], last); const m = { id: "fmr-" + last + first, first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, born, g, look: { skin }, seat: title };
+    rows.push({ ...row(m, false, st), grp: "F", title }); }
+  const keys = ["score", "influence", "legis", "pop", "cash", "integrity", "profile"];
+  for (const k of keys) [...rows].sort((a, b) => b[k] - a[k]).forEach((x, i) => (x["a_" + k] = i + 1));
+  return rows;
+}

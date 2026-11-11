@@ -595,3 +595,41 @@ export function RaceNight({ s, real }) {
     </section>
   );
 }
+
+// ── Donors, PACs, movement groups and the people from abroad ──
+const KINDS = [["donor", "Megadonors", "One person, one checkbook, and a super PAC that does what they want."], ["pac", "PACs and industries", "Checks for your campaign, bundles from executives, and a lobbyist who calls before votes."],
+  ["org", "Movement groups", "Endorsements, volunteers, audiences and pressure. Little money, a lot of energy."], ["foreign", "Influence from abroad", "Foreign nationals can't legally give to U.S. campaigns. They try anyway. They come to you; you don't call them."]];
+function Meter2({ v, label }) { const pct = (v + 1) * 50; return <div className="pm-m2" title={`${label}: ${v.toFixed(2)}`}><span>{label}</span><i><b style={{ left: `${pct}%`, background: v > 0.2 ? "#2f8f4e" : v < -0.2 ? "#b3261e" : "#9a8f78" }} /></i></div>; }
+export function Donors({ s, setS, real, setToast }) {
+  const rows = S.orgRows(s), you = S.memberById[s.youId];
+  const run = (n) => { if (n.toast && setToast) setToast(n.toast); n.toast = null; setS(n); };
+  if (S.roleOf(s) === "P") return <p className="muted">Donors and groups come to members of Congress. As President, they come through your party.</p>;
+  const total = rows.reduce((a, r) => a + (r.st.given || 0), 0);
+  return (
+    <div className="stack">
+      <h2 className="pm-h">Donors and groups</h2>
+      <p className="muted">Everyone with money or an army wants something from you. Meet them, take their support, or keep your distance. Taking it moves your votes toward theirs, and your opponents keep track. {total ? `So far they've put about ${fmtK(total)} into your races.` : ""}</p>
+      {KINDS.map(([k, title, blurb]) => (
+        <section key={k} className={`pm-orgs ${k}`}>
+          <h3>{title}</h3><p className="small muted">{blurb}</p>
+          <div className="pm-orggrid">{rows.filter((r) => r.o.kind === k && !(r.o.id === "emily" && you.g !== "F")).sort((a, b) => b.fit - a.fit).map(({ o, st, fit }) => {
+            const cares = Object.entries(o.cares || S.groupById[o.gid]?.cares || {}).slice(0, 4);
+            const off = o.party !== "any" && o.party !== you.p;
+            return (
+              <article key={o.id} className={`pm-org ${off ? "off" : ""}`}>
+                <header><strong>{S.orgName(o, real)}</strong>{o.party !== "any" && <span className={`pill ${o.party === "D" ? "dem" : "rep"}`}>{o.party === "D" ? "Democrats" : "Republicans"}</span>}{st.endorsed && <span className="pill pos2">Endorsed you</span>}</header>
+                <p className="small">{o.note}</p>
+                {cares.length > 0 && <p className="small pm-cares">{cares.map(([pid, v]) => <span key={pid} className={v > 0 ? "for" : "against"}>{v > 0 ? "For" : "Against"}: {S.byId[pid]?.name}</span>)}</p>}
+                {k !== "foreign" && <><Meter2 v={fit} label="How well you fit" /><Meter2 v={st.rel || 0} label="Relationship" /></>}
+                <p className="small muted">{st.met ? `Met ${Math.ceil(st.met)} time${st.met > 1 ? "s" : ""}. ` : ""}{st.given ? `Has spent ${fmtK(st.given)} for you.` : k === "foreign" ? "" : "No money yet."}</p>
+                {k !== "foreign" && <div className="bill-actions">
+                  <button type="button" className="ghost sm" disabled={s.hours < 3} onClick={() => run(S.orgAction(s, o.id, "meet"))}>Request a meeting (3h)</button>
+                  {!off && <button type="button" className="ghost sm" disabled={s.hours < 2} onClick={() => run(S.orgAction(s, o.id, "ask"))}>{o.kind === "org" ? "Ask for an endorsement (2h)" : "Ask for support (2h)"}</button>}
+                  {(st.given > 0 || st.endorsed) && <button type="button" className="ghost sm danger" onClick={() => run(S.orgAction(s, o.id, "cut"))}>Cut ties</button>}
+                </div>}
+              </article>); })}</div>
+        </section>))}
+      <p className="muted small">With real names on, groups show as the real organizations and people. Their positions and public records are real; everything they say and do in the game is invented. Foreign influence is shown generically: it's about the law, not any one country.</p>
+    </div>
+  );
+}

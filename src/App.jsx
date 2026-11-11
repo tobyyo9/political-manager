@@ -6,7 +6,7 @@ import RollCall from "./RollCall.jsx";
 import WeekTurn from "./Week.jsx";
 import { sfx, soundOn, setSound } from "./sfx.js";
 import Scene from "./Scene.jsx";
-import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight, Campaign, Court, Earnings, AfterOffice, RaceNight } from "./Pages.jsx";
+import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight, Campaign, Court, Earnings, AfterOffice, RaceNight, Donors } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
@@ -66,7 +66,7 @@ export default function App() {
   const desk = s.bills.filter((b) => b.stage === "desk").length;
   const TABS = role === "P"
     ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["court", "Court"], ["office", "Office"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
-    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["campaign", "Campaign"], ["court", "Court"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
+    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["campaign", "Campaign"], ["donors", "Donors & groups"], ["court", "Court"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
 
   return (
     <div className="pm">
@@ -105,7 +105,7 @@ export default function App() {
         <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) setS(null); }}>New career</button>
       </nav>
       <main className={`pm-main page-${tab}`}>
-        {s.over ? (role === "P" || s.result?.kind === "term" || s.result?.kind === "higher" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
+        {s.over ? (role === "P" || s.result?.kind === "term" || s.result?.kind === "higher" || s.result?.kind === "indicted" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
         {tab === "inbox" && <Inbox {...ctx} />}
         {tab === "floor" && <Bills {...ctx} />}
         {tab === "chamber" && <ChamberTab {...ctx} />}
@@ -119,6 +119,7 @@ export default function App() {
         {tab === "office" && <Office {...ctx} />}
         {tab === "campaign" && <Campaign {...ctx} />}
         {tab === "court" && <Court {...ctx} />}
+        {tab === "donors" && <Donors {...ctx} />}
         {tab === "rank" && <Rankings {...ctx} />}
         {tab === "news" && <News {...ctx} />}
         <p className="pm-fine">Characters are fictionalized: names are altered, and personalities, words and actions in the game are invented. Voting records, districts and committee seats come from public data. House roster is the 2026 result as called by Nov 10, 2026: real winners in flipped and open seats, with a few close races shown with the current leader. Redrawn districts use estimated leans on the new lines.</p>
@@ -404,14 +405,14 @@ function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene, real, setCa
         <h2 className="pm-h">Inbox</h2>
         {list.map((m) => (
           <article key={m.id} className={`pm-msg ${m.kind} ${m.done ? "done" : ""}`}>
-            <header><strong>{m.from}</strong><small>{S.fmtDate(m.week)}</small></header>
-            <h3>{m.title}</h3>
+            <header><strong>{realize(m.from, [], real)}</strong><small>{S.fmtDate(m.week)}</small></header>
+            <h3>{realize(m.title, [], real)}</h3>
             {m.kind === "scene" ? (
               <div className="pm-scene-row">
                 {m.done ? <p className="small">{m.skipped ? "Your staff handled it. Nothing memorable either way." : <>Coverage: <em>{m.result?.headline}</em></>}</p>
                   : <><button type="button" className="primary" onClick={() => setScene(m.id)}>Play the scene →</button><span className="muted small">If you don't, your staff handles it {S.fmtDate(m.due)}.</span></>}
               </div>
-            ) : <p>{m.body}</p>}
+            ) : <p>{realize(m.body, [], real)}</p>}
             {m.choices && (
               <div className="pm-choices">
                 {m.choices.map((c, i) => <button key={c} type="button" className={`ghost ${m.choice === i ? "on" : ""}`} disabled={m.done} onClick={() => reply(m.id, i)}>{c}</button>)}
@@ -742,25 +743,37 @@ function YourSeat({ s, you, real, setCard }) {
 // ── Rankings ──
 const RK = [["score", "Career score"], ["influence", "Influence"], ["legis", "Legislative record"], ["pop", "Popularity at home"], ["cash", "War chest"], ["integrity", "Integrity"], ["profile", "Media profile"]];
 function Rankings({ s, real, setCard }) {
-  const [key, setKey] = useState("score");
-  const rows = useMemo(() => S.rankings(s), [s]);
-  const sorted = [...rows].sort((a, b) => b[key] - a[key]);
+  const [key, setKey] = useState("score"), [grp, setGrp] = useState("all"), [q, setQ] = useState("");
+  const rows = useMemo(() => S.allRankings(s), [s]);
   const me = rows.find((r) => r.me);
-  const top = sorted.slice(0, 12);
-  const show = top.includes(me) ? top : [...top, me];
+  const inGrp = rows.filter((r) => grp === "all" || r.grp === grp);
+  const sorted = [...inGrp].sort((a, b) => b[key] - a[key]).map((r, i) => ({ r, i: i + 1 }));
+  const shown = q.length > 1 ? sorted.filter(({ r }) => `${r.m.first} ${r.m.last} ${r.m.sf} ${r.m.sl} ${r.title || ""} ${r.m.seat || ""} ${r.m.st || ""}`.toLowerCase().includes(q.toLowerCase())) : sorted;
+  const box = React.useRef(null);
+  const jump = () => { const el = box.current?.querySelector("tr.me"); if (el) el.scrollIntoView({ block: "center", behavior: "smooth" }); };
+  const myPlace = sorted.find((x) => x.r.me)?.i;
   return (
     <div className="stack">
-      <div className="pm-headrow"><h2 className="pm-h">Rankings: all 435 House members</h2><div className="hemi-by pm-wrap">{RK.map(([k, l]) => <button key={k} type="button" className={key === k ? "on" : ""} onClick={() => setKey(k)}>{l}</button>)}</div></div>
-      <div className="pm-yourranks">{RK.map(([k, l]) => <div key={k}><span>{l}</span><b>#{me["r_" + k]}</b></div>)}</div>
-      <table className="pm-table">
-        <thead><tr><th>#</th><th>Member</th><th>Seat</th><th>{RK.find((r) => r[0] === key)[1]}</th></tr></thead>
-        <tbody>{show.map((r) => <tr key={r.m.id} className={r.me ? "me" : ""} onClick={() => setCard(r.m.id)}><td>{r["r_" + key]}</td><td className="pm-rk-name"><Face m={r.m} size={28} /> {S.nameOf(r.m, real)}{r.me ? " (you)" : ""}</td><td>{r.m.p}-{r.m.seat}</td><td>{key === "cash" ? money(r[key]) : r[key]}</td></tr>)}</tbody>
-      </table>
+      <div className="pm-headrow"><h2 className="pm-h">Rankings</h2><div className="hemi-by pm-wrap">{S.RANK_GROUPS.map(([k, l]) => <button key={k} type="button" className={grp === k ? "on" : ""} onClick={() => setGrp(k)}>{l}</button>)}</div></div>
+      <div className="hemi-by pm-wrap">{RK.map(([k, l]) => <button key={k} type="button" className={key === k ? "on" : ""} onClick={() => setKey(k)}>{l}</button>)}</div>
+      {me && <div className="pm-yourranks">{RK.map(([k, l]) => <div key={k}><span>{l}</span><b>#{me["a_" + k]}</b><small>of {rows.length}</small></div>)}</div>}
+      <div className="pm-rk-tools"><input className="pm-search" placeholder="Find anyone: Obama, Thune, Kagan, Ohio…" value={q} onChange={(e) => setQ(e.target.value)} />{myPlace && <button type="button" className="ghost" onClick={jump}>Jump to you (#{myPlace})</button>}<span className="muted small">{shown.length} people</span></div>
+      <div className="pm-rk-scroll" ref={box}>
+        <table className="pm-table">
+          <thead><tr><th>#</th><th>Name</th><th>Role</th><th>{RK.find((r) => r[0] === key)[1]}</th></tr></thead>
+          <tbody>{shown.map(({ r, i }) => { const member = !!S.memberById[r.m.id] && r.m.id !== "POTUS"; return (
+            <tr key={r.m.id} className={`${r.me ? "me" : ""} ${member ? "" : "nolink"}`} onClick={() => member && setCard(r.m.id)}>
+              <td>{i}</td><td className="pm-rk-name"><Face m={r.m} size={28} /> {S.nameOf(r.m, real)}{r.me ? " (you)" : ""}</td>
+              <td className="small">{r.title || (r.m.ch === "S" ? `Senator, ${r.m.st}` : `${r.m.p}-${r.m.seat}`)}{r.title && r.grp !== "F" && r.m.p ? ` · ${r.m.p}` : ""}</td>
+              <td>{key === "cash" ? money(r[key]) : r[key]}</td></tr>); })}</tbody>
+        </table>
+      </div>
+      <p className="muted small">Everyone in the game: both chambers, the White House and Cabinet, the Court, and former officials and governors who still move money, voters and members. Ratings for people outside Congress are the game's estimates.</p>
     </div>
   );
 }
 // Articles are written with the altered names; with real names on, swap them back for the people involved.
-const realize = (text, ids, real) => { if (!real || !text) return text; let t = text; for (const id of ids) { const m = id === "POTUS" ? S.PRES_M : S.memberById[id]; if (!m || !m.sf) continue; t = t.split(`${m.sf} ${m.sl}`).join(`${m.first} ${m.last}`).split(m.sl).join(m.last); } return t; };
+const realize = (text, ids, real) => { if (!real || !text) return text; let t = text; for (const o of S.ORGS) if (t.includes(o.name)) t = t.split(o.name).join(o.real); for (const id of ids) { const m = id === "POTUS" ? S.PRES_M : S.memberById[id]; if (!m || !m.sf) continue; t = t.split(`${m.sf} ${m.sl}`).join(`${m.first} ${m.last}`).split(m.sl).join(m.last); } return t; };
 function Article({ a, s, real, setCard, big }) {
   const m = a.who === "POTUS" ? S.PRES_M : S.memberById[a.who];
   const ids = [a.who, a.target].filter(Boolean); a = { ...a, headline: realize(a.headline, ids, real), quote: realize(a.quote, ids, real), dek: realize(a.dek, ids, real) };
@@ -823,8 +836,8 @@ function End({ s, you, real, setS }) {
 
 function EndOther({ s, you, real, setS, role }) {
   const r = s.result;
-  const stamp = r.kind === "higher" ? (r.won ? "ELECTED TO THE SENATE" : "THE SENATE RUN FAILS") : r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
-  const line = r.kind === "higher" ? (r.won ? `You win statewide by ${Math.abs(r.margin)} points. You'll be sworn in as a senator.` : `You lose statewide by ${Math.abs(r.margin)} points, and you gave up your House seat to run.`) : r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
+  const stamp = r.kind === "indicted" ? "INDICTED" : r.kind === "higher" ? (r.won ? "ELECTED TO THE SENATE" : "THE SENATE RUN FAILS") : r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
+  const line = r.kind === "indicted" ? "Federal prosecutors charged you over foreign money in your campaign. You resign from Congress to fight the case." : r.kind === "higher" ? (r.won ? `You win statewide by ${Math.abs(r.margin)} points. You'll be sworn in as a senator.` : `You lose statewide by ${Math.abs(r.margin)} points, and you gave up your House seat to run.`) : r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
   return (
     <section className={`desk pm-end ${r.won ? "won" : "lost"}`}>
       <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? `January 3, ${S.electionYear(s) + 1}` : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>

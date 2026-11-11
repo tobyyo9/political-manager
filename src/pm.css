@@ -584,3 +584,19 @@ body.pm-desk{
 
 body.pm-desk .pm{background:transparent!important}
 body.pm-desk .pm-start{background:transparent}
+/* Rankings: the whole town, scrollable */
+.pm-rk-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pm-rk-tools .pm-search{flex:1;min-width:220px}
+.pm-rk-scroll{max-height:68vh;overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.pm-rk-scroll thead th{position:sticky;top:0;background:#f1ebdc;z-index:1}
+.pm-rk-scroll tr.nolink{cursor:default}.pm-yourranks small{display:block;font-size:10px;color:var(--muted)}
+/* Donors and groups */
+.page-donors::before{content:"K Street · Donors, PACs and the people who want things"}
+.pm-orgs h3{font-family:"Source Serif 4",Georgia,serif;margin:6px 0 0}
+.pm-orggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:8px}
+.pm-org{background:var(--surface);border:1px solid var(--line);border-top:4px solid #2a3f7a;border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;box-shadow:0 2px 6px rgba(70,50,20,.08)}
+.pm-orgs.donor .pm-org{border-top-color:#c9a24a}.pm-orgs.org .pm-org{border-top-color:#2f8f4e}.pm-orgs.foreign .pm-org{border-top-color:#b3261e;background:#fff7f5}
+.pm-org.off{opacity:.78}
+.pm-org header{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pm-org header strong{font-size:1.02em}
+.pm-cares{display:flex;flex-wrap:wrap;gap:4px}.pm-cares span{font-size:11px;padding:2px 6px;border-radius:3px;background:#e9f4ec;color:#1f5d34}.pm-cares span.against{background:#fbe7e4;color:#8f2a20}
+.pm-m2{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
+.pm-m2 i{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,#f0c2bb,#e9e2d0,#bfe3c8)}.pm-m2 b{position:absolute;top:-3px;width:6px;height:12px;margin-left:-3px;border-radius:2px}
