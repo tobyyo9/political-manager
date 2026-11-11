@@ -157,3 +157,16 @@ The Senate and the President as full characters, committees and amendments as pl
 - **Pixel-art scene sets** (`src/PixelSet.jsx`): a TV studio with a blinking skyline, a hearing room with camera flashes, a leadership office, a debate stage with spotlights, the briefing room, the Oval Office and the House chamber. Crowds shift in their seats, characters bob while they talk, and the frame flashes white or red as answers land.
 - **Optional chiptune sound** (`src/sfx.js`, generated with Web Audio, off by default): vote ticks, gavel, pass and fail fanfares, cash, a page turn and a crisis alarm.
 - Everything respects the "reduce motion" setting.
+
+## Eighteenth pass: the desk
+- The game sits on a walnut desk under a lamp. Every page is a sheet of paper with a light grain, the tabs are manila folder tabs, and section headings are set in serif small caps.
+- Each room has its own look and a line of signage at the top:
+  - **Inbox:** memos with a FROM line, pink "While you were out" phone slips for asks, red folders for scandals, crises and attacks, and a FILED stamp on handled mail.
+  - **Bills:** folder jackets with a status stamp (IN COMMITTEE, REPORTED, ON THE FLOOR) and a route to law (introduced, committee, floor, the other chamber, the President).
+  - **News:** a front page for The Capitol Ledger.
+  - **White House and Cabinet:** navy and gold.
+  - **Court:** marble, with a colonnade.
+  - **Campaign:** a corkboard war room with pinned, slightly crooked paper.
+  - **Network:** a corkboard of pinned photos with string to your 16 strongest ties. Thickness shows strength, and red dashed string shows enemies.
+  - **Office:** a brass nameplate.
+- Fixed real names on the President's posts about you and on poll headlines.

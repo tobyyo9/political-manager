@@ -1907,7 +1907,7 @@ function pollNow(s, internal) {
   const und = clamp((ELECTION_WEEK - rweek(s)) / 6, 3, 14), you = Math.round((100 - und + m) / 2), opp = Math.round(100 - und - you);
   (s.polls = s.polls || []).push({ w: s.week, you, opp, m: Math.round(m * 10) / 10, err: Math.round(err * 10) / 10, internal });
   if (s.polls.length > 40) s.polls.shift();
-  if (!internal) pushNews(s, `New poll in ${memberById[s.youId].seat}: ${nameOf(memberById[s.youId])} ${you}%, ${s.opp ? `${s.opp.first} ${s.opp.last}` : "a generic challenger"} ${opp}%.`, m < 3 ? "bad" : "");
+  if (!internal) { pushNews(s, `New poll in ${memberById[s.youId].seat}: ${nameOf(memberById[s.youId])} ${you}%, ${s.opp ? `${s.opp.first} ${s.opp.last}` : "a generic challenger"} ${opp}%.`, m < 3 ? "bad" : ""); s.news[0].ids = [s.youId]; }
 }
 export function buyPoll(s0) { const s = structuredClone(s0); if (s.cash < 25) return s; s.cash -= 25; pollNow(s, true); const p = s.polls[s.polls.length - 1]; s.toast = { title: "Your internal poll", text: `You ${p.you}%, ${s.opp ? s.opp.last : "challenger"} ${p.opp}%. Margin of error about ${p.err} points.`, tone: p.m > 3 ? "good" : "bad" }; return s; }
 export function campaignSpend(s0, kind, amt) {

@@ -483,3 +483,104 @@ button.danger{color:#c8443a;border-color:#e8a093}
 .sc-flash{z-index:3}
 .wk-ground{position:absolute;left:0;right:0;bottom:0;height:7vh;background:#2d3b2a}
 .wk-cap{z-index:1}
+
+/* ════════ The desk: a Capitol office as the frame, paper for everything you read ════════ */
+body.pm-desk{
+  background-color:#3b2416;
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% 0%,rgba(255,214,150,.22),transparent 70%),
+    radial-gradient(ellipse 120% 80% at 50% 120%,rgba(0,0,0,.55),transparent 60%),
+    repeating-linear-gradient(92deg,rgba(255,255,255,.025) 0 2px,transparent 2px 9px,rgba(0,0,0,.05) 9px 11px,transparent 11px 23px),
+    linear-gradient(180deg,#4a2e1c,#2e1b10);
+  background-attachment:fixed;
+}
+.pm{--surface:#fffdf7;--sunk:#f1ebdc;--ink:#1d2430;--muted:#5b6370;--line:#e3dbc8;--paper:#f7f2e5;--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .38 0 0 0 0 .25 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");color:var(--ink)}
+.pm-top{background:linear-gradient(180deg,#0e1a33,#0a1326);border-bottom:3px solid #c9a24a;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+/* Folder tabs on the desk */
+.pm .pm-tabs{background:transparent;border:0;padding:14px clamp(12px,3vw,28px) 0;gap:4px;max-width:1236px;margin:0 auto;align-items:flex-end}
+.pm .pm-tabs>button:not(.linkbtn){background:linear-gradient(#e2cf98,#d3bd80);color:#4a3a1a;border:1px solid #b89a55;border-bottom:0;border-radius:10px 10px 0 0;padding:9px 14px 8px;margin-top:6px;box-shadow:inset 0 1px 0 #f3e6bd;transition:transform .12s,background .12s}
+.pm .pm-tabs>button:not(.linkbtn):hover{transform:translateY(-2px)}
+.pm .pm-tabs>button.on{background:var(--paper);color:#1d2430;border-color:#e3dbc8;padding-bottom:12px;margin-top:0;box-shadow:0 -3px 8px rgba(0,0,0,.18);position:relative;z-index:2}
+.pm .pm-tabs .linkbtn,.pm .pm-tabs .pm-real{color:#f1e4c6}
+/* The sheet everything sits on */
+.pm .pm-main{background-color:var(--paper);background-image:var(--grain);border:1px solid #e3dbc8;border-radius:2px 6px 6px 6px;box-shadow:0 18px 40px rgba(0,0,0,.5),0 2px 0 #fff inset;max-width:1180px;margin:0 auto 48px;position:relative;z-index:1}
+.pm .panel,.pm .pm-msg,.pm .pm-bill{background-color:var(--surface);border:1px solid var(--line);box-shadow:0 1px 0 #fff inset,0 2px 6px rgba(70,50,20,.08)}
+.pm .pm-h{font-family:"Source Serif 4",Georgia,serif;font-weight:600;letter-spacing:.01em;border-bottom:2px solid #1d2430;padding-bottom:4px;font-variant:small-caps}
+.pm button.ghost:active,.pm button.primary:active,.pm .cold-go:active{transform:translateY(1px) scale(.99)}
+.pm-fine{color:#6b6252}
+/* Page banners: one line of engraved signage per room */
+.pm-main[class*="page-"]::before{display:block;font:600 11px/1 "IBM Plex Mono",monospace;letter-spacing:.22em;text-transform:uppercase;color:#7a6a48;border-bottom:1px solid #d9cfb6;padding-bottom:8px}
+.page-inbox::before{content:"Office of the Member · Correspondence"}.page-floor::before{content:"Legislation · Bills in play"}.page-chamber::before{content:"The Chamber"}
+.page-capitol::before{content:"The United States Capitol"}.page-wh::before{content:"The White House · 1600 Pennsylvania Avenue"}.page-cabinet::before{content:"The Executive Branch"}
+.page-campaign::before{content:"Campaign headquarters · War room"}.page-court::before{content:"Supreme Court of the United States · Equal Justice Under Law"}
+.page-network::before{content:"Who you know"}.page-office::before{content:"Your office"}.page-you::before{content:"Back home"}.page-elections::before{content:"The map"}
+.page-groups::before{content:"Interest groups"}.page-rank::before{content:"The rankings"}.page-news::before{content:"The morning papers"}
+
+/* Inbox: memos, phone slips, red folders */
+.pm .pm-msg{position:relative;border-top:3px double #1d2430;border-radius:3px}
+.pm .pm-msg header{font-family:"IBM Plex Mono",monospace;font-size:12px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px dashed #d4cab2;padding-bottom:6px}
+.pm .pm-msg header strong::before{content:"FROM: ";color:#9a8a68;font-weight:400}
+.pm .pm-msg h3{font-family:"Source Serif 4",Georgia,serif}
+.pm .pm-msg.ask,.pm .pm-msg.fundask,.pm .pm-msg.pask,.pm .pm-msg.petask,.pm .pm-msg.potask{background:#fff0f2;border-top:3px solid #e07a8c}
+.pm .pm-msg.ask header::after,.pm .pm-msg.fundask header::after,.pm .pm-msg.pask header::after,.pm .pm-msg.petask header::after,.pm .pm-msg.potask header::after{content:"While you were out";position:absolute;right:10px;top:-11px;background:#e07a8c;color:#fff;font:700 10px/1 "IBM Plex Mono",monospace;padding:4px 7px;letter-spacing:.08em;border-radius:2px;transform:rotate(1.5deg)}
+.pm .pm-msg.ethics,.pm .pm-msg.moneyscandal,.pm .pm-msg.attack,.pm .pm-msg.crisis{border-left:8px solid #b3261e;background:#fff7f5}
+.pm .pm-msg.crisis{border-top-color:#b3261e}
+.pm .pm-msg.scene{background:#fffbe0;border-top:3px solid #e8c34a}
+.pm .pm-msg.done{opacity:.72}
+.pm .pm-msg.done::after{content:"FILED";position:absolute;right:14px;top:34px;font:800 18px/1 "IBM Plex Mono",monospace;letter-spacing:.12em;color:#b3261e55;border:2px solid #b3261e55;padding:3px 8px;transform:rotate(-8deg);pointer-events:none}
+
+/* Bills: folder jackets with a status stamp and a route to law */
+.pm .pm-bill{position:relative;border-left:10px solid #d3bd80;border-radius:3px 6px 6px 3px}
+.pm .pm-bill.mine{border-left-color:#c9a24a}
+.pm-stamp{position:absolute;right:16px;top:12px;font:800 13px/1 "IBM Plex Mono",monospace;letter-spacing:.14em;padding:5px 9px;border:2px solid;transform:rotate(-4deg);opacity:.85;pointer-events:none}
+.pm-stamp.st0{color:#7a6a48}.pm-stamp.st1{color:#2563a8}.pm-stamp.st2{color:#b3261e}
+.pm-track{display:flex;list-style:none;margin:0 0 6px;padding:0;gap:0;font:600 10.5px/1 "IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.05em;color:#9a8f78;max-width:560px}
+.pm-track li{flex:1;position:relative;padding-top:12px}
+.pm-track li::before{content:"";position:absolute;top:3px;left:0;right:0;height:3px;background:#e1d8c3}
+.pm-track li::after{content:"";position:absolute;top:0;left:0;width:9px;height:9px;border-radius:50%;background:#e1d8c3}
+.pm-track li.on{color:#1d2430}.pm-track li.on::before,.pm-track li.on::after{background:#2f8f4e}
+
+/* The papers */
+.pm-masthead{text-align:center;border-top:4px double #111;border-bottom:4px double #111;padding:8px 0;display:flex;flex-direction:column;gap:2px;font:11px/1.3 "Source Serif 4",Georgia,serif;text-transform:uppercase;letter-spacing:.12em;color:#333}
+.pm-masthead strong{font:900 clamp(30px,6vw,52px)/1 "Playfair Display",Georgia,serif;letter-spacing:0;text-transform:none;color:#111}
+.page-news .pm-art{background-color:#f4f0e3;background-image:var(--grain);border-radius:0;border-left:0;border-right:0;box-shadow:none}
+.page-news .pm-papers{gap:0 20px}.page-news .pm-art h3{font-family:"Playfair Display",Georgia,serif;font-weight:900}
+
+/* The White House and the Cabinet: navy and gold */
+.page-wh,.page-cabinet{border-top:10px solid #0f1d3a!important;box-shadow:0 18px 40px rgba(0,0,0,.5),inset 0 3px 0 #c9a24a!important}
+.page-wh .panel,.page-cabinet .panel{border-top:3px solid #c9a24a}
+.page-wh .pm-h,.page-cabinet .pm-h{color:#0f1d3a;border-bottom-color:#c9a24a}
+
+/* The Court: marble */
+.page-court{background-image:var(--grain),linear-gradient(115deg,transparent 0 30%,rgba(120,120,130,.08) 31%,transparent 33%,transparent 62%,rgba(120,120,130,.07) 63%,transparent 66%),linear-gradient(#f4f3ef,#e9e7e1)!important}
+.page-court .pm-h{font-variant:normal;text-transform:uppercase;letter-spacing:.14em;font-size:1.15rem}
+.page-court::after{content:"";display:block;order:-1;height:26px;margin:-6px 0 0;background:repeating-linear-gradient(90deg,#dedbd2 0 14px,#f6f5f0 14px 18px,#cfccc2 18px 20px,#f6f5f0 20px 34px);border-bottom:6px solid #cfccc2;border-top:4px solid #cfccc2}
+
+/* Campaign and network: corkboard, pinned paper */
+.page-campaign,.page-network{background-color:#c9a26b!important;background-image:radial-gradient(rgba(90,55,20,.28) 1px,transparent 1.5px),radial-gradient(rgba(255,240,210,.25) 1px,transparent 1.5px)!important;background-size:7px 7px,11px 11px!important;background-position:0 0,3px 5px!important;border-color:#8a6232!important;box-shadow:0 18px 40px rgba(0,0,0,.5),inset 0 0 0 8px #7a5226,inset 0 0 0 10px #5d3c1a!important}
+.page-campaign::before,.page-network::before{color:#3b2410;border-bottom-color:#9c7442}
+.page-campaign .pm-h,.page-network .pm-h{background:#fffdf7;display:inline-block;justify-self:start;padding:4px 12px;border:0;box-shadow:0 2px 4px rgba(0,0,0,.25);transform:rotate(-1deg)}
+.page-campaign .panel,.page-network .pm-pyramid{position:relative;box-shadow:0 4px 10px rgba(50,30,10,.35)}
+.page-campaign .panel::before{content:"";position:absolute;top:-7px;left:50%;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ff7b6b,#b3261e 60%,#6e1510);box-shadow:0 2px 2px rgba(0,0,0,.4)}
+.page-campaign .panel:nth-child(odd){transform:rotate(-.35deg)}.page-campaign .panel:nth-child(even){transform:rotate(.3deg)}
+.page-campaign p.muted,.page-network>.stack>p.muted{background:#fffdf7cc;padding:6px 10px;border-radius:3px}
+.pm-cork{position:relative;height:380px;margin:4px 0 8px}
+.pm-cork>svg{position:absolute;inset:0;width:100%;height:100%}
+.pm-pin{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;background:#fffdf7;border:0;padding:5px 5px 3px;box-shadow:0 3px 6px rgba(40,20,0,.4);cursor:pointer;font:600 11px/1.1 "IBM Plex Mono",monospace;color:#1d2430}
+.pm-pin::before{content:"";position:absolute;top:-6px;left:50%;margin-left:-6px;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#8fd3a0,#2f8f4e 60%,#1b5a30)}
+.pm-pin.neg::before{background:radial-gradient(circle at 35% 35%,#ff9b8b,#b3261e 60%,#6e1510)}
+.pm-pin.you{z-index:2;padding:7px 7px 4px}.pm-pin.you::before{background:radial-gradient(circle at 35% 35%,#ffe9a0,#c9a24a 60%,#7a5c18)}
+.pm-pin:hover{z-index:3;box-shadow:0 6px 12px rgba(40,20,0,.5)}
+.pm-cork-key{position:absolute;bottom:-4px;right:6px;margin:0;font-size:11px;background:#fffdf7cc;padding:3px 8px;border-radius:3px}
+
+/* Your office: a brass nameplate */
+.page-office .pm-profile h3{display:inline-block;background:linear-gradient(#f3dd9b,#c9a24a 55%,#a9822e);color:#2a1d07;padding:4px 14px;border-radius:3px;box-shadow:0 2px 0 #7a5c18,inset 0 1px 0 #fff3c9;font-family:"Source Serif 4",Georgia,serif;letter-spacing:.04em}
+
+/* Chamber and Capitol: cream marble with a red band */
+.page-chamber,.page-capitol{border-top:8px solid #7a1f24!important}
+
+@media (max-width:640px){.pm .pm-tabs>button:not(.linkbtn){padding:8px 10px}.pm-cork{height:300px}.pm-pin small{display:none}.pm-stamp{position:static;display:inline-block;margin-bottom:6px}}
+@media (prefers-reduced-motion: reduce){.page-campaign .panel{transform:none!important}}
+
+body.pm-desk .pm{background:transparent!important}
+body.pm-desk .pm-start{background:transparent}

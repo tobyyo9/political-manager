@@ -42,6 +42,7 @@ export default function App() {
   const [snd, setSnd] = useState(soundOn());     // this week's top headline, sliding in
   useEffect(() => { if (!banner || queue.length) return; const t = setTimeout(() => setBanner(null), 5200); return () => clearTimeout(t); }, [banner, queue.length]);      // inbox message id of a scene being played
   useEffect(() => { save({ s, real }); }, [s, real]);
+  useEffect(() => { document.body.classList.add("pm-desk"); return () => document.body.classList.remove("pm-desk"); }, []);
   // Record a finished career in the hall of fame, once.
   useEffect(() => { if (!s?.over || !s.result) return; const e = S.fameEntry(s, real), f = loadFame(); const old = f.find((x) => x.id === e.id); if (old && old.upto >= e.upto) return; saveFame([e, ...f.filter((x) => x.id !== e.id)]); }, [s?.over, s?.week]);
 
@@ -103,7 +104,7 @@ export default function App() {
         <button type="button" className="linkbtn" onClick={async () => { const you2 = S.memberById[s.youId]; const r = await offerFile(`political-manager-${(you2.last || "career").replace(/[^a-z]/gi, "").toLowerCase()}-${S.fmtDate(s.week).replace(/[^0-9a-z]+/gi, "-")}.json`, S.exportSave(s, real)); setToast(r === "saved" ? { title: "Career saved", text: "Load the file from the start screen any time, on any device.", tone: "good" } : r === "declined" ? null : { title: "Couldn't save", text: "This view can't save files.", tone: "bad" }); }}>Save to file</button>
         <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) setS(null); }}>New career</button>
       </nav>
-      <main className="pm-main">
+      <main className={`pm-main page-${tab}`}>
         {s.over ? (role === "P" || s.result?.kind === "term" || s.result?.kind === "higher" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
         {tab === "inbox" && <Inbox {...ctx} />}
         {tab === "floor" && <Bills {...ctx} />}
@@ -476,8 +477,11 @@ function Bills({ s, setS, act, setBillOpen, setCard, real, role, you, decide }) 
       )}
       {active.map((b) => {
         const p = S.byId[b.pid], sp = S.memberById[b.sponsor], ch = role === "S" || (role === "P" && b.origin === "S") ? "S" : "H", c = S.whipCount(s, b, ch), mine = b.sponsor === s.youId;
+        const stage = b.floorWeek <= s.week ? 2 : b.marked ? 1 : 0, stamp = ["IN COMMITTEE", "REPORTED", "ON THE FLOOR"][b.floorWeek <= s.week ? 2 : b.marked ? 1 : 0];
         return (
           <article key={b.id} className={`pm-bill ${mine ? "mine" : ""}`}>
+            <span className={`pm-stamp st${stage}`}>{stamp}</span>
+            <ol className="pm-track">{["Introduced", "Committee", "Floor", b.origin === "S" ? "House" : "Senate", "President"].map((x, i) => <li key={x} className={i <= stage ? "on" : ""}>{x}</li>)}</ol>
             <header>
               <div><span className="eyebrow">{b.floorWeek <= s.week ? "On the floor this week" : `Floor vote around ${S.fmtDate(b.floorWeek)}`}{mine ? " · your bill" : ""}</span><h3>{p.name}</h3>
                 <small>Sponsor: <button type="button" className="linkbtn" onClick={() => setCard(sp.id)}>{S.nameOf(sp, real)}</button> ({sp.p}-{sp.st}){b.cos.includes(s.youId) ? " · you cosponsored" : ""}</small></div>
@@ -774,7 +778,7 @@ function News({ s, real, setCard }) {
   return (
     <div className="pm-two">
       <section className="stack">
-        <h2 className="pm-h">The papers</h2>
+        <div className="pm-masthead"><span>Washington's paper of record · {S.fmtDate(s.week)}</span><strong>The Capitol Ledger</strong><span>All the politics that's fit to print</span></div>
         {wire.length ? <div className="pm-papers">{wire.slice(0, 24).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={setCard} big={i === 0} />)}</div> : <p className="muted">Nothing yet. Give it a week.</p>}
       </section>
       <aside className="stack"><h2 className="pm-h">The wire</h2><ul className="pm-news">{s.news.slice(0, 60).map((n, i) => <li key={i} className={n.tone}><small>{S.fmtDate(n.week)}</small>{realize(n.text, n.ids || [], real)}</li>)}</ul></aside>

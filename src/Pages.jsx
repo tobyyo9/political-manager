@@ -128,6 +128,7 @@ export function Network({ s, real, setCard }) {
     <div className="stack">
       <h2 className="pm-h">Your network</h2>
       <p className="muted">{rows.length} people you know in Washington. Meet colleagues, keep promises and do favors to move them up; a broken promise sends them down and they remember.</p>
+      <NetWeb s={s} real={real} setCard={setCard} rows={rows} />
       <section className="pm-pyramid net">
         <div className="pm-pyr-head you"><Face m={S.memberById[s.youId]} size={52} ring="#ffcf5a" /><div><strong>You</strong><small>{S.nameOf(S.memberById[s.youId], real)}</small></div></div>
         {tiers.map(([title, f], i) => { const list = rows.filter(f); return (
@@ -137,6 +138,28 @@ export function Network({ s, real, setCard }) {
           </div>); })}
       </section>
     </div>
+  );
+}
+
+// The corkboard: you in the middle, your strongest ties pinned around you, string for every relationship.
+function NetWeb({ s, real, setCard, rows }) {
+  const you = S.memberById[s.youId];
+  const pick = [...rows].sort((a, b) => Math.abs(b.rel) - Math.abs(a.rel)).slice(0, 16);
+  if (!pick.length) return null;
+  const W = 760, H = 380, cx = W / 2, cy = H / 2;
+  const pos = pick.map((r, i) => { const t = (i / pick.length) * Math.PI * 2 - Math.PI / 2, ring = i % 2 ? 0.78 : 1; return { r, x: cx + Math.cos(t) * 330 * ring, y: cy + Math.sin(t) * 150 * ring }; });
+  return (
+    <section className="pm-cork">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+        {pos.map(({ r, x, y }) => <path key={r.m.id} d={`M${cx},${cy} Q${(cx + x) / 2},${(cy + y) / 2 + 18} ${x},${y}`} fill="none" stroke={r.rel >= 0 ? "#2f8f4e" : "#b3261e"} strokeWidth={1 + Math.abs(r.rel) * 5} strokeOpacity=".85" strokeDasharray={r.rel < 0 ? "6 4" : ""} />)}
+      </svg>
+      <div className="pm-pin you" style={{ left: "50%", top: "50%" }}><Face m={you} size={58} ring="#ffcf5a" /><small>You</small></div>
+      {pos.map(({ r, x, y }, i) => (
+        <button key={r.m.id} type="button" className={`pm-pin ${r.rel < 0 ? "neg" : ""}`} style={{ left: `${(x / W) * 100}%`, top: `${(y / H) * 100}%`, transform: `translate(-50%,-50%) rotate(${((i * 37) % 9) - 4}deg)` }} onClick={() => setCard(r.m.id)} title={`${S.nameOf(r.m, real)}: ${r.rel >= 0.35 ? "ally" : r.rel >= 0.1 ? "friendly" : r.rel <= -0.3 ? "hostile" : r.rel < -0.05 ? "cool" : "neutral"}`}>
+          <Face m={r.m} size={40} /><small>{S.nameOf(r.m, real).split(" ").slice(-1)[0]}</small>
+        </button>))}
+      <p className="pm-cork-key">String thickness is how strong the tie is. Green: on your side. Red, dashed: against you.</p>
+    </section>
   );
 }
 
@@ -197,7 +220,7 @@ export function Trend({ s, keys, h = 160 }) {
 }
 
 // ── The White House ──
-export function WhiteHouse({ s, act }) {
+export function WhiteHouse({ s, act, real }) {
   const you = S.memberById[s.youId];
   const live = S.activeBills(s);
   return (
@@ -209,7 +232,7 @@ export function WhiteHouse({ s, act }) {
             <p>Approval <b>{Math.round(s.presApproval)}%</b> · Your rapport: <b>{S.RAPPORT(s.rapport || 0)}</b> · Executive orders this term: <b>{s.eo || 0}</b></p></div>
         </section>
         <h2 className="pm-h">What the President is saying</h2>
-        <ul className="pm-wh-feed">{(s.pres || []).map((x, i) => <li key={i} className={x.text.startsWith("REVERSAL") ? "flip" : x.text.startsWith("EXECUTIVE") ? "eo" : ""}><small>{S.fmtDate(x.week)}</small>{x.text}</li>)}</ul>
+        <ul className="pm-wh-feed">{(s.pres || []).map((x, i) => <li key={i} className={x.text.startsWith("REVERSAL") ? "flip" : x.text.startsWith("EXECUTIVE") ? "eo" : ""}><small>{S.fmtDate(x.week)}</small>{realYou(x.text, s, real)}</li>)}</ul>
         {!(s.pres || []).length && <p className="muted">Nothing yet. {S.presPron("He'll")} weigh in on every bill, sooner or later.</p>}
       </section>
       <aside className="stack">
@@ -372,6 +395,8 @@ export function ElectionNight({ night, real }) {
   );
 }
 
+// Swap your own altered name back to the real one when real names are on.
+export const realYou = (t, s, real) => { const y = S.memberById[s.youId]; if (!real || !y || !t || y.fictional || y.custom) return t; return t.split(`${y.sf} ${y.sl}`).join(`${y.first} ${y.last}`).split(y.sl).join(y.last); };
 // ── Your campaign, and money in politics ──
 const fmtK = (k) => (Math.abs(k) >= 1000 ? `$${(k / 1000).toFixed(1)}M` : `$${Math.round(k)}K`);
 function Polls({ s }) {
