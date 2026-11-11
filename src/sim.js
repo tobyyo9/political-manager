@@ -13,6 +13,8 @@ import { CABINET, BENCH, PRESIDENT } from "./exec.js";
 // The President's party and the current year change when a career runs past 2028.
 let PP = "R", YEAR = 2027;
 const PSIGN = () => (PP === "R" ? 1 : -1);
+// Where the generic ballot settles given the President's approval: a 40% President costs his party about 3 points, plus about 2 for being the party in power.
+export const moodTarget = (s) => PSIGN() * ((45 - s.presApproval) * 0.45 + 2);
 export const presParty = () => PP;
 export const yearOf = () => YEAR;
 export { IGROUPS, groupById };
@@ -508,7 +510,8 @@ export function advance(s0) {
   if (s.week % 4 === 0) {
     s.econ.growth = clamp(s.econ.growth + (r() - 0.5) * 0.8, -2.5, 4); s.econ.inflation = clamp(s.econ.inflation + (r() - 0.52) * 0.5, 1, 7); s.econ.jobs = clamp(s.econ.jobs + (r() - 0.5) * 0.3 - (s.econ.growth - 1.5) * 0.05, 3.2, 8);
     s.presApproval = clamp(s.presApproval + (s.econ.growth - 1.5) * 0.6 - (s.econ.inflation - 3) * 0.8 + (r() - 0.5) * 2, 28, 55);
-    s.mood = clamp(s.mood + (40 - s.presApproval) * 0.03 - 0.25 + (r() - 0.5) * 0.8, -6, 9);   // the thermostat pulls back toward the President's party over time
+    // The generic ballot (mood: + = Democrats ahead, in points) tracks the President's popularity: voters punish the party in the White House when he is unpopular, plus a small out-party edge. It moves a tenth of the way to that target each month, so shocks fade.
+    s.mood = clamp(s.mood + (moodTarget(s) - s.mood) * 0.12 + (r() - 0.5) * 0.8, -12, 12);
     if (r() < 0.5) pushNews(s, `Economy: growth ${s.econ.growth.toFixed(1)}%, inflation ${s.econ.inflation.toFixed(1)}%, unemployment ${s.econ.jobs.toFixed(1)}%. The President's approval is ${Math.round(s.presApproval)}%.`);
   }
   if (roleOf(s) === "P") s.approval = s.presApproval;
@@ -646,8 +649,9 @@ function primary(s, r) {
   const gp = groupElection(s, "primary");
   const strength = s.baseApproval + fit * 8 + Math.min(10, s.cash / 400) - (you.prisk > 0.5 ? 6 : 0) + gp.net - (s.rivals || 0) * 3;
   s.primaryGroups = gp;
-  const challenged = strength < 62 || r() < 0.15;
-  const share = clamp(50 + (strength - 55) * 0.9 + (r() - 0.5) * 6, 20, 92);
+  const challenged = strength < 60 || r() < 0.2;
+  // Incumbents almost always win primaries; you only lose if your own party's voters have really turned on you.
+  const share = clamp(60 + (strength - 55) * 0.75 + (r() - 0.5) * 8, 20, 92);
   s.primary = { challenged, share: challenged ? Math.round(share * 10) / 10 : 100, won: !challenged || share > 50 };
   if (challenged) pushNews(s, `${nameOf(you)} ${s.primary.won ? "survives" : "loses"} a primary challenge with ${s.primary.share}% of the vote.`, s.primary.won ? "good" : "bad");
   if (!s.primary.won) { s.over = true; s.result = { kind: "primary", ...s.primary }; }
@@ -1162,10 +1166,11 @@ function presWeek(s, r) {
   if (s.week % 4 === 0) pushInbox(s, { kind: "staff", from: "Your pollster", title: `You're at ${Math.round(s.presApproval)}%`, body: `Republicans: ${Math.round(s.baseApproval)}% approve. ${s.presApproval < 38 ? "Below 38 your party starts running away from you." : s.presApproval > 45 ? "Members want you in their districts again." : "Stable, not strong."}`, done: true });
 }
 function presVerdict(s, r) {
-  const margin = (s.presApproval - 44) * 0.9 + (s.econ.growth - 1.6) * 1.5 - (s.econ.inflation - 3) * 1.2 + Math.min(4, (s.legacy || 0) * 0.25) + (r() - 0.5) * 4;
+  const map = presMap(s, true); s.lastPres = map;
+  const won = map.winner === PP, margin = map.nat * (PP === "D" ? 1 : -1);
   s.over = true;
-  s.result = { kind: "pres", won: margin > 0, margin: Math.round(margin * 10) / 10, approval: Math.round(s.presApproval), laws: s.laws.length, vetoes: s.vetoes, eos: (s.eos || []).filter((e) => e.alive).length, legacy: s.legacy };
-  pushNews(s, `Election night 2028: the Republican nominee ${margin > 0 ? "wins" : "loses"} the White House by ${Math.abs(s.result.margin)} points.`, margin > 0 ? "good" : "bad");
+  s.result = { kind: "pres", won, margin: Math.round(margin * 10) / 10, ev: map.ev, approval: Math.round(s.presApproval), laws: s.laws.length, vetoes: s.vetoes, eos: (s.eos || []).filter((e) => e.alive).length, legacy: s.legacy };
+  pushNews(s, `Election night 2028: the Republican nominee ${won ? "wins" : "loses"}, ${map.ev.R} electoral votes to ${map.ev.D}.`, won ? "good" : "bad");
 }
 // Senators who aren't on the 2028 ballot: a verdict on the term instead of an election.
 function termReview(s, r) {
@@ -1383,12 +1388,13 @@ function flipTitles(ch, newMaj) {
 // The election at the end of a term reshapes Washington: seats flip, members retire, the White House can change hands.
 function electWorld(s) {
   const r = rng(hash(`${s.seed}:world:${s.term}`)), year = electionYear(s), cls = cycleClass(s.term), out = { flips: { H: 0, S: 0 }, retire: 0 };
+  s.lastSenate = senateMap(s, true);
   const before = { H: HOUSE.filter((m) => m.p === "D").length >= 218 ? "D" : "R", S: SENATE.filter((m) => m.p === "D").length >= 51 ? "D" : "R" };
   for (const m of [...MEMBERS]) {
     if (m.id === s.youId) continue;
     if (m.ch === "S" && m.cls !== cls) continue;
     const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`);
-    const margin = (m.dem - 50) * 2 + s.mood * (m.ch === "H" ? 0.9 : 0.8) + inc * (m.ch === "H" ? 3 : 4) + n * (m.ch === "H" ? 5 : 6);
+    const margin = (m.dem - 50) * 2 + s.mood * (m.ch === "H" ? 0.9 : 0.8) + inc * (m.ch === "H" ? 4 : 4) + n * (m.ch === "H" ? 5 : 6);
     const winner = margin > 0 ? "D" : "R";
     const retires = noise(`${s.seed}:ret${s.term}:${m.id}`) < -0.86 || (YEAR + 1 - (m.born || 1960) > 82);
     if (winner !== m.p) { out.flips[m.ch]++; newcomer(s, m, winner, year); }
@@ -1397,10 +1403,9 @@ function electWorld(s) {
   // The White House, every four years.
   let presMsg = "";
   if (s.term % 2 === 1) {
-    const env = PP === "R" ? -s.mood : s.mood;   // mood in the President's party's favor
-    const pm = (s.presApproval - 44) * 0.9 + env * 0.4 + (s.econ.growth - 1.6) * 1.5 - (s.econ.inflation - 3) * 1.2 + (r() - 0.5) * 6;
-    const winner = pm > 0 ? PP : PP === "R" ? "D" : "R";
-    presMsg = `${winner === "D" ? "A Democrat" : "A Republican"} wins the White House${winner === PP ? ", keeping it for the President's party" : ""}.`;
+    const map = presMap(s, true); s.lastPres = map;
+    const winner = map.winner;
+    presMsg = `${winner === "D" ? "A Democrat" : "A Republican"} wins the White House, ${Math.max(map.ev.D, map.ev.R)} electoral votes to ${Math.min(map.ev.D, map.ev.R)}${winner === PP ? ", keeping it for the President's party" : ""}.`;
     if (winner !== PP) { PP = winner; s.presApproval = 52; } else s.presApproval = 48;
     s.presHeat = 0.2; s.rapport = 0; s.pres = [];
     // A new (fictional) President and cabinet: the real one is term-limited.
@@ -1486,3 +1491,40 @@ function runHigher(s, r) {
 }
 // Hiring: replace a staffer with a better (and pricier) one.
 export const hireCost = (x) => 60 + 12 * Math.min(20, x.skill + 4);
+
+// ════════ The electoral map ════════
+export const EV = { AL: 9, AK: 3, AZ: 11, AR: 6, CA: 54, CO: 10, CT: 7, DE: 3, DC: 3, FL: 30, GA: 16, HI: 4, ID: 4, IL: 19, IN: 11, IA: 6, KS: 6, KY: 8, LA: 8, ME: 4, MD: 10, MA: 11, MI: 15, MN: 10, MS: 6, MO: 10, MT: 4, NE: 5, NV: 6, NH: 4, NJ: 14, NM: 5, NY: 28, NC: 16, ND: 3, OH: 17, OK: 7, OR: 8, PA: 19, RI: 4, SC: 9, SD: 3, TN: 11, TX: 40, UT: 6, VT: 3, VA: 13, WA: 12, WV: 4, WI: 10, WY: 3 };
+// Each state's 2024 Democratic share of the two-party presidential vote (from the senators' records; DC added).
+export const STATE_DEM = (() => { const o = { DC: 92 }; for (const m of ORIG) if (m.ch === "S") o[m.st] = m.dem; return o; })();
+const NAT_2024 = -1.5;                                   // Trump won the national vote by about 1.5 points
+const phi = (z) => 1 / (1 + Math.exp(-1.7 * z));
+// The national presidential margin for Democrats: the generic ballot plus the economy, which helps or hurts the party in power.
+export function nationalPres(s) { return s.mood * 0.85 - PSIGN() * ((s.econ.growth - 1.6) * 1.2 - (s.econ.inflation - 3) * 1.0); }
+// final: draw the actual result with state-level error; otherwise a forecast with win probabilities.
+export function presMap(s, final = false, year = electionYear(s)) {
+  const nat = nationalPres(s), states = {}; const ev = { D: 0, R: 0 };
+  for (const st of Object.keys(EV)) {
+    const base = (STATE_DEM[st] - 50) * 2 + (nat - NAT_2024);
+    const m = final ? base + noise(`${s.seed}:pres:${year}:${st}`) * 4 + noise(`${s.seed}:presnat:${year}`) * 2 : base;
+    const pD = final ? (m > 0 ? 1 : 0) : phi(m / 5);
+    states[st] = { m: Math.round(m * 10) / 10, pD, w: m > 0 ? "D" : "R", ev: EV[st] };
+    ev[m > 0 ? "D" : "R"] += EV[st];
+  }
+  return { year, nat: Math.round(nat * 10) / 10, states, ev, winner: ev.D >= 270 ? "D" : "R", final };
+}
+// Senate races on the next ballot: forecast or result per state.
+export function senateMap(s, final = false) {
+  const cls = cycleClass(s.term), states = {};
+  for (const m of SENATE.filter((x) => x.cls === cls)) {
+    const inc = m.p === "D" ? 1 : -1, base = (m.dem - 50) * 2 + s.mood * 0.8 + inc * 4;
+    const mm = final ? base + noise(`${s.seed}:el${s.term}:${m.id}`) * 6 : base;
+    states[m.st] = { m: Math.round(mm * 10) / 10, pD: final ? (mm > 0 ? 1 : 0) : phi(mm / 6), w: mm > 0 ? "D" : "R", holder: m.p, who: m.id };
+  }
+  return { states, cls };
+}
+export function houseMap() {
+  const states = {};
+  for (const m of HOUSE) { const x = (states[m.st] = states[m.st] || { D: 0, R: 0 }); x[m.p]++; }
+  for (const st in states) { const x = states[st]; x.pD = x.D / (x.D + x.R); }
+  return { states };
+}

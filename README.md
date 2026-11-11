@@ -69,3 +69,9 @@ The Senate and the President as full characters, committees and amendments as pl
 - At the start of each term: run for party whip, go for chair or ranking member on your committee, and, for House members, a chance to run for the Senate when your state's seat is on the next ballot (you give up your House seat to run).
 - Staff can be replaced with better (and pricier) hires from the Office tab. A career history panel tracks each Congress.
 - The world is saved with the career and restored on reload.
+
+## Seventh pass: realistic elections and the electoral map
+- The national mood is now a generic ballot that settles where the President's approval puts it (an unpopular President costs his party, plus a small out-party edge) and moves gradually, so shutdown blame and scandals fade instead of piling up.
+- Incumbents almost always survive primaries unless their own voters have turned on them; seat turnover per cycle is in the realistic range (roughly 10 to 30 House seats).
+- An electoral map (Map tab): presidential forecast and results by state from each state's 2024 result plus the national swing, with 538 electoral votes (Maine and Nebraska splits not modeled); Senate races on the ballot; House delegations by state. State outlines from us-atlas (Census boundaries).
+- Presidential results in long careers and the President's 2028 verdict are decided by electoral votes.

@@ -3,7 +3,7 @@ import * as S from "./sim.js";
 import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import RollCall from "./RollCall.jsx";
-import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet } from "./Pages.jsx";
+import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
@@ -39,8 +39,8 @@ export default function App() {
   const ctx = { s, setS, you, real, act, setCard, setBillOpen: openBoard, setTab, reply, role, decide };
   const desk = s.bills.filter((b) => b.stage === "desk").length;
   const TABS = role === "P"
-    ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
-    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
+    ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
+    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
 
   return (
     <div className="pm">
@@ -84,6 +84,7 @@ export default function App() {
         {tab === "capitol" && <Capitol {...ctx} />}
         {tab === "wh" && <WhiteHouse {...ctx} />}
         {tab === "cabinet" && <Cabinet {...ctx} />}
+        {tab === "elections" && <Elections {...ctx} />}
         {tab === "network" && <Network {...ctx} />}
         {tab === "office" && <Office {...ctx} />}
         {tab === "rank" && <Rankings {...ctx} />}

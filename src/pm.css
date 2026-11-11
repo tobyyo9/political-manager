@@ -248,3 +248,13 @@ button.danger{color:#c8443a;border-color:#e8a093}
 .pm-mpcounts{display:flex;gap:16px;flex-wrap:wrap}.pm-mpcounts b.ok{color:#1d8a4f}.pm-mpcounts b.no{color:#c8443a}
 .pm-commline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px}
 .pm-hire{margin-top:8px;font-size:12.5px}
+.pm-map-wrap{background:var(--card,#fff);border:1px solid var(--line,#d8dde6);border-radius:16px;padding:12px}
+.pm-map{width:100%;height:auto;display:block}
+.pm-map path{cursor:pointer;transition:stroke-width .1s}
+.pm-map-lbl{font-size:13px;font-weight:700;fill:#fff;text-anchor:middle;dominant-baseline:middle;pointer-events:none;paint-order:stroke;stroke:#0005;stroke-width:2px}
+.pm-map-tip{min-height:22px;font-size:13.5px;margin:6px 4px}
+.pm-evbar .pm-ev-nums{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pm-ev-nums .dem b{color:#1b3f8f;font-size:1.6rem}.pm-ev-nums .rep b{color:#8f231b;font-size:1.6rem}
+.pm-ev-track{position:relative;height:14px;border-radius:8px;background:#e6e9ef;overflow:hidden;margin-top:8px;display:flex}
+.pm-ev-track i.d{background:#1b3f8f}.pm-ev-track i.r{background:#8f231b;margin-left:auto}
+.pm-ev-track em{position:absolute;top:-2px;bottom:-2px;width:2px;background:#111}

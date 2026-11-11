@@ -1,6 +1,7 @@
 // The bigger screens: the Capitol's power structure, your network, your office, the White House.
 import * as S from "./sim.js";
 import Portrait from "./Portrait.jsx";
+import USMAP from "./data/usmap.json";
 
 const { useState, useMemo } = React;
 const pc = (p) => (p === "D" ? "dem" : "rep");
@@ -270,3 +271,58 @@ export function Cabinet({ s, real, act, role, you }) {
     </div>
   );
 }
+
+// ── Elections: the map ──
+const STATE_NAME = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming" };
+// Probability (or seat share) of Democrats -> a color from deep red to deep blue.
+const shade = (p) => (p >= 0.95 ? "#1b3f8f" : p >= 0.8 ? "#3d7bd9" : p >= 0.6 ? "#9db8f0" : p > 0.4 ? "#d9d4e6" : p > 0.2 ? "#f0a9a0" : p > 0.05 ? "#d4594d" : "#8f231b");
+const SMALL = new Set(["VT", "NH", "MA", "RI", "CT", "NJ", "DE", "MD", "DC", "HI"]);
+export function Elections({ s }) {
+  const [view, setView] = useState("pres");
+  const [when, setWhen] = useState("now");
+  const [hover, setHover] = useState(null);
+  const year = S.electionYear(s), presYear = year % 4 === 0;
+  const past = when === "last";
+  const pres = past && s.lastPres ? s.lastPres : S.presMap(s);
+  const sen = past && s.lastSenate ? s.lastSenate : S.senateMap(s);
+  const house = S.houseMap();
+  const fill = (st) => {
+    if (view === "pres") return shade(pres.states[st]?.pD ?? 0.5);
+    if (view === "senate") { const x = sen.states[st]; return x ? shade(x.pD) : "#e6e9ef"; }
+    const x = house.states[st]; return x ? shade(x.pD) : "#e6e9ef";
+  };
+  const tip = (st) => {
+    if (view === "pres") { const x = pres.states[st]; return x && `${STATE_NAME[st]} · ${x.ev} electoral votes · ${x.m > 0 ? "D" : "R"}+${Math.abs(x.m).toFixed(1)}${pres.final ? "" : ` · Democrats ${Math.round(x.pD * 100)}% to win`}`; }
+    if (view === "senate") { const x = sen.states[st]; if (!x) return `${STATE_NAME[st]} · no Senate race this cycle`; const m = S.memberById[x.who]; return `${STATE_NAME[st]} · ${past ? "won by" : "held by"} ${past ? (x.w === "D" ? "Democrats" : "Republicans") : `${S.nameOf(m)} (${m.p})`} · ${x.m > 0 ? "D" : "R"}+${Math.abs(x.m).toFixed(1)}${past ? "" : ` · Democrats ${Math.round(x.pD * 100)}% to win`}`; }
+    const x = house.states[st]; return x && `${STATE_NAME[st]} · ${x.D} Democrats, ${x.R} Republicans in the House`;
+  };
+  const evD = pres.ev.D, evR = pres.ev.R;
+  const senUp = Object.values(sen.states), senD = SENATE_SAFE(s, sen);
+  return (
+    <div className="stack">
+      <div className="pm-headrow">
+        <h2 className="pm-h">Elections {past ? (s.lastPres || s.lastSenate ? `· ${year - 2}` : "") : `· ${year} forecast`}</h2>
+        <div className="hemi-by">{[["pres", "President"], ["senate", "Senate"], ["house", "House delegations"]].map(([v, l]) => <button key={v} type="button" className={view === v ? "on" : ""} onClick={() => setView(v)}>{l}</button>)}</div>
+        {(s.lastPres || s.lastSenate) && <div className="hemi-by">{[["now", "Forecast"], ["last", "Last election"]].map(([v, l]) => <button key={v} type="button" className={when === v ? "on" : ""} onClick={() => setWhen(v)}>{l}</button>)}</div>}
+      </div>
+      {view === "pres" && (
+        <section className="panel pm-evbar">
+          <div className="pm-ev-nums"><span className="dem"><b>{evD}</b> Democrats</span><span className="muted small">{pres.final ? `Final, ${pres.year}` : presYear ? `If the election were held today · national ${pres.nat >= 0 ? "D" : "R"}+${Math.abs(pres.nat).toFixed(1)}` : `Next presidential election ${year + 2} · if it were held today`}</span><span className="rep">Republicans <b>{evR}</b></span></div>
+          <div className="pm-ev-track"><i className="d" style={{ width: `${(evD / 538) * 100}%` }} /><i className="r" style={{ width: `${(evR / 538) * 100}%` }} /><em style={{ left: "50.2%" }} title="270 to win" /></div>
+        </section>
+      )}
+      {view === "senate" && <section className="panel small">{senUp.length} seats {past ? "were" : "are"} on the {past ? "last" : year} ballot (class {sen.cls}). Democrats hold {S.SENATE.filter((m) => m.p === "D").length} seats now{!past ? `; on this forecast they would hold about ${senD}` : ""}.</section>}
+      {view === "house" && <section className="panel small">Democrats hold {S.HOUSE.filter((m) => m.p === "D").length} of 435 seats. The generic ballot is {s.mood >= 0 ? "D" : "R"}+{Math.abs(s.mood).toFixed(1)}.</section>}
+      <section className="pm-map-wrap">
+        <svg viewBox="0 0 975 610" className="pm-map" role="img" aria-label="Map of the United States">
+          {Object.entries(USMAP).map(([st, g]) => <path key={st} d={g.d} fill={fill(st)} stroke="#fff" strokeWidth={hover === st ? 2.5 : 0.8} onMouseEnter={() => setHover(st)} onMouseLeave={() => setHover(null)} onClick={() => setHover(st)} />)}
+          {Object.entries(USMAP).filter(([st]) => !SMALL.has(st)).map(([st, g]) => <text key={st} x={g.c[0]} y={g.c[1]} className="pm-map-lbl">{st}</text>)}
+        </svg>
+        <div className="pm-map-tip">{hover ? tip(hover) : "Hover or tap a state."}</div>
+        <div className="pm-legend">{[["Safe D", 0.97], ["Likely D", 0.85], ["Lean D", 0.65], ["Toss-up", 0.5], ["Lean R", 0.35], ["Likely R", 0.15], ["Safe R", 0.02]].map(([l, p]) => <span key={l}><i style={{ background: shade(p) }} />{l}</span>)}</div>
+      </section>
+      <p className="muted small">The forecast moves with the generic ballot, which follows the President's approval and the economy. Each state starts from its 2024 presidential result. Maine and Nebraska's district electoral votes are counted with the statewide winner. {view === "senate" ? "Senate forecasts include incumbency." : ""}</p>
+    </div>
+  );
+}
+const SENATE_SAFE = (s, sen) => S.SENATE.filter((m) => m.p === "D" && sen.states[m.st]?.who !== m.id).length + Object.values(sen.states).filter((x) => x.pD >= 0.5).length;
