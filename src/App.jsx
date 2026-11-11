@@ -180,8 +180,18 @@ function Start({ onStart, real, setReal }) {
     ["Omar", "MN", "Lightning rod", "Deputy chair of the Progressive Caucus and a constant target. Safe at home, scrutinized everywhere else."],
     ["Raskin", "MD", "The lawyer", "The top Democrat on Judiciary. Investigations, impeachment talk and the hearings everyone watches."],
     ["Khanna", "CA", "The dealmaker", "Silicon Valley's progressive. Known for teaming up with unlikely partners on the right."],
+    ["Scalise", "LA", "The minority leader", "The top House Republican now that the gavel is gone. Keep 178 members together and win the House back."],
+    ["Casar", "TX", "The bloc leader", "Chairs the Progressive Caucus, the left's biggest bloc. Can you turn 99 votes into leverage?"],
+    ["Luna", "FL", "The insurgent", "A Florida Republican who forces votes her own leaders don't want, with a big online following."],
+    ["Moskowitz", "FL", "The troll", "A Florida Democrat who trolls both parties and works across the aisle when it suits his district."],
+    ["Gluesenkamp Perez", "WA", "The mechanic", "Runs an auto repair shop and co-chairs the Blue Dogs. Holds a seat Trump carried."],
+    ["Frost", "FL", "Gen Z", "The first Gen Z member of Congress. A safe seat in Orlando and a huge following online."],
+    ["Cole", "OK", "The appropriator", "The top Republican on Appropriations. Every funding fight runs through you."],
+    ["Comer", "KY", "The investigator", "Ran Oversight's investigations in the majority. Now the top Republican there, in the minority."],
+    ["Waters", "CA", "The chair", "Back as chair of Financial Services after decades in the House. Banks watch your hearings closely."],
   ].map(([l, st, title, note]) => ({ m: S.HOUSE.find((m) => m.last === l && m.st === st), title, note })).filter((x) => x.m), []);
   const [where, setWhere] = useState("H");
+  const [moreH, setMoreH] = useState(false), [moreS, setMoreS] = useState(false);
   const senators = useMemo(() => [
     ["Schumer", "NY", "Majority Leader", "Democrats took the Senate back. Now you run the floor, and every one of your 56 has a demand."],
     ["Thune", "SD", "Minority Leader", "You lost the majority, and the President doesn't take your calls when he's angry."],
@@ -191,6 +201,15 @@ function Start({ onStart, real, setReal }) {
     ["Murkowski", "AK", "The swing vote", "A Republican who votes her conscience. The President hates it. Up in 2028."],
     ["Cruz", "TX", "The national brand", "Debates, podcasts and a 2028 itch. In the minority, with a new Democratic colleague from home."],
     ["Paul", "KY", "The contrarian", "A libertarian who says no to spending and to tariffs, even the President's. Up in 2028."],
+    ["Warren", "MA", "The policy machine", "Chairs Banking and has a plan for that. Not up until 2030."],
+    ["Hawley", "MO", "The populist", "A Republican who teams up with Democrats on labor, tech and stock trading, and fights them on most everything else."],
+    ["Kennedy", "LA", "The one-liner", "A folksy quip in every hearing. Up in 2028 in a safe seat."],
+    ["Ossoff", "GA", "Six more years", "Just reelected in Georgia. You won't face voters again until 2032."],
+    ["Brown", "OH", "The comeback", "Back in the Senate after winning Ohio's special election. Up again in 2028."],
+    ["Booker", "NJ", "The talker", "Holds the record for the longest Senate speech. Just reelected."],
+    ["Grassley", "IA", "The institution", "In Congress since the 1970s and still going. Up in 2028."],
+    ["Murphy", "CT", "The messenger", "One of the Democrats' sharpest voices on TV, and on guns. Not up until 2030."],
+    ["Lee", "UT", "The constitutionalist", "A Utah conservative with a big online presence. Up in 2028."],
   ].map(([l, st, title, note]) => ({ m: S.SENATE.find((m) => m.last === l && m.st === st), title, note })).filter((x) => x.m), []);
   const POOL = where === "S" ? S.SENATE : S.HOUSE;
   const hits = q.length > 1 ? POOL.filter((m) => `${m.first} ${m.last} ${m.sf} ${m.sl} ${m.seat}`.toLowerCase().includes(q.toLowerCase())).slice(0, 12) : [];
@@ -235,7 +254,7 @@ function Start({ onStart, real, setReal }) {
             <h3>Famous senators</h3>
             <p className="muted small">A third of the Senate is on the ballot in 2028. Everyone else plays for the long game.{!real && " Names are altered; tick Show real names to see who they are."}</p>
             <div className="pm-featured">
-              {senators.map(({ m, title, note }) => (
+              {(moreS ? senators : senators.slice(0, 8)).map(({ m, title, note }) => (
                 <button key={m.id} type="button" className={`pm-seatcard ${pc(m.p)}`} onClick={() => onStart(S.newCareer(m.id, undefined, null, diff))}>
                   <span className="cast-trait">{title}</span>
                   <span className="pm-who"><Face m={m} size={40} /><strong>{S.nameOf(m, real)}</strong></span>
@@ -244,6 +263,7 @@ function Start({ onStart, real, setReal }) {
                 </button>
               ))}
             </div>
+            {senators.length > 8 && <button type="button" className="ghost pm-more" onClick={() => setMoreS((x) => !x)}>{moreS ? "Show fewer" : `Show ${senators.length - 8} more`}</button>}
           </section>
           <section className="panel">
             <h3>Or take over any senator</h3>
@@ -269,7 +289,7 @@ function Start({ onStart, real, setReal }) {
             <h3>Famous faces</h3>
             <p className="muted small">Play one of the best-known members of the House.{!real && " Names are altered; tick Show real names to see who they are."}</p>
             <div className="pm-featured">
-              {famous.map(({ m, title, note }) => (
+              {(moreH ? famous : famous.slice(0, 8)).map(({ m, title, note }) => (
                 <button key={m.id} type="button" className={`pm-seatcard ${pc(m.p)}`} onClick={() => onStart(S.newCareer(m.id, undefined, null, diff))}>
                   <span className="cast-trait">{title}</span>
                   <span className="pm-who"><Face m={m} size={40} /><strong>{S.nameOf(m, real)}</strong></span>
@@ -278,6 +298,7 @@ function Start({ onStart, real, setReal }) {
                 </button>
               ))}
             </div>
+            {famous.length > 8 && <button type="button" className="ghost pm-more" onClick={() => setMoreH((x) => !x)}>{moreH ? "Show fewer" : `Show ${famous.length - 8} more`}</button>}
           </section>
           <section className="panel">
             <h3>Or take over any House member</h3>

@@ -341,3 +341,4 @@ button.danger{color:#c8443a;border-color:#e8a093}
 .pm-today{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
 .pm-inpapers{display:flex;flex-direction:column;gap:8px;margin:8px 0}
 @media(max-width:720px){.pm-papers{grid-template-columns:1fr}}
+.pm-more{margin-top:10px}
