@@ -547,3 +547,26 @@ export function AfterOffice({ s, setS }) {
     </section>
   );
 }
+
+// ── Your race on election night: precincts report, the lead swings, then the call ──
+export function RaceNight({ s, real }) {
+  const r = s.result, you = S.memberById[s.youId];
+  const calm = (() => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } })();
+  const [pct, setPct] = useState(calm ? 100 : 0), [run, setRun] = useState(0);
+  React.useEffect(() => { if (calm) return; setPct(0); let p = 0; const t = setInterval(() => { p = Math.min(100, p + 1 + Math.random() * 3); setPct(p); if (p >= 100) clearInterval(t); }, 90); return () => clearInterval(t); }, [run]);
+  if (!r || (r.kind !== "general" && r.kind !== "higher") || r.margin == null) return null;
+  // Early returns wander (mail ballots, then election-day votes, then the late count) and settle on the real margin.
+  const h = (k) => { let x = 0; for (const c of `${s.seed}${k}`) x = (x * 31 + c.charCodeAt(0)) % 9973; return x / 9973 - 0.5; };
+  const wander = (1 - pct / 100) ** 1.4 * (14 * h("a") + 8 * Math.sin(pct / 9 + h("b") * 6));
+  const m = r.margin + wander, mine = Math.max(1, Math.min(99, 50 + m / 2));
+  const oppName = r.opp?.name || (s.opp ? `${s.opp.first} ${s.opp.last}` : "Your opponent"), called = pct >= 100 || (pct > 70 && Math.abs(r.margin) > 12) || (pct > 88 && Math.abs(r.margin) > 4);
+  const votes = Math.round((you.ch === "S" || r.kind === "higher" ? 3200000 : 330000) * pct / 100);
+  return (
+    <section className="pm-race">
+      <div className="pm-race-head"><span className="rc-live"><i className="live-dot" /> {r.kind === "higher" ? `U.S. Senate · ${you.st}` : you.seat}</span><span className="muted small">{Math.floor(pct)}% reporting · {votes.toLocaleString()} votes counted</span><button type="button" className="linkbtn" onClick={() => setRun((x) => x + 1)}>Replay</button></div>
+      <div className="pm-race-row you"><span>{S.nameOf(you, real)} ({you.p})</span><div className="pm-race-bar"><i style={{ width: `${mine}%` }} /></div><b>{mine.toFixed(1)}%</b></div>
+      <div className="pm-race-row opp"><span>{oppName} ({you.p === "D" ? "R" : "D"})</span><div className="pm-race-bar"><i style={{ width: `${100 - mine}%` }} /></div><b>{(100 - mine).toFixed(1)}%</b></div>
+      <p className={`pm-race-call ${called ? (r.won ? "ok" : "no") : ""}`}>{called ? `PROJECTED WINNER: ${r.won ? S.nameOf(you, real) : oppName}` : pct < 30 ? "Too early to call" : "Too close to call"}</p>
+    </section>
+  );
+}

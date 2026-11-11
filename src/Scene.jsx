@@ -2,6 +2,8 @@
 import * as S from "./sim.js";
 import { stageScene, roll, tally } from "./scenes.js";
 import Portrait from "./Portrait.jsx";
+import PixelSet from "./PixelSet.jsx";
+import { sfx } from "./sfx.js";
 
 const { useState, useEffect, useMemo } = React;
 const Face = ({ m, size }) => <Portrait id={m.id} g={m.g} born={m.born} p={m.p} size={size} fix={m.look} />;
@@ -22,7 +24,7 @@ export default function Scene({ s, msg, real, onFinish, onClose }) {
   if (!scene) return null;
   const B = scene.beats[beat], speaker = B ? scene.cast[B.who] : null, you = scene.cast.find((c) => c.you);
   const momentum = picks.reduce((a, p) => a + p.res.delta, 0);
-  const choose = (i) => { const r = roll(s, msg, scene, beat, i); setRes({ ...r, choice: B.choices[i] }); setPicks((p) => [...p, { beat, choice: B.choices[i], res: r }]); };
+  const choose = (i) => { const r = roll(s, msg, scene, beat, i); sfx(r.ok ? (["briefing", "hearing", "chamber"].includes(scene.setting) ? "flash" : "call") : "fail"); setRes({ ...r, choice: B.choices[i] }); setPicks((p) => [...p, { beat, choice: B.choices[i], res: r }]); };
   const next = () => {
     const last = picks[picks.length - 1];
     if (beat + 1 >= scene.beats.length || last?.choice.end) setDone(tally(scene, picks));
@@ -36,7 +38,8 @@ export default function Scene({ s, msg, real, onFinish, onClose }) {
           <div className="sc-mom" title="Momentum"><span>Momentum</span><i><b style={{ left: `${50 + Math.max(-6, Math.min(6, momentum)) * 7}%` }} /></i></div>
           <button type="button" className="sc-x" onClick={onClose} aria-label="Close">×</button></div>
         <div className="sc-set">
-          <div className="sc-backdrop" />
+          <div className="sc-backdrop"><PixelSet setting={scene.setting} /></div>
+          {res && <div key={picks.length} className={`sc-flash ${res.ok ? "ok" : "no"}`} />}
           <div className="sc-people">
             {scene.cast.map((c, i) => (
               <div key={i} className={`sc-person ${c.you ? "you" : ""} ${speaker === c ? "talking" : ""} ${c.mod ? "mod" : ""}`}>

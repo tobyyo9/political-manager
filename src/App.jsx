@@ -3,8 +3,10 @@ import * as S from "./sim.js";
 import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import RollCall from "./RollCall.jsx";
+import WeekTurn from "./Week.jsx";
+import { sfx, soundOn, setSound } from "./sfx.js";
 import Scene from "./Scene.jsx";
-import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight , Campaign, Court, Earnings, AfterOffice } from "./Pages.jsx";
+import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight, Campaign, Court, Earnings, AfterOffice, RaceNight } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
@@ -35,7 +37,9 @@ export default function App() {
   const [queue, setQueue] = useState([]);        // roll calls waiting to be shown
   const [toast, setToast] = useState(null);
   const [scene, setScene] = useState(null);
-  const [banner, setBanner] = useState(null);     // this week's top headline, sliding in
+  const [banner, setBanner] = useState(null);
+  const [turn, setTurn] = useState(null);          // the week-turn animation
+  const [snd, setSnd] = useState(soundOn());     // this week's top headline, sliding in
   useEffect(() => { if (!banner || queue.length) return; const t = setTimeout(() => setBanner(null), 5200); return () => clearTimeout(t); }, [banner, queue.length]);      // inbox message id of a scene being played
   useEffect(() => { save({ s, real }); }, [s, real]);
   // Record a finished career in the hall of fame, once.
@@ -43,8 +47,12 @@ export default function App() {
 
   if (!s) return <Start real={real} setReal={setReal} onStart={(st, r2) => { setS(st); if (r2 !== undefined) setReal(r2); setTab("inbox"); window.scrollTo(0, 0); }} />;
   const you = S.memberById[s.youId];
-  const act = (name, arg) => { const n = S.doAction(s, name, arg); if (n.toast) setToast(n.toast); n.toast = null; setS(n); };
+  const act = (name, arg) => { const n = S.doAction(s, name, arg); if (n.toast) { setToast(n.toast); if (/raised|\$\d/.test(n.toast.text || "") && n.toast.tone === "good") sfx("cash"); } n.toast = null; setS(n); };
   const next = () => { const n = S.advance(s); setQueue(n.events || []); n.events = []; setS(n); window.scrollTo(0, 0);
+    const calm = (() => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } })();
+    const crisis = (n.news || []).find((x) => x.week === n.week && /^BREAKING:/.test(x.text));
+    if (crisis) sfx("alarm"); else sfx("page");
+    if (!calm && !n.over) setTurn({ k: n.week, from: S.fmtDate(s.week), to: S.fmtDate(n.week), alert: crisis ? crisis.text.replace(/^BREAKING: /, "").split(". ")[0] : null, heads: (n.news || []).filter((x) => x.week === n.week && !/^BREAKING:/.test(x.text)).slice(0, 3).map((x) => realize(x.text, x.ids || [], real)) });
     const top = (n.wire || []).find((a) => a.week >= s.week); if (top) { setBanner({ ...top, k: n.week }); } };
   const open = s.inbox.filter((m) => !m.done).length;
   const reply = (id, i) => { const n = S.answer(s, id, i); if (n.toast) setToast(n.toast); n.toast = null; setS(n); };
@@ -91,6 +99,7 @@ export default function App() {
         ))}
         <span className="pm-spacer" />
         <label className="pm-real"><input type="checkbox" checked={real} onChange={(e) => setReal(e.target.checked)} /> Real names</label>
+        <button type="button" className="linkbtn" onClick={() => { setSound(!snd); setSnd(!snd); }} title="Chiptune sound effects">{snd ? "Sound on" : "Sound off"}</button>
         <button type="button" className="linkbtn" onClick={async () => { const you2 = S.memberById[s.youId]; const r = await offerFile(`political-manager-${(you2.last || "career").replace(/[^a-z]/gi, "").toLowerCase()}-${S.fmtDate(s.week).replace(/[^0-9a-z]+/gi, "-")}.json`, S.exportSave(s, real)); setToast(r === "saved" ? { title: "Career saved", text: "Load the file from the start screen any time, on any device.", tone: "good" } : r === "declined" ? null : { title: "Couldn't save", text: "This view can't save files.", tone: "bad" }); }}>Save to file</button>
         <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) setS(null); }}>New career</button>
       </nav>
@@ -116,9 +125,10 @@ export default function App() {
       {card && <MemberCard id={card} {...ctx} onClose={() => setCard(null)} />}
       {billOpen && <BillBoard id={billOpen} {...ctx} onClose={() => setBillOpen(null)} />}
       {toast && <Toast t={toast} onClose={() => setToast(null)} />}
-      {banner && !queue.length && !sceneMsg && <button type="button" key={banner.k} className="pm-banner" onClick={() => { setBanner(null); setTab("news"); }}><span className="pm-banner-tag">{banner.outlet}</span><strong>{realize(banner.headline, [banner.who, banner.target].filter(Boolean), real)}</strong><small>Read the papers →</small></button>}
-      {sceneMsg && !sceneMsg.done && <Scene s={s} msg={sceneMsg} real={real} onFinish={finishScene} onClose={() => setScene(null)} />}
-      {queue.length > 0 && <RollCall ev={queue[0]} s={s} real={real} onClose={() => setQueue((q) => q.slice(1))} />}
+      {turn && <WeekTurn key={turn.k} turn={turn} onDone={() => setTurn(null)} />}
+      {banner && !turn && !queue.length && !sceneMsg && <button type="button" key={banner.k} className="pm-banner" onClick={() => { setBanner(null); setTab("news"); }}><span className="pm-banner-tag">{banner.outlet}</span><strong>{realize(banner.headline, [banner.who, banner.target].filter(Boolean), real)}</strong><small>Read the papers →</small></button>}
+      {sceneMsg && !sceneMsg.done && !turn && <Scene s={s} msg={sceneMsg} real={real} onFinish={finishScene} onClose={() => setScene(null)} />}
+      {queue.length > 0 && !turn && <RollCall ev={queue[0]} s={s} real={real} onClose={() => setQueue((q) => q.slice(1))} />}
     </div>
   );
 }
@@ -785,6 +795,7 @@ function End({ s, you, real, setS }) {
       <div className="desk-verdict">
         <span className="rc-stamp">{r.kind === "primary" ? "DEFEATED IN THE PRIMARY" : won ? "REELECTED" : "DEFEATED"}</span>
         <p>{r.kind === "primary" ? `Your own party's voters chose someone else. You took ${r.share}%.` : `${S.nameOf(you, real)} ${won ? "wins" : "loses"} ${you.seat} by ${Math.abs(r.margin)} points. The national mood ran ${r.env >= 0 ? "with" : "against"} your party by ${Math.abs(r.env)}. Democrats will hold ${r.houseD} House seats.`}</p>
+        <RaceNight s={s} real={real} />
         <AfterOffice s={s} setS={setS} />
         {r.opp && <p className="small muted">Your opponent, {r.opp.name}, raised {money(r.opp.raised)}. Your campaign spent {money(r.spent)}.</p>}
       </div>
@@ -814,6 +825,7 @@ function EndOther({ s, you, real, setS, role }) {
     <section className={`desk pm-end ${r.won ? "won" : "lost"}`}>
       <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? `January 3, ${S.electionYear(s) + 1}` : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>
       <div className="desk-verdict"><span className="rc-stamp">{stamp}</span><p>{line}</p></div>
+      {r.kind === "higher" && <RaceNight s={s} real={real} />}
       <AfterOffice s={s} setS={setS} />
       {s.night && <ElectionNight night={s.night} real={real} />}
       <div className="grades">

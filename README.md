@@ -149,3 +149,11 @@ The Senate and the President as full characters, committees and amendments as pl
   - Known crossovers by members still serving are in `src/data/record.json` and count as a new "their record on this issue" term: Paul on tariffs, war and the big bill; Murkowski on tariffs and rescissions; Fetterman on Iran; Case, Cuellar and Gluesenkamp Perez on the SAVE Act; Hurd on tariffs. The 5 Republicans still serving who voted for the 2026 ACA subsidy extension (Hurd, Salazar, Garbarino, LaLota, Joyce) now lean toward voting for it again.
   - The out-party now resists the President's priorities about twice as hard.
   - The squared error against real party crossover rates fell by half.
+
+## Seventeenth pass: animation
+- **Roll calls.** A pixel gavel drops and the result stamp slams with a small screen shake. Members who crossed party lines are ringed in gold and listed by name.
+- **Your race on election night.** Precincts report live, the lead swings with early returns and settles on the real margin, and the race gets called: "Too close to call," then "PROJECTED WINNER".
+- **Turning the week.** A pixel Capitol under a sky that runs from dusk through night to dawn, a calendar page that flips, and the new week's first headlines. A crisis week turns the sky red with a BREAKING card. Click to skip.
+- **Pixel-art scene sets** (`src/PixelSet.jsx`): a TV studio with a blinking skyline, a hearing room with camera flashes, a leadership office, a debate stage with spotlights, the briefing room, the Oval Office and the House chamber. Crowds shift in their seats, characters bob while they talk, and the frame flashes white or red as answers land.
+- **Optional chiptune sound** (`src/sfx.js`, generated with Web Audio, off by default): vote ticks, gavel, pass and fail fanfares, cash, a page turn and a crisis alarm.
+- Everything respects the "reduce motion" setting.
