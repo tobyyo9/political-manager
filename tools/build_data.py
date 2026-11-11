@@ -34,6 +34,8 @@ def cap(w):
 def swap(first, last):
     """Swap the opening sounds: Hakeem Jeffries -> Jakeem Heffries, Chuck Schumer -> Schuck Chumer."""
     f, l = first.split()[0], last
+    if "." in f:   # initials like "J.D.": keep them and swap the last name's opening sound for their first letter
+        ol = onset(l); return f, (f[0] + l[len(ol):]).capitalize() if ol else f[0] + l.lower()
     of, ol = onset(f), onset(l)
     if of.lower() == ol.lower():
         # same opening: swap the first vowel sounds instead

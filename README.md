@@ -75,3 +75,10 @@ The Senate and the President as full characters, committees and amendments as pl
 - Incumbents almost always survive primaries unless their own voters have turned on them; seat turnover per cycle is in the realistic range (roughly 10 to 30 House seats).
 - An electoral map (Map tab): presidential forecast and results by state from each state's 2024 result plus the national swing, with 538 electoral votes (Maine and Nebraska splits not modeled); Senate races on the ballot; House delegations by state. State outlines from us-atlas (Census boundaries).
 - Presidential results in long careers and the President's 2028 verdict are decided by electoral votes.
+
+## Eighth pass: scenes
+- Short staged scenes in a cable-news frame: a live bug, lower-thirds, a news ticker built from the week's headlines, a momentum meter, typed lines, and a newspaper front page at the end.
+- Scene types: cable interviews (after a vote that breaks with your party, or now and then), oversight hearings (questioning or defending a cabinet officer under fire), closed-door meetings with the whip before a party vote you're shaky on, the general election debate, and for the President, press briefings and Oval Office meetings with members of his party.
+- Each answer rolls your attributes (a blend of who you are and what you've built) against the other side's; risky answers swing harder. Prepping with your communications director costs 4 hours and helps more if they're good.
+- Scenes wait in the inbox; if you don't play one in two weeks, your staff handles it with no effect. Effects: approval at home, your base, profile, relationships, cabinet heat, your vote deals with leadership, and up to 3.5 points on election night from the debate.
+- Names with initials (J.D. Ford) now alter cleanly.

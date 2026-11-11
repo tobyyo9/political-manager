@@ -3,6 +3,7 @@ import * as S from "./sim.js";
 import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import RollCall from "./RollCall.jsx";
+import Scene from "./Scene.jsx";
 import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
@@ -25,6 +26,7 @@ export default function App() {
   const [billOpen, setBillOpen] = useState(null);
   const [queue, setQueue] = useState([]);        // roll calls waiting to be shown
   const [toast, setToast] = useState(null);
+  const [scene, setScene] = useState(null);      // inbox message id of a scene being played
   useEffect(() => { save({ s, real }); }, [s, real]);
 
   if (!s) return <Start real={real} setReal={setReal} onStart={(st) => { setS(st); setTab("inbox"); window.scrollTo(0, 0); }} />;
@@ -36,7 +38,9 @@ export default function App() {
   const openBoard = (id) => { setS((cur) => S.flag(cur, "board")); setBillOpen(id); };
   const role = S.roleOf(s);
   const decide = (id, signs) => { const n = S.decide(s, id, signs); setQueue(n.events || []); n.events = []; setS(n); };
-  const ctx = { s, setS, you, real, act, setCard, setBillOpen: openBoard, setTab, reply, role, decide };
+  const ctx = { s, setS, you, real, act, setCard, setBillOpen: openBoard, setTab, reply, role, decide, setScene };
+  const sceneMsg = scene && s.inbox.find((m) => m.id === scene);
+  const finishScene = (out, mode) => { if (mode === "prep") { setS(S.prepScene(s, scene)); return; } setS(S.finishScene(s, scene, out)); setScene(null); };
   const desk = s.bills.filter((b) => b.stage === "desk").length;
   const TABS = role === "P"
     ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
@@ -94,6 +98,7 @@ export default function App() {
       {card && <MemberCard id={card} {...ctx} onClose={() => setCard(null)} />}
       {billOpen && <BillBoard id={billOpen} {...ctx} onClose={() => setBillOpen(null)} />}
       {toast && <Toast t={toast} onClose={() => setToast(null)} />}
+      {sceneMsg && !sceneMsg.done && <Scene s={s} msg={sceneMsg} real={real} onFinish={finishScene} onClose={() => setScene(null)} />}
       {queue.length > 0 && <RollCall ev={queue[0]} s={s} real={real} onClose={() => setQueue((q) => q.slice(1))} />}
     </div>
   );
@@ -281,7 +286,7 @@ function Create({ onStart, diff }) {
 }
 
 // ── Inbox ──
-function Inbox({ s, act, setBillOpen, reply, role, setTab }) {
+function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene }) {
   const steps = S.firstSteps(s), left = steps.filter((x) => !x.done).length;
   const list = [...s.inbox].sort((a, b) => Number(a.done) - Number(b.done) || b.week - a.week).slice(0, 40);
   return (
@@ -292,7 +297,12 @@ function Inbox({ s, act, setBillOpen, reply, role, setTab }) {
           <article key={m.id} className={`pm-msg ${m.kind} ${m.done ? "done" : ""}`}>
             <header><strong>{m.from}</strong><small>{S.fmtDate(m.week)}</small></header>
             <h3>{m.title}</h3>
-            <p>{m.body}</p>
+            {m.kind === "scene" ? (
+              <div className="pm-scene-row">
+                {m.done ? <p className="small">{m.skipped ? "Your staff handled it. Nothing memorable either way." : <>Coverage: <em>{m.result?.headline}</em></>}</p>
+                  : <><button type="button" className="primary" onClick={() => setScene(m.id)}>Play the scene →</button><span className="muted small">If you don't, your staff handles it {S.fmtDate(m.due)}.</span></>}
+              </div>
+            ) : <p>{m.body}</p>}
             {m.choices && (
               <div className="pm-choices">
                 {m.choices.map((c, i) => <button key={c} type="button" className={`ghost ${m.choice === i ? "on" : ""}`} disabled={m.done} onClick={() => reply(m.id, i)}>{c}</button>)}

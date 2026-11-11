@@ -532,6 +532,7 @@ export function advance(s0) {
   (s.trend = s.trend || []).push({ w: s.week, a: Math.round(s.approval), b: Math.round(s.baseApproval), p: Math.round(s.presApproval), m: Math.round(s.mood * 10) / 10 });
   // 5. Your inbox.
   if (roleOf(s) !== "P") inbox(s, r);
+  sceneWeek(s, R(s, "scene"));
   // 6. Primary and general.
   const rw = s.week - (s.termStart || 0);
   if (roleOf(s) === "P") { if (rw >= ELECTION_WEEK && !s.over) presVerdict(s, r); }
@@ -662,7 +663,7 @@ function general(s, r) {
   const env = you.p === "D" ? s.mood : -s.mood;                       // national swing toward your party, in points
   const lean2 = (you.own - 50) * 2;                                   // the seat's 2024 margin for your party
   const gg = groupElection(s, "general");
-  const margin = lean2 + env * 0.9 + 3 + (s.approval - 50) * 0.45 + Math.min(4, s.cash / 900) + gg.net * 0.5 + (r() - 0.5) * 5;
+  const margin = lean2 + env * 0.9 + 3 + (s.approval - 50) * 0.45 + Math.min(4, s.cash / 900) + gg.net * 0.5 + (r() - 0.5) * 5 + (s.debateBonus || 0);
   // The whole House moves with the mood.
   let d = 0; for (const m of HOUSE) { const mm = (m.dem - 50) * 2 + s.mood * 0.9 + (m.p === "D" ? 3 : -3) + noise(`${s.seed}:gen:${m.id}`) * 5; if (m.id === s.youId ? (you.p === "D" ? margin > 0 : margin <= 0) : mm > 0) d++; }
   s.over = true;
@@ -1433,7 +1434,7 @@ export function nextCongress(s0) {
   if (!canContinue(s)) return s;
   s.career.push({ congress: 119 + s.term, year: electionYear(s), kind: s.result.kind, margin: s.result.margin, role: roleOf(s), laws: s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length });
   const w = electWorld(s);
-  s.term++; s.termStart = Math.ceil((731 * (s.term - 1)) / 7); s.week = s.termStart; s.hours = HOURS; s.over = false; s.result = null; s.primary = null; s.rivals = 0; s.endorsed = false;
+  s.term++; s.termStart = Math.ceil((731 * (s.term - 1)) / 7); s.debateBonus = 0; s.week = s.termStart; s.hours = HOURS; s.over = false; s.result = null; s.primary = null; s.rivals = 0; s.endorsed = false;
   s.bills = []; s.youOwe = []; s.promises = []; s.flags.punished = s.flags.rewarded = false; s.inbox = s.inbox.filter((m) => !m.done).slice(0, 0); s.trend = [];
   s.noms = s.noms.filter((n) => !n.done); s.imp = s.imp.filter((i) => !i.done); s.runFor = null;
   s.clout += 4; s.profile = clamp(s.profile + 3, 0, 100); s.approval = clamp(s.approval * 0.6 + 52 * 0.4, 5, 95);
@@ -1528,3 +1529,57 @@ export function houseMap() {
   for (const st in states) { const x = states[st]; x.pD = x.D / (x.D + x.R); }
   return { states };
 }
+
+// ════════ Scenes: hearings, interviews, meetings, debates ════════
+// The engine only decides when a scene happens and what it does to you; scenes.js stages it.
+const SCENE_DUE = 2;   // weeks before your staff handles it for you
+function pushScene(s, type, ctx, title, from) {
+  if (s.inbox.some((m) => m.kind === "scene" && !m.done && m.scene.type === type)) return null;
+  const COOL = { tv: 7, hearing: 9, leader: 6, briefing: 4, oval: 5, debate: 0 }; s.sceneAt = s.sceneAt || {};
+  if (s.week - (s.sceneAt[type] ?? -99) < COOL[type]) return null; s.sceneAt[type] = s.week;
+  const msg = { kind: "scene", scene: { type, ...ctx }, from, title, body: "", due: s.week + SCENE_DUE };
+  pushInbox(s, msg); return s.inbox[0];
+}
+function sceneWeek(s, r) {
+  const role = roleOf(s), you = memberById[s.youId], rw = s.week - (s.termStart || 0);
+  // Staff handles scenes you never played.
+  for (const m of s.inbox) if (m.kind === "scene" && !m.done && s.week >= m.due) { m.done = true; m.skipped = true; }
+  if (role === "P") {
+    if (s.week % 5 === 2) pushScene(s, "briefing", { week: s.week }, "Press briefing: the press corps is waiting", "Press office");
+    const desk = s.bills.find((b) => b.stage === "committee" && b.floorWeek - s.week === 2 && !presView(s, b).signs && b.party !== PP);
+    if (desk && r() < 0.5) { const m = HOUSE.filter((x) => x.p === PP && x.vuln > 0.55).sort((a, b) => b.vuln - a.vuln)[Math.floor(r() * 5)]; if (m) pushScene(s, "oval", { bill: desk.id, who: m.id }, `Oval Office: ${nameOf(m)} on ${byId[desk.pid].name}`, "Legislative affairs"); }
+    return;
+  }
+  // A TV booking after a vote that broke with your party, or now and then.
+  const last = s.votesCast.filter((v) => v.week === s.week - 1);
+  const off = last.find((v) => !v.partyLine);
+  if ((off && r() < 0.6) || (!off && last.length && r() < 0.12)) { const v = off || last[0]; pushScene(s, "tv", { pid: v.pid, vote: v.vote, off: !!off }, `Cable interview tonight about ${byId[v.pid].name}`, "Your communications director"); }
+  // A hearing with a cabinet officer under fire, if your party runs oversight or you sit on the panel.
+  const hot = s.cab.find((c) => !c.vacant && c.heat >= 0.55 && c.id !== "vp");
+  if (hot && r() < 0.08) pushScene(s, "hearing", { cab: hot.id, mine: you.p !== PP }, `Hearing: ${hot.post} ${cabName(hot)} testifies`, "Committee staff");
+  // Leadership leans on you before a party vote you might not take.
+  const b = s.bills.find((x) => x.stage === "committee" && x.party === you.p && x.floorWeek - s.week === 1 && x.yourVote === null);
+  if (b && lean(you, b.pid, billCtx(s, b)).L < 0.3 && r() < 0.6) { const boss = MEMBERS.find((m) => m.ch === you.ch && m.p === you.p && /Whip|Leader|Speaker/.test(m.lead?.[0] || "")) || null; if (boss && boss.id !== s.youId) pushScene(s, "leader", { bill: b.id, boss: boss.id }, `The whip wants a word about ${byId[b.pid].name}`, "The whip's office"); }
+  // The debate before your general election.
+  if (upThisTerm(s, you) && rw === ELECTION_WEEK - 5) { const opp = `${PF[Math.floor(r() * PF.length)]} ${PL[Math.floor(r() * PL.length)]}`; pushScene(s, "debate", { opp, ch: s.runFor ? "S" : you.ch }, `Debate night against ${opp}`, "Your campaign manager"); }
+}
+export function prepScene(s0, id) { const s = structuredClone(s0); const m = s.inbox.find((x) => x.id === id); if (m && !m.prep && s.hours >= 4) { m.prep = true; s.hours -= 4; } return s; }
+// Apply a played scene. out: { score (-6..6), base, swing, profile, rel: {id: d}, tags }
+export function finishScene(s0, id, out) {
+  const s = structuredClone(s0); const m = s.inbox.find((x) => x.id === id); if (!m || m.done) return s;
+  m.done = true; m.result = { score: out.score, headline: out.headline };
+  const sc = m.scene, role = roleOf(s), you = memberById[s.youId], k = clamp(out.score / 6, -1, 1);
+  s.baseApproval = clamp(s.baseApproval + (out.base || 0), 5, 99);
+  s.approval = clamp(s.approval + (out.swing || 0), 5, 95);
+  s.profile = clamp(s.profile + (out.profile || 0), 0, 100);
+  for (const [mid, d] of Object.entries(out.rel || {})) s.rel[mid] = clamp((s.rel[mid] || 0) + d, -1, 1);
+  if (role === "P") { s.presApproval = clamp(s.presApproval + k * 1.5 + (out.swing || 0) * 0.3, 20, 70); }
+  if (sc.type === "hearing") { const c = s.cab.find((x) => x.id === sc.cab); if (c) c.heat = clamp(c.heat + (sc.mine ? 0.08 * k + 0.03 : -0.06 * Math.max(0, k)), 0, 1); }
+  if (sc.type === "leader") { const b = s.bills.find((x) => x.id === sc.bill); if (b && out.tags?.includes("deal")) { b.yourVote = true; s.loyalty += 2; s.clout += 2; } if (out.tags?.includes("refuse")) { s.loyalty -= 2; if (b) b.yourVote = false; } }
+  if (sc.type === "debate") s.debateBonus = k * 3.5;
+  if (sc.type === "oval") { const b = s.bills.find((x) => x.id === sc.bill); if (b && out.tags?.includes("won")) { b.deals[sc.who] = (b.deals[sc.who] || 0) - 0.5; s.know[sc.who] = Math.max(2, s.know[sc.who] || 0); } }
+  pushNews(s, out.headline, out.score >= 2 ? "good" : out.score <= -2 ? "bad" : "");
+  s.moments.push({ week: s.week, text: out.headline });
+  return s;
+}
+export function sceneCtx() { return { PP, cycleClass }; }
