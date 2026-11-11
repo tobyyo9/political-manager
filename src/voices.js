@@ -1,3 +1,4 @@
+import PERSONA from "./data/personas.json";
 // Personalities and the press. Every character gets a voice, and the papers fill up with what they say.
 // Everything here is invented for the game: in-character lines, not quotes. Names shown are the altered ones by default.
 const hashN = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
@@ -21,6 +22,9 @@ const LOUD = new Set(["bombast", "firebrand", "devotee", "showboat", "gaffe"]);
 // A voice from who they are: their traits, how far out they sit, how long they've been here.
 export function voiceOf(m, presParty = "R") {
   if (m.voice) return m.voice;
+  // Well-known members: set by hand from their public style. Devotees only while their party holds the White House.
+  const set = !m.fictional && !m.custom && PERSONA[m.id];
+  if (set) return set === "devotee" && m.p !== presParty ? "firebrand" : set;
   if (m.id === "POTUS") return m.fictional ? pick(["pro", "folksy", "dodger", "bombast"], () => hashN(m.first + m.last)) : "bombast";
   const t = m.t || {}, h = hashN(m.id + ":voice"), x = Math.abs(m.x || 0), sen = (m.seniority || 0);
   let v = "pro";
@@ -37,6 +41,8 @@ export function voiceOf(m, presParty = "R") {
   else if (t.label === "follower") v = "dodger";
   else v = h < 0.3 ? "folksy" : h < 0.55 ? "dodger" : "pro";
   if (hashN(m.id + ":gaffe") < 0.035) v = "gaffe";
+  // Real people not set by hand never get the two labels that read as mockery; fictional characters can.
+  if (!m.fictional && !m.custom && (v === "gaffe" || v === "bombast")) v = v === "bombast" ? "firebrand" : "pro";
   return v;
 }
 
