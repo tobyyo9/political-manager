@@ -3,6 +3,7 @@
 // seed, so the same seed and the same choices replay the same history.
 import RAW from "./data/members.json";
 import GENDER from "./data/gender.json";
+import CAUCUS from "./data/caucuses.json";
 import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import { PRESIDENT_STANCE } from "./shared/data/president.js";
@@ -61,13 +62,39 @@ function factionOf(m, q) {
   return m.x > q.R[1] ? "Hard-right conservatives" : m.x > q.R[0] ? "Mainstream Republicans" : "Governing-wing Republicans";
 }
 export const FACTION_NOTE = {
-  "Progressives": "The most liberal third of House Democrats by voting record. Think Progressive Caucus.",
-  "Mainstream Democrats": "The middle of the caucus; follows leadership.",
-  "Moderate Democrats": "The least liberal Democrats, many from swing seats. Think New Democrats and Blue Dogs.",
-  "Hard-right conservatives": "The most conservative fifth of Republicans. Think Freedom Caucus.",
-  "Mainstream Republicans": "The bulk of the conference.",
-  "Governing-wing Republicans": "The least conservative Republicans, often from competitive seats. Think Main Street and Problem Solvers.",
+  "Progressive Caucus": "The Congressional Progressive Caucus, the left of the party. Wants Medicare for All, higher taxes on the rich, limits on ICE and war powers.",
+  "New Democrat Coalition": "The pro-business, pro-growth center of the party and its biggest bloc. Membership here is estimated: the public roster could not be fetched.",
+  "Blue Dog Coalition": "Fiscally conservative Democrats, mostly from Trump-won or rural seats. Small, but each vote is in play.",
+  "Democrats, no bloc": "Democrats who are not in a big ideological caucus. They tend to follow leadership.",
+  "Freedom Caucus": "The House Freedom Caucus, the hard right. Will sink its own party's bills over spending or process.",
+  "Republican Study Committee": "The conservative mainstream and the biggest Republican bloc. Membership here is estimated from voting records.",
+  "Main Street Caucus": "Governing-wing Republicans, many from competitive seats, who want bills to pass. Membership here is estimated from voting records.",
+  "Progressives": "The most liberal Senate Democrats by voting record.",
+  "Mainstream Democrats": "The middle of the Senate Democrats; follows leadership.",
+  "Moderate Democrats": "The least liberal Senate Democrats, many from purple states.",
+  "Hard-right conservatives": "The most conservative Senate Republicans.",
+  "Mainstream Republicans": "The bulk of the Senate Republican conference.",
+  "Governing-wing Republicans": "The least conservative Senate Republicans, often deal-makers.",
 };
+// Real caucus rosters (House). Matched by last name and state; seats not on a roster are placed by voting record and flagged estimated.
+const normN = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/-/g, " ").trim();
+const ROSTER = {};
+for (const k of ["Progressive Caucus", "Freedom Caucus", "Blue Dog Coalition"]) ROSTER[k] = CAUCUS[k].split(";").map((e) => e.split(","));
+const onRoster = (m, k) => !m.placeholder && !m.custom && ROSTER[k].some(([l, st]) => st === m.st && (normN(m.last) === normN(l) || normN(m.last).endsWith(normN(l)) || normN(l).endsWith(normN(m.last))));
+export const CAUCUS_CHAIR = CAUCUS.chairs;
+function houseCaucus(ms) {
+  const H = ms.filter((m) => m.ch === "H");
+  for (const m of H) { m.caucus = []; m.cauEst = false; }
+  for (const m of H) for (const k of Object.keys(ROSTER)) if (onRoster(m, k)) m.caucus.push(k);
+  const Ds = H.filter((m) => m.p === "D" && !m.caucus.length), Rs = H.filter((m) => m.p === "R" && !m.caucus.length);
+  const cpcLine = (() => { const xs = H.filter((m) => m.caucus.includes("Progressive Caucus")).map((m) => m.x).sort((a, b) => a - b); return xs[Math.floor(xs.length * 0.6)]; })();
+  const dx = Ds.map((m) => m.x).sort((a, b) => a - b), ndLine = dx[Math.floor(dx.length * 0.22)];
+  for (const m of Ds) { m.cauEst = true; m.caucus.push(m.placeholder && m.x < cpcLine ? "Progressive Caucus" : m.x >= ndLine ? "New Democrat Coalition" : "Democrats, no bloc"); }
+  const rx = Rs.map((m) => m.x).sort((a, b) => a - b), msLine = rx[Math.floor(rx.length * 0.3)], fcLine = rx[Math.floor(rx.length * 0.96)];
+  for (const m of Rs) { m.cauEst = true; m.caucus.push(m.placeholder && m.x > fcLine ? "Freedom Caucus" : m.x <= msLine ? "Main Street Caucus" : "Republican Study Committee"); }
+  // Blue Dogs also sit in the New Dems; the bloc that drives their vote is the first one.
+  for (const m of H) { if (m.caucus.includes("Blue Dog Coalition") && m.x < -0.15) m.caucus.push("New Democrat Coalition"); m.faction = m.caucus[0]; }
+}
 const PF = "Maya Daniel Priya Marcus Elena Jordan Aisha Tyler Sofia Caleb Naomi Andre Leah Mateo Hannah Darius Claire Omar Grace Wes Ines Malik Tessa Rafael Joy Colin Amara Dev Paige Luis Renee Kofi Brooke Tomas Nadia Reid Carmen Isaac Lena Xavier Bianca Hugo Simone Eli Farah Grant Yara Miles Tamsin Jonah Imani Rhys Corinne Anders Lucia Desmond".split(" ");
 const PL = "Whitfield Navarro Okoye Brandt Castellano Pruitt Mbeki Halloran Vasquez Lindqvist Tran Abernathy Rosales Keating Dlamini Mercer Fontaine Osei Kowalczyk Barros Thackeray Nakamura Delacroix Hollis Ferreira Stanhope Ibarra Calloway Petrov Adeyemi Winslow Zamora Beckett Oyelaran Marchetti Sandoval Hargreaves Bui Lockhart Esparza Achterberg Bellweather Cardenas Drummond Eastlake Farrow Galanis Haverford Iwasaki Jessup Kilbride Lachance Montoya Nwosu Ostrander Pemberton Quintero Rasmussen Sokolov Tallchief".split(" ");
 function buildMembers() {
@@ -82,6 +109,7 @@ function buildMembers() {
     for (const p of ["D", "R"]) { const xs = ms.filter((m) => m.ch === ch && m.p === p).map((m) => m.x).sort((a, b) => a - b); q[p] = p === "D" ? [xs[Math.floor(xs.length * 0.3)], xs[Math.floor(xs.length * 0.7)]] : [xs[Math.floor(xs.length * 0.3)], xs[Math.floor(xs.length * 0.8)]]; }
     for (const m of ms) if (m.ch === ch) m.faction = factionOf(m, q);
   }
+  houseCaucus(ms);
   for (const m of ms) {
     m.mix = mixFor(m.dem);
     m.pmix = primaryMix(m.mix, m.p);
@@ -569,7 +597,8 @@ export function applyCustom(c) {
   m.own = m.p === "D" ? m.dem : 100 - m.dem;
   m.vuln = clamp(1 - (m.own - 49) / 14, 0.12, 1); m.prisk = clamp((m.own - 52) / 22, 0.08, 0.85);
   m.signer = false; m.seniority = 0; m.chair = null;
-  m.faction = m.p === "D" ? (m.x < -0.45 ? "Progressives" : m.x < -0.25 ? "Mainstream Democrats" : "Moderate Democrats") : (m.x > 0.6 ? "Hard-right conservatives" : m.x > 0.35 ? "Mainstream Republicans" : "Governing-wing Republicans");
+  m.faction = m.p === "D" ? (m.x < -0.4 ? "Progressive Caucus" : m.x > -0.1 ? "Blue Dog Coalition" : "New Democrat Coalition") : (m.x > 0.62 ? "Freedom Caucus" : m.x > 0.4 ? "Republican Study Committee" : "Main Street Caucus");
+  m.caucus = [m.faction]; m.cauEst = false;
   m.base = { influence: 8, cash: 400 };
   for (const k in factionLine) delete factionLine[k];
 }
@@ -811,13 +840,22 @@ export function caucuses(ch) {
   const ms = ch === "H" ? HOUSE : SENATE, maj = ms.filter((m) => m.p === "D").length, need = ch === "H" ? 218 : 51, margin = maj - need;
   const names = [...new Set(ms.map((m) => m.faction))];
   const rows = names.map((f) => { const g = ms.filter((m) => m.faction === f), p = g[0].p, mean = g.reduce((a, m) => a + m.x, 0) / g.length;
-    const spread = Math.sqrt(g.reduce((a, m) => a + (m.x - mean) ** 2, 0) / g.length), leader = [...g].sort((a, b) => b.base.influence - a.base.influence)[0];
+    const ch0 = CAUCUS.chairs[f], chair = ch0 && ms.find((m) => m.st === ch0[1] && normN(m.last) === normN(ch0[0]));
+    const spread = Math.sqrt(g.reduce((a, m) => a + (m.x - mean) ** 2, 0) / g.length), leader = chair || [...g].sort((a, b) => b.base.influence - a.base.influence)[0];
     const posts = g.filter((m) => m.lead?.length || m.chair).length, veto = p === "D" && g.length > margin;
     const power = Math.round(Math.min(100, (g.length / ms.length) * 110 + (veto ? 25 : 0) + posts * 1.5 + (1 - Math.min(1, spread * 4)) * 10));
-    return { name: f, p, size: g.length, mean, cohesion: Math.round((1 - Math.min(1, spread * 4)) * 100), leader, posts, veto, power, note: FACTION_NOTE[f] }; });
+    return { name: f, p, size: g.length, mean, chair: !!chair, roster: ch === "H" && !!ROSTER[f], estimated: g.filter((m) => m.cauEst).length, cohesion: Math.round((1 - Math.min(1, spread * 4)) * 100), leader, posts, veto, power, note: FACTION_NOTE[f] }; });
   return { rows: rows.sort((a, b) => a.mean - b.mean), margin, need, maj };
 }
-export const caucusRelation = (a, b) => { const d = Math.abs(a.mean - b.mean); return a.p === b.p ? (d < 0.2 ? "Allies" : d < 0.35 ? "Uneasy partners" : "Rivals") : d < 0.45 ? "Can do business" : d < 0.8 ? "Opponents" : "Enemies"; };
+// House blocs: how they actually get along, from how they behave in fights over rules, spending and leadership.
+const CREL = { "Progressive Caucus|New Democrat Coalition": "Uneasy partners", "Progressive Caucus|Blue Dog Coalition": "Rivals", "New Democrat Coalition|Blue Dog Coalition": "Allies",
+  "Democrats, no bloc|Progressive Caucus": "Allies", "Democrats, no bloc|New Democrat Coalition": "Allies", "Democrats, no bloc|Blue Dog Coalition": "Uneasy partners",
+  "Freedom Caucus|Republican Study Committee": "Uneasy partners", "Freedom Caucus|Main Street Caucus": "Rivals", "Republican Study Committee|Main Street Caucus": "Uneasy partners",
+  "Blue Dog Coalition|Main Street Caucus": "Can do business", "New Democrat Coalition|Main Street Caucus": "Can do business", "Blue Dog Coalition|Republican Study Committee": "Opponents",
+  "New Democrat Coalition|Republican Study Committee": "Opponents", "Democrats, no bloc|Main Street Caucus": "Opponents", "Progressive Caucus|Main Street Caucus": "Opponents",
+  "Democrats, no bloc|Republican Study Committee": "Enemies", "Progressive Caucus|Republican Study Committee": "Enemies", "Blue Dog Coalition|Freedom Caucus": "Opponents",
+  "New Democrat Coalition|Freedom Caucus": "Enemies", "Progressive Caucus|Freedom Caucus": "Enemies", "Democrats, no bloc|Freedom Caucus": "Enemies" };
+export const caucusRelation = (a, b) => { const k = CREL[a.name + "|" + b.name] || CREL[b.name + "|" + a.name]; if (k) return k;  const d = Math.abs(a.mean - b.mean); return a.p === b.p ? (d < 0.2 ? "Allies" : d < 0.35 ? "Uneasy partners" : "Rivals") : d < 0.45 ? "Can do business" : d < 0.8 ? "Opponents" : "Enemies"; };
 export function committees(ch) {
   const map = {};
   for (const m of MEMBERS) if (m.ch === ch) for (const c of m.comm || []) { if (c.c.length > 4) continue; const k = (map[c.c] = map[c.c] || { c: c.c, n: c.n, members: [], chair: null, ranking: null }); k.members.push(m); if (c.role === "Chair") k.chair = m; if (c.role === "Ranking Member") k.ranking = m; }
@@ -826,3 +864,21 @@ export function committees(ch) {
 export function relations(s) {
   return MEMBERS.filter((m) => m.id !== s.youId && ((s.know[m.id] || 0) > 0 || s.rel[m.id] || s.owedToYou[m.id])).map((m) => ({ m, rel: s.rel[m.id] || 0, know: s.know[m.id] || 0, owes: s.owedToYou[m.id] || 0, youOwe: s.youOwe.filter((f) => f.to === m.id && f.status === "open").length })).sort((a, b) => b.rel - a.rel || b.know - a.know);
 }
+
+// Who is close to whom, among the other characters. Built from things that really bind members:
+// the same caucus, the same state delegation, the same committee, and how close their voting records are.
+const bondCache = {};
+export function bonds(m) {
+  if (bondCache[m.id]) return bondCache[m.id];
+  const pool = MEMBERS.filter((o) => o.id !== m.id && o.ch === m.ch);
+  const shareComm = (o) => (m.comm || []).filter((c) => c.c.length <= 4 && (o.comm || []).some((d) => d.c === c.c)).length;
+  const score = (o) => (o.p === m.p ? 0.6 : -0.6) + (o.faction === m.faction ? 0.5 : 0) + (o.st === m.st ? 0.45 : 0) + 0.15 * shareComm(o) - 1.4 * Math.abs(o.x - m.x) + 0.25 * noise(m.id < o.id ? m.id + o.id : o.id + m.id);
+  const why = (o) => o.st === m.st && o.p === m.p ? `same ${o.st} delegation` : o.faction === m.faction ? `both ${m.faction}` : shareComm(o) ? "serve on a committee together" : o.p !== m.p ? "cross-party friendship" : "vote alike";
+  const whyNot = (o) => o.p === m.p ? (o.faction !== m.faction ? `${o.faction} vs ${m.faction}` : "old feud") : o.st === m.st ? `rivals in ${o.st}` : "opposite ends of the chamber";
+  const ranked = pool.map((o) => ({ o, v: score(o) })).sort((a, b) => b.v - a.v);
+  const friends = ranked.slice(0, 4).map(({ o }) => ({ m: o, why: why(o) }));
+  const sameP = ranked.filter(({ o }) => o.p === m.p).slice(-1).map(({ o }) => ({ m: o, why: whyNot(o) }));
+  const other = ranked.filter(({ o }) => o.p !== m.p && (o.st === m.st || Math.abs(o.x - m.x) > 1)).slice(-1).map(({ o }) => ({ m: o, why: whyNot(o) }));
+  return (bondCache[m.id] = { friends, rivals: [...sameP, ...other] });
+}
+export const caucusOf = (m) => (m.caucus || [m.faction]);

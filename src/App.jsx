@@ -326,7 +326,7 @@ function ChamberTab({ s, real, setCard }) {
   const list = useMemo(() => S.seated(ch), [ch, s.youId, s.custom]);
   const { seats, dotR } = useMemo(() => S.seatsFor(list.length), [list.length]);
   const b = s.bills.find((x) => x.id === bill);
-  const FC = { "Progressives": "#1b3f8f", "Mainstream Democrats": "#3d7bd9", "Moderate Democrats": "#9db8f0", "Governing-wing Republicans": "#f0a9a0", "Mainstream Republicans": "#d4594d", "Hard-right conservatives": "#7a1f1a" };
+  const FC = ch === "H" ? { "Progressive Caucus": "#1b3f8f", "Democrats, no bloc": "#3d7bd9", "New Democrat Coalition": "#7fa6ec", "Blue Dog Coalition": "#bcd0f5", "Main Street Caucus": "#f0a9a0", "Republican Study Committee": "#d4594d", "Freedom Caucus": "#7a1f1a" } : { "Progressives": "#1b3f8f", "Mainstream Democrats": "#3d7bd9", "Moderate Democrats": "#9db8f0", "Governing-wing Republicans": "#f0a9a0", "Mainstream Republicans": "#d4594d", "Hard-right conservatives": "#7a1f1a" };
   const BC = { yes: "#2fbf71", "lean yes": "#9be27b", undecided: "#b9c2cf", "lean no": "#f0a9a0", no: "#d4594d", you: "#ffcf5a" };
   const color = (m) => (by === "bill" && b && ch === "H" ? BC[S.estimate(s, m, b).bucket] : by === "faction" ? FC[m.faction] : by === "rel" ? ((s.rel[m.id] || 0) > 0.3 ? "#2fbf71" : (s.rel[m.id] || 0) > 0.05 ? "#9be27b" : (s.rel[m.id] || 0) < -0.05 ? "#d4594d" : (s.know[m.id] || 0) > 0 ? "#8fa1b8" : "#3a4660") : m.p === "D" ? "#3d7bd9" : "#d4594d");
   const [hover, setHover] = useState(null);
@@ -335,7 +335,7 @@ function ChamberTab({ s, real, setCard }) {
     <div className="stack">
       <div className="pm-headrow">
         <div className="hemi-by">{[["H", "House"], ["S", "Senate"]].map(([v, l]) => <button key={v} type="button" className={ch === v ? "on" : ""} onClick={() => setCh(v)}>{l}</button>)}</div>
-        <div className="hemi-by">{[["party", "Party"], ["faction", "Faction"], ["rel", "Who you know"], ["bill", "A bill's count"]].map(([v, l]) => <button key={v} type="button" className={by === v ? "on" : ""} onClick={() => setBy(v)}>{l}</button>)}</div>
+        <div className="hemi-by">{[["party", "Party"], ["faction", "Caucus"], ["rel", "Who you know"], ["bill", "A bill's count"]].map(([v, l]) => <button key={v} type="button" className={by === v ? "on" : ""} onClick={() => setBy(v)}>{l}</button>)}</div>
         {by === "bill" && <select value={bill} onChange={(e) => setBill(e.target.value)}><option value="">Pick a bill</option>{S.activeBills(s).map((x) => <option key={x.id} value={x.id}>{S.byId[x.pid].name}</option>)}</select>}
       </div>
       <section className="pm-chamber">
@@ -352,7 +352,7 @@ function ChamberTab({ s, real, setCard }) {
 
 // ── Member card ──
 function Bar({ label, v }) { return <div className="pm-bar"><span>{label}</span><i><b style={{ width: `${v * 100}%` }} /></i></div>; }
-function MemberCard({ id, s, real, act, onClose, setBillOpen }) {
+function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
   const m = S.memberById[id], me = id === s.youId, k = me ? 3 : s.know[id] || 0, rel = s.rel[id] || 0;
   const lr = S.leftRank(m);
   const bills = S.activeBills(s).filter((b) => b.sponsor === id);
@@ -365,7 +365,7 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen }) {
         </div>
         <div className="modal-body">
           <dl className="pm-facts">
-            <div><dt>Faction</dt><dd title={S.FACTION_NOTE[m.faction]}>{m.faction}</dd></div>
+            <div><dt>{m.ch === "H" ? "Caucus" : "Bloc"}</dt><dd title={S.FACTION_NOTE[m.faction]}>{S.caucusOf(m).join(" · ")}{m.cauEst ? <small className="muted"> (estimated)</small> : m.ch === "H" ? <small className="muted"> (real roster)</small> : null}</dd></div>
             <div><dt>Voting record</dt><dd>More conservative than {lr}% of the {m.ch === "H" ? "House" : "Senate"}{m.est || m.gen ? " (estimated)" : ""}</dd></div>
             <div><dt>{m.ch === "H" ? "District" : "State"} in 2024</dt><dd>{m.dem >= 50 ? `Democrats +${((m.dem - 50) * 2).toFixed(0)}` : `Republicans +${((50 - m.dem) * 2).toFixed(0)}`}</dd></div>
             <div><dt>Feels pressure from</dt><dd>{m.vuln > 0.6 ? "The general election" : m.prisk > 0.5 ? "A primary" : "Neither much"}</dd></div>
@@ -380,6 +380,11 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen }) {
               <Attrs a={S.attrs(m)} know={k} seed={m.id} />
             </>
           )}
+          {(() => { const B = S.bonds(m); return (
+            <div className="pm-bonds">
+              <div><h4 className="pm-subh">Close to</h4>{B.friends.map(({ m: o, why }) => <button key={o.id} type="button" className="linkless pm-bond" onClick={() => setCard(o.id)}><Face m={o} size={30} /><span><b>{S.nameOf(o, real)}</b><small>{why}</small></span></button>)}</div>
+              <div><h4 className="pm-subh">At odds with</h4>{B.rivals.map(({ m: o, why }) => <button key={o.id} type="button" className="linkless pm-bond neg" onClick={() => setCard(o.id)}><Face m={o} size={30} /><span><b>{S.nameOf(o, real)}</b><small>{why}</small></span></button>)}</div>
+            </div>); })()}
           {me && <><h4 className="pm-subh">Attributes</h4><Attrs a={S.yourAttrs(s)} know={3} /></>}
           {bills.length > 0 && <p className="small">Carrying: {bills.map((b) => <button key={b.id} type="button" className="linkbtn" onClick={() => { onClose(); setBillOpen(b.id); }}>{S.byId[b.pid].name}</button>)}</p>}
           <div className="bill-actions">

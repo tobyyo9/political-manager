@@ -74,10 +74,11 @@ export function Capitol({ s, real, setCard }) {
             <div className="pm-cpower">
               {C.rows.map((r) => (
                 <div key={r.name} className={`pm-cp ${pc(r.p)}`} title={r.note}>
-                  <div className="pm-cp-top"><strong>{r.name}</strong>{r.veto && <span className="pill neg2">Can sink party bills</span>}</div>
+                  <div className="pm-cp-top"><strong>{r.name}</strong>{r.veto && <span className="pill neg2">Can sink party bills</span>}{r.roster ? <span className="pill pos2" title="Members matched to the caucus's published roster">Real roster</span> : ch === "H" ? <span className="pill" title="No public roster could be fetched; members placed by voting record">Estimated</span> : null}</div>
+                  <p className="pm-cp-note">{r.note}</p>
                   <div className="pm-cp-bar"><i style={{ width: `${r.power}%` }} /></div>
                   <div className="pm-cp-meta"><span>Power <b>{r.power}</b></span><span>{r.size} members</span><span>Unity {r.cohesion}%</span><span>{r.posts} leaders or chairs</span></div>
-                  <button type="button" className="pm-cp-lead linkless" onClick={() => setCard(r.leader.id)}><Face m={r.leader} size={28} /><span>Ringleader: <b>{S.nameOf(r.leader, real)}</b></span></button>
+                  <button type="button" className="pm-cp-lead linkless" onClick={() => setCard(r.leader.id)}><Face m={r.leader} size={28} /><span>{r.chair ? "Chair" : "Ringleader"}: <b>{S.nameOf(r.leader, real)}</b></span></button>
                 </div>
               ))}
             </div>
@@ -85,7 +86,7 @@ export function Capitol({ s, real, setCard }) {
           <section className="panel">
             <h3>How the caucuses get along</h3>
             <div className="pm-matrix" style={{ gridTemplateColumns: `140px repeat(${C.rows.length}, minmax(0, 1fr))` }}>
-              <span />{C.rows.map((r) => <span key={r.name} className={`pm-mx-h ${pc(r.p)}`}>{r.name.replace("Republicans", "R.").replace("Democrats", "D.").replace("conservatives", "cons.")}</span>)}
+              <span />{C.rows.map((r) => <span key={r.name} className={`pm-mx-h ${pc(r.p)}`}>{r.name.replace("Republican Study Committee", "RSC").replace("New Democrat Coalition", "New Dems").replace("Blue Dog Coalition", "Blue Dogs").replace("Democrats, no bloc", "D. no bloc").replace("Republicans", "R.").replace("Democrats", "D.").replace("conservatives", "cons.")}</span>)}
               {C.rows.map((a) => (
                 <React.Fragment key={a.name}>
                   <span className={`pm-mx-h left ${pc(a.p)}`}>{a.name}</span>
@@ -94,7 +95,7 @@ export function Capitol({ s, real, setCard }) {
                 </React.Fragment>
               ))}
             </div>
-            <p className="muted small">Based on how far apart their voting records are. Allies vote together most of the time; enemies almost never.</p>
+            <p className="muted small">{ch === "H" ? "Based on how these blocs behave in fights over rules, spending and leadership." : "Based on how far apart their voting records are."} Allies vote together most of the time; enemies almost never.</p>
           </section>
         </>
       )}
