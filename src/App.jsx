@@ -3,7 +3,7 @@ import * as S from "./sim.js";
 import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import RollCall from "./RollCall.jsx";
-import { Face, Attrs, Capitol, Network, Office, WhiteHouse } from "./Pages.jsx";
+import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
@@ -34,27 +34,40 @@ export default function App() {
   const open = s.inbox.filter((m) => !m.done).length;
   const reply = (id, i) => { const n = S.answer(s, id, i); if (n.toast) setToast(n.toast); n.toast = null; setS(n); };
   const openBoard = (id) => { setS((cur) => S.flag(cur, "board")); setBillOpen(id); };
-  const ctx = { s, setS, you, real, act, setCard, setBillOpen: openBoard, setTab, reply };
+  const role = S.roleOf(s);
+  const decide = (id, signs) => { const n = S.decide(s, id, signs); setQueue(n.events || []); n.events = []; setS(n); };
+  const ctx = { s, setS, you, real, act, setCard, setBillOpen: openBoard, setTab, reply, role, decide };
+  const desk = s.bills.filter((b) => b.stage === "desk").length;
+  const TABS = role === "P"
+    ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
+    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
 
   return (
     <div className="pm">
       <header className="pm-top">
         <div className="pm-id">
           <Face m={you} size={48} ring="#ffcf5a" />
-          <div><strong>{S.titleOf(you)} {S.nameOf(you, real)}</strong><small>{you.p === "D" ? "Democrat" : "Republican"} · {you.seat} · {you.faction}</small></div>
+          <div><strong>{S.titleOf(you)} {S.nameOf(you, real)}</strong><small>{role === "P" ? `Republican · second term · can't run again` : `${you.p === "D" ? "Democrat" : "Republican"} · ${role === "S" ? `Senator from ${you.st}${S.upIn2028(you) ? " · up in 2028" : ` · up in ${you.cls === 1 ? 2030 : 2032}`}` : you.seat} · ${you.faction}`}</small></div>
         </div>
         <div className="pm-meters">
           <Meter label="Week" value={`${Math.min(s.week + 1, S.WEEKS)} / ${S.WEEKS}`} sub={S.fmtDate(s.week)} />
           <Meter label="Hours left" value={s.hours} sub={`of ${S.HOURS}`} />
+          {role === "P" ? <>
+            <Meter label="Approval" value={`${Math.round(s.presApproval)}%`} tone={s.presApproval >= 42 ? "ok" : "no"} />
+            <Meter label="Republicans approve" value={`${Math.round(s.baseApproval)}%`} tone={s.baseApproval >= 80 ? "ok" : "no"} />
+            <Meter label="Political capital" value={Math.round(s.clout)} />
+            <Meter label="Scandal heat" value={`${Math.round(s.presHeat * 100)}`} tone={s.presHeat < 0.6 ? "ok" : "no"} />
+          </> : <>
           <Meter label="War chest" value={money(s.cash)} />
-          <Meter label="Approval at home" value={`${Math.round(s.approval)}%`} tone={s.approval >= 50 ? "ok" : "no"} />
+          <Meter label={role === "S" ? "Approval in your state" : "Approval at home"} value={`${Math.round(s.approval)}%`} tone={s.approval >= 50 ? "ok" : "no"} />
           <Meter label="Your base" value={`${Math.round(s.baseApproval)}%`} tone={s.baseApproval >= 60 ? "ok" : "no"} />
           <Meter label="Clout" value={Math.round(s.clout)} />
+          </>}
         </div>
         {!s.over && <button type="button" className="cold-go pm-next" onClick={next}>End the week →</button>}
       </header>
       <nav className="pm-tabs">
-        {[["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["network", "Network"], ["office", "Office"], ["you", "Your seat"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]].map(([id, l]) => (
+        {TABS.map(([id, l]) => (
           <button key={id} type="button" className={tab === id ? "on" : ""} onClick={() => setTab(id)}>{l}</button>
         ))}
         <span className="pm-spacer" />
@@ -62,7 +75,7 @@ export default function App() {
         <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) setS(null); }}>New career</button>
       </nav>
       <main className="pm-main">
-        {s.over ? <End {...ctx} /> : null}
+        {s.over ? (role === "P" || s.result?.kind === "term" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
         {tab === "inbox" && <Inbox {...ctx} />}
         {tab === "floor" && <Bills {...ctx} />}
         {tab === "chamber" && <ChamberTab {...ctx} />}
@@ -70,6 +83,7 @@ export default function App() {
         {tab === "groups" && <GroupsTab {...ctx} />}
         {tab === "capitol" && <Capitol {...ctx} />}
         {tab === "wh" && <WhiteHouse {...ctx} />}
+        {tab === "cabinet" && <Cabinet {...ctx} />}
         {tab === "network" && <Network {...ctx} />}
         {tab === "office" && <Office {...ctx} />}
         {tab === "rank" && <Rankings {...ctx} />}
@@ -122,22 +136,76 @@ function Start({ onStart, real, setReal }) {
     ["Raskin", "MD", "The lawyer", "The top Democrat on Judiciary. Investigations, impeachment talk and the hearings everyone watches."],
     ["Khanna", "CA", "The dealmaker", "Silicon Valley's progressive. Known for teaming up with unlikely partners on the right."],
   ].map(([l, st, title, note]) => ({ m: S.HOUSE.find((m) => m.last === l && m.st === st), title, note })).filter((x) => x.m), []);
-  const hits = q.length > 1 ? S.HOUSE.filter((m) => `${m.first} ${m.last} ${m.sf} ${m.sl} ${m.seat}`.toLowerCase().includes(q.toLowerCase())).slice(0, 12) : [];
+  const [where, setWhere] = useState("H");
+  const senators = useMemo(() => [
+    ["Schumer", "NY", "Majority Leader", "Democrats took the Senate back. Now you run the floor, and every one of your 56 has a demand."],
+    ["Thune", "SD", "Minority Leader", "You lost the majority, and the President doesn't take your calls when he's angry."],
+    ["Sanders", "VT", "The movement", "An independent who caucuses with Democrats. In the majority for the first time in years. Not up until 2030."],
+    ["Talarico", "TX", "The upset", "You just flipped Texas. Six years before you face voters again, and the whole party wants you on TV."],
+    ["Fetterman", "PA", "The maverick", "You break with your party often. Up in 2028, and both sides want your vote."],
+    ["Murkowski", "AK", "The swing vote", "A Republican who votes her conscience. The President hates it. Up in 2028."],
+    ["Cruz", "TX", "The national brand", "Debates, podcasts and a 2028 itch. In the minority, with a new Democratic colleague from home."],
+    ["Paul", "KY", "The contrarian", "A libertarian who says no to spending and to tariffs, even the President's. Up in 2028."],
+  ].map(([l, st, title, note]) => ({ m: S.SENATE.find((m) => m.last === l && m.st === st), title, note })).filter((x) => x.m), []);
+  const POOL = where === "S" ? S.SENATE : S.HOUSE;
+  const hits = q.length > 1 ? POOL.filter((m) => `${m.first} ${m.last} ${m.sf} ${m.sl} ${m.seat}`.toLowerCase().includes(q.toLowerCase())).slice(0, 12) : [];
+  const P = S.PRES_M;
   return (
     <div className="pm-start">
       <section className="cold-hero pm-hero">
         <div className="cold-shade" />
         <div className="cold-inner">
           <span className="cold-kicker"><i className="live-dot" /> January 3, 2027 · The 120th Congress</span>
-          <h1 className="cold-h">One seat.<br /><span>535 people to deal with.</span></h1>
-          <p className="cold-lede">Play one member of the House through two years: build relationships, trade favors, count votes you can never be sure of, and face your voters in November 2028. Every member votes from their own record, district and pressures.</p>
+          <h1 className="cold-h">One Washington.<br /><span>560 people to deal with.</span></h1>
+          <p className="cold-lede">Play a House member, a senator or the President through two years of divided government: build relationships, trade favors, count votes you can never be sure of, and face the verdict in November 2028. Every member votes from their own record, district and pressures.</p>
         </div>
       </section>
       <div className="pm-startbar">
         <div className="hemi-by">{[["pick", "Take a seat"], ["create", "Create a newcomer"]].map(([v, l]) => <button key={v} type="button" className={mode === v ? "on" : ""} onClick={() => setMode(v)}>{l}</button>)}</div>
         <label className="pm-real"><input type="checkbox" checked={real} onChange={(e) => setReal(e.target.checked)} /> Show real names</label>
       </div>
-      {mode === "pick" ? (
+      {mode === "pick" && (
+        <div className="pm-where">
+          {[["H", "The House", "435 members, two-year terms, everyone on the ballot in 2028."], ["S", "The Senate", "100 senators, six-year terms, the filibuster and confirmations."], ["P", "The White House", "Play the President against a Democratic Congress."]].map(([v, l, d]) => (
+            <button key={v} type="button" className={`pm-wherebtn ${where === v ? "on" : ""}`} onClick={() => { setWhere(v); setQ(""); }}><strong>{l}</strong><span>{d}</span></button>
+          ))}
+        </div>
+      )}
+      {mode === "pick" && where === "P" && (
+        <section className="pm-oval">
+          <Face m={P} size={120} ring="#ffcf5a" />
+          <div>
+            <span className="cast-trait">Second term · year three</span>
+            <h2>President {S.nameOf(P, real)}</h2>
+            <p>The midterms went badly. Democrats run both chambers, and their bills now land on your desk. Sign them, veto them, and fight the overrides. Call members, threaten vetoes, act alone with executive orders, and manage a cabinet that leaks, feuds and needs Senate confirmation to replace. You can't run again. Your score is your approval, your legacy, and whether your party keeps the White House in 2028. Lose enough Republicans and you could be the first President removed from office.</p>
+            <button type="button" className="cold-go" onClick={() => onStart(S.newCareer("POTUS", undefined, null, diff))}>Take the oath →</button>
+          </div>
+        </section>
+      )}
+      {mode === "pick" && where === "S" && (
+        <>
+          <section className="panel pm-famous">
+            <h3>Famous senators</h3>
+            <p className="muted small">A third of the Senate is on the ballot in 2028. Everyone else plays for the long game.{!real && " Names are altered; tick Show real names to see who they are."}</p>
+            <div className="pm-featured">
+              {senators.map(({ m, title, note }) => (
+                <button key={m.id} type="button" className={`pm-seatcard ${pc(m.p)}`} onClick={() => onStart(S.newCareer(m.id, undefined, null, diff))}>
+                  <span className="cast-trait">{title}</span>
+                  <span className="pm-who"><Face m={m} size={40} /><strong>{S.nameOf(m, real)}</strong></span>
+                  <small>{m.ind ? "Independent" : m.p === "D" ? "Democrat" : "Republican"} · {m.st} · {S.upIn2028(m) ? "up in 2028" : `up in ${m.cls === 1 ? 2030 : 2032}`}</small>
+                  <p>{note}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+          <section className="panel">
+            <h3>Or take over any senator</h3>
+            <input className="pm-search" placeholder="Search by name or state, like Warren or GA" value={q} onChange={(e) => setQ(e.target.value)} />
+            <div className="pm-results">{hits.map((m) => <button key={m.id} type="button" className="pm-row" onClick={() => onStart(S.newCareer(m.id, undefined, null, diff))}><span className={`avatar ${pc(m.p)} sm`}>{ini(m, real)}</span><span><strong>{S.nameOf(m, real)}</strong><small>{m.st} · {S.upIn2028(m) ? "up in 2028" : `up in ${m.cls === 1 ? 2030 : 2032}`} · in office since {m.since}</small></span></button>)}</div>
+          </section>
+        </>
+      )}
+      {mode === "pick" && where !== "H" ? null : mode === "pick" ? (
         <>
           <div className="pm-featured">
             {featured.map(({ m, tag, title, note }) => (
@@ -166,7 +234,7 @@ function Start({ onStart, real, setReal }) {
           </section>
           <section className="panel">
             <h3>Or take over any House member</h3>
-            <input className="pm-search" placeholder="Search by name or seat, like TX-15 or Pelosi" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input className="pm-search" placeholder="Search by name or seat, like TX-15 or Jeffries" value={q} onChange={(e) => setQ(e.target.value)} />
             <div className="pm-results">{hits.map((m) => <button key={m.id} type="button" className="pm-row" onClick={() => onStart(S.newCareer(m.id, undefined, null, diff))}><span className={`avatar ${pc(m.p)} sm`}>{ini(m, real)}</span><span><strong>{S.nameOf(m, real)}</strong><small>{m.seat} · {m.faction} · in office since {m.since}</small></span></button>)}</div>
           </section>
         </>
@@ -212,7 +280,7 @@ function Create({ onStart, diff }) {
 }
 
 // ── Inbox ──
-function Inbox({ s, act, setBillOpen, reply }) {
+function Inbox({ s, act, setBillOpen, reply, role, setTab }) {
   const steps = S.firstSteps(s), left = steps.filter((x) => !x.done).length;
   const list = [...s.inbox].sort((a, b) => Number(a.done) - Number(b.done) || b.week - a.week).slice(0, 40);
   return (
@@ -234,7 +302,7 @@ function Inbox({ s, act, setBillOpen, reply }) {
         ))}
       </section>
       <aside className="stack">
-        {left > 0 && s.week < 6 && (
+        {left > 0 && s.week < 6 && role !== "P" && (
           <section className="panel pm-steps">
             <h3>Your first week</h3>
             <ul>{steps.map((x) => <li key={x.text} className={x.done ? "done" : ""}><i>{x.done ? "✓" : ""}</i>{x.text}</li>)}</ul>
@@ -243,11 +311,11 @@ function Inbox({ s, act, setBillOpen, reply }) {
         )}
         <h2 className="pm-h">Spend your hours</h2>
         <div className="pm-actions">
-          {[["district", "Town halls and events back home. Raises approval."], ["funds", "Dial for dollars. Fills the war chest."], ["committee", "Hearings and markups. Builds your record and clout."], ["tv", "A cable hit. Raises your profile; small risk of a gaffe."]].map(([a, d]) => (
+          {(role === "P" ? [["rally", "A rally in a swing state. Lifts approval; less each time if you overdo it."]] : [["district", role === "S" ? "Tour the state. Raises approval." : "Town halls and events back home. Raises approval."], ["funds", "Dial for dollars. Fills the war chest."], ["committee", "Hearings and markups. Builds your record and clout."], ["tv", "A cable hit. Raises your profile; small risk of a gaffe."]]).map(([a, d]) => (
             <button key={a} type="button" className="pm-act" disabled={!S.can(s, a)} onClick={() => act(a)}><strong>{S.ACTIONS[a].label}</strong><span>{d}</span><small>{S.ACTIONS[a].hours} hours</small></button>
           ))}
         </div>
-        <p className="muted small">Meet colleagues from the Chamber tab. Whip votes, cosponsor and introduce bills from the Bills tab.</p>
+        <p className="muted small">{role === "P" ? <>Call members and threaten vetoes from the Bills tab. Executive orders and firings are on the <button type="button" className="linkbtn" onClick={() => setTab("cabinet")}>Cabinet</button> tab. Invite members to the White House from the Chamber tab.</> : role === "S" ? "Meet colleagues from the Chamber tab. Holds, filibusters, whipping and cosponsoring are on the Bills tab. Oversight is on the Cabinet tab." : "Meet colleagues from the Chamber tab. Whip votes, cosponsor and introduce bills from the Bills tab."}</p>
       </aside>
     </div>
   );
@@ -263,7 +331,7 @@ function CountBar({ c, need, total }) {
     </div>
   );
 }
-function Bills({ s, setS, act, setBillOpen, setCard, real }) {
+function Bills({ s, setS, act, setBillOpen, setCard, real, role, you, decide }) {
   const [pick, setPick] = useState(false);
   const [q, setQ] = useState("");
   const active = S.activeBills(s).sort((a, b) => a.floorWeek - b.floorWeek);
@@ -271,7 +339,14 @@ function Bills({ s, setS, act, setBillOpen, setCard, real }) {
   const options = POLICIES.filter((p) => !s.laws.includes(p.id) && !s.bills.some((b) => b.pid === p.id && !b.dead) && p.name.toLowerCase().includes(q.toLowerCase())).slice(0, 14);
   return (
     <div className="stack">
-      <div className="pm-headrow"><h2 className="pm-h">Bills in play</h2><button type="button" className="primary" disabled={!S.can(s, "introduce")} onClick={() => setPick((x) => !x)}>Write a bill ({S.ACTIONS.introduce.hours} hours)</button></div>
+      {role === "P" && s.bills.filter((b) => b.stage === "desk").map((b) => { const pv = S.presView(s, b), info = S.billInfo(b.pid, b.party); return (
+        <article key={b.id} className="pm-bill pm-deskbill">
+          <header><div><span className="eyebrow">On your desk · passed both chambers</span><h3>{S.byId[b.pid].name}</h3><small>{b.hist.join(" · ")}</small></div></header>
+          <p className="small">{S.byId[b.pid].desc}</p>
+          <p className="small">Your instinct: <strong className={pv.signs ? "ok" : "no"}>{pv.signs ? "sign it" : "veto it"}</strong>. The public {info.pop > 0.05 ? "likes it" : info.pop < -0.05 ? "dislikes it" : "is split"}. {b.party === "D" ? "Democrats wrote it; signing it angers some of your base." : "Your party's bill."}</p>
+          <div className="bill-actions"><button type="button" className="primary" onClick={() => decide(b.id, true)}>Sign it</button><button type="button" className="ghost danger" onClick={() => decide(b.id, false)}>Veto it</button></div>
+        </article>); })}
+      <div className="pm-headrow"><h2 className="pm-h">Bills in play</h2><button type="button" className="primary" disabled={!S.can(s, "introduce")} onClick={() => setPick((x) => !x)}>{role === "P" ? "Send Congress a bill" : "Write a bill"} ({S.ACTIONS.introduce.hours} hours)</button></div>
       {pick && (
         <section className="panel">
           <input className="pm-search" placeholder="Search policies: minimum wage, tariffs, border…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
@@ -279,24 +354,29 @@ function Bills({ s, setS, act, setBillOpen, setCard, real }) {
         </section>
       )}
       {active.map((b) => {
-        const p = S.byId[b.pid], sp = S.memberById[b.sponsor], c = S.whipCount(s, b), mine = b.sponsor === s.youId;
+        const p = S.byId[b.pid], sp = S.memberById[b.sponsor], ch = role === "S" || (role === "P" && b.origin === "S") ? "S" : "H", c = S.whipCount(s, b, ch), mine = b.sponsor === s.youId;
         return (
           <article key={b.id} className={`pm-bill ${mine ? "mine" : ""}`}>
             <header>
               <div><span className="eyebrow">{b.floorWeek <= s.week ? "On the floor this week" : `Floor vote around ${S.fmtDate(b.floorWeek)}`}{mine ? " · your bill" : ""}</span><h3>{p.name}</h3>
                 <small>Sponsor: <button type="button" className="linkbtn" onClick={() => setCard(sp.id)}>{S.nameOf(sp, real)}</button> ({sp.p}-{sp.st}){b.cos.includes(s.youId) ? " · you cosponsored" : ""}</small></div>
-              <div className="pm-vote">
+              {role !== "P" && <div className="pm-vote">
                 <span className="stat-label">Your vote</span>
                 <div className="hemi-by">{[[true, "Yes"], [false, "No"], [null, "Staff decides"]].map(([v, l]) => <button key={l} type="button" className={b.yourVote === v ? "on" : ""} onClick={() => setS(S.setVote(s, b.id, v))}>{l}</button>)}</div>
-              </div>
+              </div>}
             </header>
-            <CountBar c={c} need={218} total={434} />
+            <p className="muted small pm-origin">{b.origin === "S" ? "Starts in the Senate, then the House." : "Starts in the House, then the Senate."} Count shown: {ch === "S" ? `the Senate (${b.route === "reconciliation" ? "51 under reconciliation" : "60 to end a filibuster"})` : "the House"}.{b.holds ? ` · ${b.holds} hold${b.holds > 1 ? "s" : ""}` : ""}{b.fil ? " · under a talking filibuster" : ""}{b.threat ? " · veto threatened" : ""}</p>
+            <CountBar c={c} need={ch === "S" ? (b.route === "reconciliation" ? 51 : 60) : 218} total={ch === "S" ? 100 : 434} />
             {(() => { const said = (s.pres || []).find((x) => x.pid === b.pid); return said ? <blockquote className="pm-said">{said.text}</blockquote> : null; })()}
-            {(() => { const pv = S.presView(s, b); return <p className="small pm-pres"><span className="avatar rep sm">DT</span> The President: <strong className={pv.signs ? "ok" : "no"}>{pv.signs ? "likely signs" : pv.gap > -0.15 ? "leaning veto, movable" : "likely veto"}</strong>{pv.firm ? " · firm views on this" : ""}{b.wh ? ` · your lobbying ${b.wh > 0 ? "helped" : "hurt"}` : ""}</p>; })()}
+            {(() => { const pv = S.presView(s, b); return <p className="small pm-pres"><span className="avatar rep sm">DT</span> {role === "P" ? "Your instinct" : "The President"}: <strong className={pv.signs ? "ok" : "no"}>{pv.signs ? "likely signs" : pv.gap > -0.15 ? "leaning veto, movable" : "likely veto"}</strong>{pv.firm ? " · firm views on this" : ""}{b.wh ? ` · your lobbying ${b.wh > 0 ? "helped" : "hurt"}` : ""}</p>; })()}
             <div className="bill-actions">
               <button type="button" className="ghost" onClick={() => setBillOpen(b.id)}>Whip board →</button>
-              <button type="button" className="ghost" disabled={!S.can(s, "wh")} onClick={() => act("wh", { bill: b.id })}>Lobby the White House (8 hours)</button>
-              {!mine && !b.cos.includes(s.youId) && <button type="button" className="ghost" disabled={!S.can(s, "cosponsor")} onClick={() => act("cosponsor", { bill: b.id })}>Cosponsor (2 hours)</button>}
+              {role !== "P" && <button type="button" className="ghost" disabled={!S.can(s, "wh")} onClick={() => act("wh", { bill: b.id })}>Lobby the White House (8 hours)</button>}
+              {role === "P" && <button type="button" className="ghost" disabled={!S.can(s, "push")} onClick={() => act("push", { bill: b.id })}>Bully pulpit (4h)</button>}
+              {role === "P" && !b.threat && <button type="button" className="ghost danger" disabled={!S.can(s, "threat")} onClick={() => act("threat", { bill: b.id })}>Threaten a veto (1h)</button>}
+              {role === "S" && !mine && <button type="button" className="ghost" disabled={!S.can(s, "hold")} onClick={() => act("hold", { bill: b.id })} title="Delays the bill three weeks. The sponsor will know.">Place a hold (2h)</button>}
+              {role === "S" && !mine && b.route !== "reconciliation" && !b.fil && <button type="button" className="ghost danger" disabled={!S.can(s, "filibuster")} onClick={() => act("filibuster", { bill: b.id })} title="Hold the floor for hours. Stiffens your party against cloture.">Talking filibuster (12h)</button>}
+              {role !== "P" && !mine && !b.cos.includes(s.youId) && <button type="button" className="ghost" disabled={!S.can(s, "cosponsor")} onClick={() => act("cosponsor", { bill: b.id })}>Cosponsor (2 hours)</button>}
             </div>
           </article>
         );
@@ -306,9 +386,10 @@ function Bills({ s, setS, act, setBillOpen, setCard, real }) {
     </div>
   );
 }
-function BillBoard({ id, s, act, real, setCard, onClose }) {
+function BillBoard({ id, s, act, real, setCard, onClose, role }) {
   const b = s.bills.find((x) => x.id === id), p = S.byId[b.pid];
-  const [ch, setCh] = useState("H");
+  const [ch, setCh] = useState(b.origin === "S" ? "S" : "H");
+  const wa = role === "P" ? "call" : "whip";
   const info = S.billInfo(b.pid, b.party);
   const need = ch === "H" ? (info.amendment ? 290 : 218) : info.amendment ? 67 : info.reconcilable && b.party === "D" && !info.mustPass && !info.bipartisan ? 51 : 60;
   const rows = useMemo(() => (ch === "H" ? S.HOUSE : S.SENATE).filter((m) => m.id !== s.youId).map((m) => ({ m, e: S.estimate(s, m, b) })).sort((a, z) => Math.abs(a.e.est) - Math.abs(z.e.est)).slice(0, 18), [s, id, ch]);
@@ -329,8 +410,8 @@ function BillBoard({ id, s, act, real, setCard, onClose }) {
                 <span className={`pm-bucket b-${e.bucket.replace(" ", "-")}`}>{e.bucket}</span>
                 <span className="pm-why">{e.know >= 1 ? S.reasons(e).slice(0, 2).map((r) => r.text).join("; ") : "You don't know them well enough to say why."}{b.deals[m.id] ? " · you have a deal" : ""}</span>
                 <span className="pm-whipbtns">
-                  <button type="button" className="ghost" disabled={!S.can(s, "whip")} onClick={() => act("whip", { bill: b.id, id: m.id })}>Ask (5h)</button>
-                  {(s.owedToYou[m.id] || 0) > 0 && <button type="button" className="primary" disabled={!S.can(s, "whip")} onClick={() => act("whip", { bill: b.id, id: m.id, favor: true })}>Call in favor</button>}
+                  <button type="button" className="ghost" disabled={!S.can(s, wa) || (role === "P" && b.asked[m.id])} onClick={() => act(wa, { bill: b.id, id: m.id })}>{role === "P" ? (b.asked[m.id] ? "Called" : "Call (3h)") : "Ask (5h)"}</button>
+                  {role !== "P" && (s.owedToYou[m.id] || 0) > 0 && <button type="button" className="primary" disabled={!S.can(s, "whip")} onClick={() => act("whip", { bill: b.id, id: m.id, favor: true })}>Call in favor</button>}
                 </span>
               </li>
             ))}
@@ -526,6 +607,34 @@ function End({ s, you, real, setS }) {
       <div className="pm-aar">
         <h3>How it happened</h3>
         <ul>{S.afterAction(s).map((l, i) => <li key={i}>{l}</li>)}</ul>
+      </div>
+      <div className="rc-actions"><button type="button" className="cold-go" onClick={() => setS(null)}>Start a new career →</button></div>
+    </section>
+  );
+}
+
+function EndOther({ s, you, real, setS, role }) {
+  const r = s.result;
+  const stamp = r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
+  const line = r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
+  return (
+    <section className={`desk pm-end ${r.won ? "won" : "lost"}`}>
+      <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? "January 3, 2029" : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>
+      <div className="desk-verdict"><span className="rc-stamp">{stamp}</span><p>{line}</p></div>
+      <div className="grades">
+        {role === "P" ? <>
+          <div className="grade"><b>{s.signed || 0}</b><span>Bills you signed</span></div>
+          <div className="grade"><b>{s.vetoes || 0}</b><span>Vetoes</span></div>
+          <div className="grade"><b>{s.bills.filter((b) => b.stage === "law" && b.hist.some((h) => h.startsWith("Vetoed"))).length}</b><span>Vetoes overridden</span></div>
+          <div className="grade"><b>{(s.eos || []).filter((e) => e.alive).length}/{(s.eos || []).length}</b><span>Executive orders that survived court</span></div>
+          <div className="grade"><b>{s.noms.filter((n) => n.result?.ok).length}/{s.noms.filter((n) => n.result).length}</b><span>Nominees confirmed</span></div>
+          <div className="grade"><b>{Math.round(s.presApproval)}%</b><span>Final approval</span></div>
+        </> : <>
+          <div className="grade"><b>{s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length}</b><span>Your bills that became law</span></div>
+          <div className="grade"><b>{s.votesCast.length}</b><span>Votes cast</span></div>
+          <div className="grade"><b>{Math.round(s.clout)}</b><span>Clout</span></div>
+          <div className="grade"><b>{Math.round(s.baseApproval)}%</b><span>Your base</span></div>
+        </>}
       </div>
       <div className="rc-actions"><button type="button" className="cold-go" onClick={() => setS(null)}>Start a new career →</button></div>
     </section>

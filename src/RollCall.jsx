@@ -5,15 +5,17 @@ const { useState, useEffect, useMemo } = React;
 const MS = 2400, PAUSE = 800;
 
 function steps(ev) {
-  const out = [{ type: "ch", ch: "H", label: "House", t: ev.house, need: ev.needH }];
-  if (ev.senate) out.push({ type: "ch", ch: "S", label: "Senate", t: ev.senate, need: ev.needS });
+  const out = [];
+  const H = ev.house && { type: "ch", ch: "H", label: "House", t: ev.house, need: ev.needH }, Sn = ev.senate && { type: "ch", ch: "S", label: "Senate", t: ev.senate, need: ev.needS };
+  for (const x of ev.first === "S" ? [Sn, H] : [H, Sn]) if (x) out.push(x);
   if (ev.signs !== undefined) out.push({ type: "desk", signs: ev.signs });
   if (ev.over) { out.push({ type: "ch", ch: "H", label: "House override", t: ev.over.house, need: 290 }); out.push({ type: "ch", ch: "S", label: "Senate override", t: ev.over.senate, need: 67 }); }
   const V = {
-    "failed-house": ["FAILED", `It fell short in the House, ${ev.house.yes} to ${ev.needH} needed.`, "no"],
-    "failed-senate": ["FAILED", `It passed the House and fell short in the Senate, ${ev.senate?.yes} to ${ev.needS} needed.`, "no"],
-    filibustered: ["FILIBUSTERED", `It passed the House, but ${ev.senate?.yes} senators is short of the 60 needed to end debate.`, "no"],
-    signed: ["SIGNED INTO LAW", "The President signs it.", "ok"],
+    "failed-house": ["FAILED", `It fell short in the House, ${ev.house?.yes} to ${ev.needH} needed.`, "no"],
+    desk: ["ON YOUR DESK", "Both chambers passed it. Sign it or veto it from the Bills tab.", "ok"],
+    "failed-senate": ["FAILED", `${ev.first === "S" ? "It" : "It passed the House and"} fell short in the Senate, ${ev.senate?.yes} to ${ev.needS} needed.`, "no"],
+    filibustered: ["FILIBUSTERED", `${ev.first === "S" ? "In the Senate," : "It passed the House, but"} ${ev.senate?.yes} senators is short of the 60 needed to end debate.`, "no"],
+    signed: ["SIGNED INTO LAW", ev.auto === false ? "You sign it at the Resolute Desk." : "The President signs it.", "ok"],
     overridden: ["OVERRIDDEN", "Two-thirds of both chambers defy the President. It's law.", "ok"],
     vetoed: ["VETO SUSTAINED", `The President vetoes it. On the override, some of his party who voted yes won't defy him: ${ev.over?.house.yes} House, ${ev.over?.senate.yes} Senate.`, "veto"],
     states: ["SENT TO THE STATES", "Two-thirds of both chambers passed it. Now 38 states must ratify.", "ok"],

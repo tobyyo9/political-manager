@@ -21,8 +21,9 @@ export function look(id, g = "M", born = 1970, p = "D") {
   };
 }
 
-export default function Portrait({ id, g, born, p, size = 44, ring, className = "" }) {
-  const L = look(id, g, born, p);
+export default function Portrait({ id, g, born, p, size = 44, ring, className = "", fix }) {
+  const L = { ...look(id, g, born, p), ...(fix ? { ...fix, skin: fix.skin !== undefined ? SKIN[fix.skin] : undefined } : {}) };
+  if (!L.skin) L.skin = look(id, g, born, p).skin;
   const H = L.hair;
   return (
     <svg viewBox="0 0 64 64" width={size} height={size} className={`portrait ${className}`} role="img" aria-hidden="true" style={ring ? { boxShadow: `0 0 0 2px ${ring}` } : undefined}>

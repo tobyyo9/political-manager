@@ -160,6 +160,7 @@ RESULTS = {
   ("NY",21): ("Anthony","Constantino","R",0.6,None,"lead"),
   # House members who won Senate seats, and who replaced them
   ("NH",1): ("Stefany","Shaheen","D",-0.3,1974,""), ("MN",2): ("Matt","Little","D",-0.25,1985,""), ("AL",1): ("Jerry","Carl","R",0.55,1958,""),
+  ("OK",1): ("Mark","Tedford","R",0.55,None,""),
 }
 # Incumbents who won in a renumbered seat: (to) <- (from)
 MOVES = {("CA",3): ("CA",6), ("CA",40): ("CA",41), ("CA",41): ("CA",38), ("FL",20): ("FL",25), ("FL",25): ("FL",23), ("FL",23): ("FL",22)}
@@ -172,6 +173,10 @@ for (st, d), (fn, ln, party, x, born, note) in RESULTS.items():
     m = idx[(st, d)]; keep = {"ch": "H", "st": st, "d": d, "dem": m["dem"]}
     m.clear(); m.update({**keep, "id": f"E{st}{d}", "first": fn, "last": ln, "p": party, "x": x, "y": 0, "born": born, "since": 2027,
                          "comm": [], "lead": [], "new": True, "est": True, "flip": party != before[(st, d)]["p"], "uncalled": note == "lead"})
+# A winner in a seat that voted 15+ points the other way only happens on redrawn lines: use an estimated lean instead.
+for m in house:
+    own = m["dem"] if m["p"] == "D" else 100 - m["dem"]
+    if m.get("new") and own < 42 and (m["p"] == "R" or m["st"] in ("CA", "UT", "TX")): m["dem"] = 54.0 if m["p"] == "D" else 45.0; m["newLines"] = True
 flips = [m for m in house if m.get("flip")]
 for m in house:
     if m.get("gen") and "first" not in m:
@@ -203,7 +208,8 @@ for st, old, fn, ln, x, born in WON:
 # Open Senate seats, winners as called Nov 3-4, 2026. Former House members carry their House record.
 OPEN = [("KY", "McConnell", "Andy", "Barr", "R", ("KY", 6), 0.45, 1973), ("IL", "Durbin", "Juliana", "Stratton", "D", None, -0.42, 1965),
         ("NH", "Shaheen", "Chris", "Pappas", "D", ("NH", 1), -0.3, 1980), ("MN", "Smith", "Peggy", "Flanagan", "D", None, -0.5, 1979),
-        ("AL", "Tuberville", "Barry", "Moore", "R", ("AL", 1), 0.65, 1966)]
+        ("AL", "Tuberville", "Barry", "Moore", "R", ("AL", 1), 0.65, 1966),
+        ("OK", "Armstrong", "Kevin", "Hern", "R", ("OK", 1), 0.55, 1961)]   # Mullin left for DHS in March; appointee Armstrong served to year's end
 for st, old, fn, ln, party, house_seat, x, born in OPEN:
     s = next((m for m in senate if m["st"] == st and m["last"].startswith(old)), None)
     if not s: print("missing senate seat", st, old); continue

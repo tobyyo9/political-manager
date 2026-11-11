@@ -48,3 +48,11 @@ The Senate and the President as full characters, committees and amendments as pl
 - Member cards show attributes scouted by how well you know them (?, a range, or the number).
 - Staff send polls, vote counts, gossip, press checks and district news to your inbox.
 - Placeholder newcomers now have unique invented names and say so on their card.
+
+## Fourth pass: the Senate and the executive branch (Nov 2026)
+- Three ways to play: a House member, any senator, or the President.
+- Senators: bills can start in the Senate; holds and talking filibusters; class 3 senators face the 2028 ballot, the rest get a verdict on their term.
+- The President: sign or veto each bill that reaches the desk, override fights, call members, veto threats, the bully pulpit, rallies, executive orders that can be blocked in court, firing and nominating cabinet officers. The verdict is the 2028 presidential result; removal by the Senate is a defined failure.
+- The Cabinet as characters (as reported Oct 30, 2026): scandal heat, resignations, firings, nominations from a bench of allies, Senate confirmation votes, oversight hearings, impeachment and trial votes for cabinet officers and the President.
+- The President endorses or attacks members by name after big votes.
+- Data: Oklahoma's special Senate winner (Hern) and his House successor; seats won on redrawn lines get an estimated lean.

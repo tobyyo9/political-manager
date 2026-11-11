@@ -20,6 +20,44 @@ for (const you of picks) for (const [style, acts] of Object.entries(styles)) for
     n++;
   } catch (e) { fail++; console.log("FAIL", you.seat, style, seed, "week", s.week, e.message.split("\n")[0]); }
 }
+// Senators (one on the 2028 ballot, one not) and the President.
+const sens = [S.SENATE.find((m) => m.cls === 3 && m.p === "D" && m.own < 54), S.SENATE.find((m) => m.cls === 3 && m.p === "R"), S.SENATE.find((m) => m.cls === 1 && m.p === "D")].filter(Boolean);
+for (const you of sens) for (let seed = 1; seed <= 4; seed++) {
+  let s = S.newCareer(you.id, seed), guard = 0;
+  try {
+    while (!s.over && guard++ < 200) {
+      for (const m of s.inbox.filter((x) => !x.done && x.kind !== "staff").slice(0, 4)) s = S.answer(s, m.id, seed % 2);
+      const b = S.activeBills(s).find((x) => x.party !== you.p);
+      if (b && seed % 2 && S.can(s, "hold")) s = S.doAction(s, "hold", { bill: b.id });
+      if (b && seed === 4 && S.can(s, "filibuster") && s.week % 9 === 0) s = S.doAction(s, "filibuster", { bill: b.id });
+      const c = s.cab.find((x) => !x.vacant); if (c && S.can(s, "hearing") && s.week % 5 === 0) s = S.doAction(s, "hearing", { id: c.id });
+      if (S.can(s, "district")) s = S.doAction(s, "district");
+      s = S.advance(s);
+    }
+    if (!s.over) throw new Error("senate career never ended");
+    out.push({ seat: "Sen " + you.seat + " cls" + you.cls, p: you.p, own: you.own, style: "senator", seed, kind: s.result.kind, won: s.result.won, margin: s.result.margin ?? s.result.score ?? 0, laws: s.laws.length, houseD: s.result.houseD });
+    n++;
+  } catch (e) { fail++; console.log("FAIL senate", you.seat, seed, "week", s.week, e.stack.split("\n").slice(0, 3).join(" | ")); }
+}
+const presOut = [];
+for (let seed = 1; seed <= 8; seed++) {
+  let s = S.newCareer("POTUS", seed), guard = 0;
+  try {
+    while (!s.over && guard++ < 200) {
+      for (const m of s.inbox.filter((x) => !x.done && x.kind !== "staff")) s = S.answer(s, m.id, seed % 3 === 0 ? 1 : 0);
+      for (const b of s.bills.filter((x) => x.stage === "desk")) s = S.decide(s, b.id, seed % 2 === 0 || S.presView(s, b).signs);
+      const b = S.activeBills(s).find((x) => x.stage === "committee");
+      if (b) { const t = S.HOUSE.find((m) => m.p === "R" && !(b.asked || {})[m.id]); if (t && S.can(s, "call")) s = S.doAction(s, "call", { bill: b.id, id: t.id }); if (!S.presView(s, b).signs && S.can(s, "threat") && !b.threat) s = S.doAction(s, "threat", { bill: b.id }); }
+      if (seed > 4 && S.can(s, "rally")) s = S.doAction(s, "rally");
+      if (s.week % 10 === 3 && S.can(s, "eo")) s = S.doAction(s, "eo", { pid: ["deport", "tariffs_up", "school_choice", "permitting", "voter_id"][s.week % 5] });
+      const hot = s.cab.find((c) => !c.vacant && c.heat > 0.8); if (hot && S.can(s, "fire")) s = S.doAction(s, "fire", { id: hot.id });
+      s = S.advance(s);
+    }
+    if (!s.over) throw new Error("presidency never ended");
+    presOut.push(s.result); n++;
+  } catch (e) { fail++; console.log("FAIL president", seed, "week", s.week, e.stack.split("\n").slice(0, 3).join(" | ")); }
+}
+console.log("President:", presOut.map((r) => `${r.kind} ${r.won ? "W" : "L"} ${r.margin ?? ""} appr ${r.approval ?? ""} laws ${r.laws ?? ""} vetoes ${r.vetoes ?? ""}`).join(" · "));
 const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});
 for (const [k, rs] of Object.entries(by((r) => `${r.seat} ${r.p} own ${r.own} · ${r.style}`)))
   console.log(k.padEnd(34), "won", rs.filter((r) => r.won).length + "/" + rs.length, "avg margin", (rs.reduce((a, r) => a + r.margin, 0) / rs.length).toFixed(1), "laws", (rs.reduce((a, r) => a + r.laws, 0) / rs.length).toFixed(1), "ended by", [...new Set(rs.map((r) => r.kind))].join("/"));

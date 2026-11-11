@@ -4,7 +4,7 @@ import Portrait from "./Portrait.jsx";
 
 const { useState, useMemo } = React;
 const pc = (p) => (p === "D" ? "dem" : "rep");
-export const Face = ({ m, size = 44, ring }) => <Portrait id={m.id} g={m.g} born={m.born} p={m.p} size={size} ring={ring} />;
+export const Face = ({ m, size = 44, ring }) => <Portrait id={m.id} g={m.g} born={m.born} p={m.p} size={size} ring={ring} fix={m.look} />;
 const relLabel = (r) => (r <= -0.3 ? "Hostile" : r < -0.05 ? "Cool" : r < 0.1 ? "Neutral" : r < 0.35 ? "Friendly" : "Ally");
 const relColor = (r) => (r <= -0.3 ? "#c8443a" : r < -0.05 ? "#e8a093" : r < 0.1 ? "#b9c2cf" : r < 0.35 ? "#9be27b" : "#2fbf71");
 const tint = (v) => (v >= 16 ? "a-top" : v >= 12 ? "a-good" : v >= 8 ? "a-mid" : "a-low");
@@ -211,6 +211,60 @@ export function WhiteHouse({ s, act }) {
         <section className="panel"><h3>His approval</h3><Trend s={s} keys={[["p", "President", "#c8443a"]]} h={130} /></section>
         <p className="muted small">His party's members feel his pull on every vote, and twice as hard on a veto override. {you.p === "R" ? "As a Republican you get meetings more easily." : "As a Democrat, you need a real national profile before he takes your calls."}</p>
       </aside>
+    </div>
+  );
+}
+
+// ── The Cabinet: the executive branch as characters ──
+const FEMALE = new Set(["Susie", "Brooke", "Linda", "Pam", "Jeanine", "Kari"]);
+const cabFace = (c) => ({ id: "cab" + c.last, g: FEMALE.has(c.first) ? "F" : "M", born: c.born || 1970, p: "R", look: c.tone !== undefined ? { skin: c.tone } : undefined });
+export function Cabinet({ s, real, act, role, you }) {
+  const [eoQ, setEoQ] = useState("");
+  const P = S.PRES_M, rival = role !== "P" && you.p === "D";
+  const imps = (s.imp || []).filter((i) => !i.done), noms = (s.noms || []).filter((n) => !n.done);
+  const orders = role === "P" ? S.POLICIES.filter((p) => (S.PRESIDENT_STANCE[p.id] || 0) > 0.3 && !s.laws.includes(p.id) && !(s.eos || []).some((e) => e.pid === p.id) && p.name.toLowerCase().includes(eoQ.toLowerCase())).slice(0, 10) : [];
+  return (
+    <div className="stack">
+      <section className="pm-wh-hero pm-cab-hero">
+        <Face m={P} size={84} ring="#ffcf5a" />
+        <div>
+          <span className="eyebrow">The executive branch</span>
+          <h2>{role === "P" ? "Your administration" : `President ${S.nameOf(P, real)}'s administration`}</h2>
+          <p className="muted small">Approval {Math.round(s.presApproval)}% · scandal heat {Math.round((s.presHeat || 0) * 100)}/100{s.presHeat > 0.75 ? " · impeachment talk is growing" : ""}. Cabinet officers rise and fall on scandal heat. Above 70 the press is on them; above 90 House Democrats move to impeach. Replacements need 51 senators.</p>
+        </div>
+      </section>
+      {(imps.length > 0 || noms.length > 0) && (
+        <section className="panel">
+          <h3>In the Senate and House now</h3>
+          <ul className="pm-cab-pending">
+            {noms.map((n) => { const c = s.cab.find((x) => x.id === n.post); return <li key={n.id}><span className="pill">Nomination</span> {real ? `${n.first} ${n.last}` : S.swapPair(n.first, n.last).join(" ")} for {c.post}. Senate vote {S.fmtDate(n.vote)}. {n.cont > 0.5 ? "Expect a brawl." : "Looks confirmable."}</li>; })}
+            {imps.map((i) => { const c = s.cab.find((x) => x.id === i.who); return <li key={i.id}><span className="pill neg2">Impeachment</span> {i.who === "POTUS" ? "The President" : `${c.post} ${S.cabName(c, real)}`}: {i.stage === "house" ? "House vote" : "Senate trial verdict"} {S.fmtDate(i.week)}.</li>; })}
+          </ul>
+        </section>
+      )}
+      <div className="pm-cab-grid">
+        {s.cab.map((c) => (
+          <article key={c.id} className={`pm-cab ${c.vacant ? "vacant" : ""} ${c.heat >= 0.7 ? "hot" : ""}`}>
+            <header>{c.vacant ? <span className="pm-cab-empty">?</span> : <Face m={cabFace(c)} size={52} />}<div><small>{c.post}</small><strong>{c.vacant ? "Vacant (acting)" : S.cabName(c, real)}</strong></div></header>
+            {!c.vacant && <div className="pm-heat" title="Scandal heat"><span>Heat</span><i><b style={{ width: `${c.heat * 100}%`, background: c.heat >= 0.7 ? "#c8443a" : c.heat >= 0.45 ? "#e0a94a" : "#2fbf71" }} /></i><em>{Math.round(c.heat * 100)}</em></div>}
+            {!c.vacant && <p className="small muted">{c.note}{c.area?.length ? ` Fights over: ${c.area.slice(0, 3).map((id) => S.byId[id]?.name).filter(Boolean).join(", ")}.` : ""}</p>}
+            <div className="bill-actions">
+              {!c.vacant && role === "P" && c.id !== "vp" && <button type="button" className="ghost danger" disabled={!S.can(s, "fire")} onClick={() => act("fire", { id: c.id })}>Fire (4h)</button>}
+              {!c.vacant && role !== "P" && rival && c.id !== "vp" && <button type="button" className="ghost" disabled={!S.can(s, "hearing")} onClick={() => act("hearing", { id: c.id })}>Oversight hearing (8h)</button>}
+              {!c.vacant && role !== "P" && !rival && <button type="button" className="ghost" disabled={!S.can(s, "defend")} onClick={() => act("defend", { id: c.id })}>Defend on TV (4h)</button>}
+            </div>
+          </article>
+        ))}
+      </div>
+      {role === "P" && (
+        <section className="panel">
+          <h3>Executive orders</h3>
+          <p className="muted small">Act without Congress. It takes effect at once and moves opinion, but many orders get sued, and a judge can block them.</p>
+          <input className="pm-search" placeholder="Search: tariffs, border, school choice…" value={eoQ} onChange={(e) => setEoQ(e.target.value)} />
+          <div className="pm-results">{orders.map((p) => <button key={p.id} type="button" className="pm-row" disabled={!S.can(s, "eo")} onClick={() => act("eo", { pid: p.id })}><span><strong>{p.name}</strong><small>{p.desc}</small></span></button>)}</div>
+          {(s.eos || []).length > 0 && <ul className="pm-cab-pending">{s.eos.map((e) => <li key={e.pid}><span className={`pill ${e.alive ? "pos2" : "neg2"}`}>{e.alive ? (e.court ? "In force, in court" : "In force") : "Blocked"}</span> {S.byId[e.pid].name} · signed {S.fmtDate(e.week)}</li>)}</ul>}
+        </section>
+      )}
     </div>
   );
 }
