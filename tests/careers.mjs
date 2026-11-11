@@ -162,7 +162,26 @@ S.resetWorld();
 if (!oaths) { fail++; console.log("FAIL presidency: nobody ever took the oath"); }
 if (!vac) { fail++; console.log("FAIL vacancies: no special elections in four long careers"); }
 console.log("Presidency arcs:", presArc.join(" · "), "· special elections", vac);
-console.log("Long careers:", longOut.join(" · "));
+
+// Speakers and governors: every House gets a Speaker, governors' races run, and you can run for governor.
+const govOut = []; let multi = 0, vacates = 0, govRuns = 0;
+for (const seed of [1, 2, 3, 4, 5]) {
+  S.resetWorld(); const y = S.HOUSE.filter((m) => m.p === (seed % 2 ? "D" : "R"))[30 + seed]; let s = S.newCareer(y.id, seed), guard = 0, terms = 0;
+  try {
+    while (guard++ < 900) {
+      for (const m of s.inbox.filter((x) => !x.done && x.choices).slice(0, 5)) s = S.answer(s, m.id, m.kind === "foreign" ? 1 : m.kind === "govrun" ? (terms >= 1 ? 0 : 1) : m.kind === "lead" ? (seed === 3 ? 0 : 3) : m.kind === "spkvote" ? seed % 2 : m.kind === "vacate" ? seed % 2 : 0);
+      s = S.advance(s);
+      const rw = s.week - (s.termStart || 0);
+      if (rw === 2 && !S.HOUSE.some((m) => /^Speaker of the House/.test(m.lead?.[0] || ""))) throw new Error("no Speaker after the opening vote");
+      for (const n of s.news.filter((n) => n.week === s.week)) { if (/elected Speaker on the \d/.test(n.text)) multi++; if (/motion to vacate/.test(n.text)) vacates++; }
+      if (s.over) { if (s.result.kind === "gov") govRuns++; if (S.canContinue(s) && terms < 3) { s = S.nextCongress(s); terms++; } else break; }
+    }
+    if (Object.keys(s.govs || {}).length !== 50) throw new Error("governors missing");
+    govOut.push(`${S.electionYear(s)} ${s.result?.kind} govD ${Object.values(s.govs).filter((g) => g.p === "D").length}`); n++;
+  } catch (e) { fail++; console.log("FAIL speaker/governor", seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
+}
+S.resetWorld();
+console.log("Speakers and governors:", govOut.join(" · "), "· multi-ballot Speaker votes", multi, "· motions to vacate", vacates, "· runs for governor", govRuns);console.log("Long careers:", longOut.join(" · "));
 console.log("President:", presOut.map((r) => `${r.kind} ${r.won ? "W" : "L"} ${r.margin ?? ""} appr ${r.approval ?? ""} laws ${r.laws ?? ""} vetoes ${r.vetoes ?? ""}`).join(" · "));
 const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});
 for (const [k, rs] of Object.entries(by((r) => `${r.seat} ${r.p} own ${r.own} · ${r.style}`)))

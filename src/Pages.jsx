@@ -306,7 +306,7 @@ export function Cabinet({ s, real, act, role, you }) {
 }
 
 // ── Elections: the map ──
-const STATE_NAME = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming" };
+const STATE_NAME = S.STATE_NAME;
 // Probability (or seat share) of Democrats -> a color from deep red to deep blue.
 const shade = (p) => (p >= 0.95 ? "#1b3f8f" : p >= 0.8 ? "#3d7bd9" : p >= 0.6 ? "#9db8f0" : p > 0.4 ? "#d9d4e6" : p > 0.2 ? "#f0a9a0" : p > 0.05 ? "#d4594d" : "#8f231b");
 const SMALL = new Set(["VT", "NH", "MA", "RI", "CT", "NJ", "DE", "MD", "DC", "HI"]);
@@ -322,11 +322,13 @@ export function Elections({ s, real }) {
   const fill = (st) => {
     if (view === "pres") return shade(pres.states[st]?.pD ?? 0.5);
     if (view === "senate") { const x = sen.states[st]; return x ? shade(x.pD) : "#e6e9ef"; }
+    if (view === "gov") { const g = S.govOf(s, st); return !g ? "#e6e9ef" : shade(g.p === "D" ? (g.lead ? 0.65 : 0.92) : g.lead ? 0.35 : 0.08); }
     const x = house.states[st]; return x ? shade(x.pD) : "#e6e9ef";
   };
   const tip = (st) => {
     if (view === "pres") { const x = pres.states[st]; return x && `${STATE_NAME[st]} · ${x.ev} electoral votes · ${x.m > 0 ? "D" : "R"}+${Math.abs(x.m).toFixed(1)}${pres.final ? "" : ` · Democrats ${Math.round(x.pD * 100)}% to win`}`; }
     if (view === "senate") { const x = sen.states[st]; if (!x) return `${STATE_NAME[st]} · no Senate race this cycle`; const m = S.memberById[x.who], nn = (n) => (real ? `${n.first} ${n.last}` : `${n.sf} ${n.sl}`), noms = !past && x.noms ? ["D", "R"].filter((p) => x.noms[p]).map((p) => `${nn(x.noms[p])} (${p})`).join(" vs. ") : ""; return `${STATE_NAME[st]} · ${past ? "won by" : x.open ? "open seat, held by" : "held by"} ${past ? (x.w === "D" ? "Democrats" : "Republicans") : `${S.nameOf(m, real)} (${m.p})`}${noms ? ` · running: ${noms}` : ""} · ${x.m > 0 ? "D" : "R"}+${Math.abs(x.m).toFixed(1)}${past ? "" : ` · Democrats ${Math.round(x.pD * 100)}% to win`}`; }
+    if (view === "gov") { const g = S.govOf(s, st); return g ? `${STATE_NAME[st]} · Governor ${real ? `${g.first} ${g.last}` : `${g.sf} ${g.sl}`} (${g.p})${g.you ? " · you" : ""}${g.lead ? " · race not yet called; leading" : ""} · next election ${g.next}${g.tl ? ", term-limited" : ""}` : `${STATE_NAME[st]} · no governor`; }
     const x = house.states[st]; return x && `${STATE_NAME[st]} · ${x.D} Democrats, ${x.R} Republicans in the House`;
   };
   const evD = pres.ev.D, evR = pres.ev.R;
@@ -335,7 +337,7 @@ export function Elections({ s, real }) {
     <div className="stack">
       <div className="pm-headrow">
         <h2 className="pm-h">Elections {past ? (s.lastPres || s.lastSenate ? `· ${year - 2}` : "") : `· ${year} forecast`}</h2>
-        <div className="hemi-by">{[["pres", "President"], ["senate", "Senate"], ["house", "House delegations"], ...(s.amb?.pr && !past ? [["race", `${s.amb.year} primaries`]] : [])].map(([v, l]) => <button key={v} type="button" className={view === v ? "on" : ""} onClick={() => setView(v)}>{l}</button>)}</div>
+        <div className="hemi-by">{[["pres", "President"], ["senate", "Senate"], ["house", "House delegations"], ["gov", "Governors"], ...(s.amb?.pr && !past ? [["race", `${s.amb.year} primaries`]] : [])].map(([v, l]) => <button key={v} type="button" className={view === v ? "on" : ""} onClick={() => setView(v)}>{l}</button>)}</div>
         {(s.lastPres || s.lastSenate) && <div className="hemi-by">{[["now", "Forecast"], ["last", "Last election"]].map(([v, l]) => <button key={v} type="button" className={when === v ? "on" : ""} onClick={() => setWhen(v)}>{l}</button>)}</div>}
       </div>
       {view === "pres" && (
@@ -345,6 +347,7 @@ export function Elections({ s, real }) {
         </section>
       )}
       {view === "senate" && <section className="panel small">{senUp.length} seats {past ? "were" : "are"} on the {past ? "last" : year} ballot (class {sen.cls}). Democrats hold {S.SENATE.filter((m) => m.p === "D").length} seats now{!past ? `; on this forecast they would hold about ${senD}` : ""}.</section>}
+      {view === "gov" && <section className="panel small">{(() => { const g = Object.values(s.govs || {}), d = g.filter((x) => x.p === "D").length, up = g.filter((x) => x.next === year).length; return `Democrats hold ${d} governorships, Republicans ${g.length - d}. ${up} are on the ${year} ballot. Governors appoint senators when a seat opens, and their states sue to block laws they oppose. Alaska and Kansas were still uncalled as of November 10, 2026; the candidate leading is shown, in a lighter shade.`; })()}</section>}
       {view === "house" && <section className="panel small">Democrats hold {S.HOUSE.filter((m) => m.p === "D").length} of 435 seats. The generic ballot is {s.mood >= 0 ? "D" : "R"}+{Math.abs(s.mood).toFixed(1)}.</section>}
       {view === "race" && s.amb?.pr ? <PrimaryRace s={s} real={real} /> : <>
       <section className="pm-map-wrap">
