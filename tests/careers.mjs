@@ -57,6 +57,27 @@ for (let seed = 1; seed <= 8; seed++) {
     presOut.push(s.result); n++;
   } catch (e) { fail++; console.log("FAIL president", seed, "week", s.week, e.stack.split("\n").slice(0, 3).join(" | ")); }
 }
+// Campaigners: spend, poll, pay dues, give, petition, request earmarks, force votes.
+for (const you of [picks[0], picks[2], S.SENATE.find((m) => m.cls === 3 && m.p === "D")]) for (let seed = 1; seed <= 3; seed++) {
+  let s = S.newCareer(you.id, seed), guard = 0;
+  try {
+    while (!s.over && guard++ < 200) {
+      for (const m of s.inbox.filter((x) => !x.done && x.kind !== "staff")) s = S.answer(s, m.id, seed % 3);
+      if (S.earWindow(s)) for (const e of S.earOptions(s).slice(0, 3)) s = S.requestEarmark(s, e.i);
+      if (s.week % 6 === 0) s = S.payDues(s, 25);
+      if (s.week === 3) s = S.startLpac(s);
+      if (S.yourRace(s) && s.opp) { const left = S.ELECTION_WEEK - (s.week - (s.termStart || 0)); if (left > 30 && s.week % 5 === 0) s = S.campaignSpend(s, "field", 50); if (left < 9) s = S.campaignSpend(s, "tv", 100); if (s.week % 9 === 0) s = S.buyPoll(s); if (s.week % 10 === 0) s = S.askForHelp(s); }
+      const bg = S.battleground(s, you.ch, you.p); if (bg.length && s.week % 7 === 0) { const x = bg[0]; s = S.giveTo(s, x.mine ? x.m.id : `cand:${x.m.id}`, s.week % 14 ? "check" : "event"); if (s.lpac) s = S.giveTo(s, x.mine ? x.m.id : `cand:${x.m.id}`, "lpac"); }
+      for (const b of S.activeBills(s)) { if (S.canPetition(s, b) && S.can(s, "petition") && seed === 1) s = S.doAction(s, "petition", { bill: b.id }); if (S.PRIVILEGED[b.pid] && !b.privileged && S.can(s, "privileged")) s = S.doAction(s, "privileged", { bill: b.id }); }
+      if (S.can(s, "funds")) s = S.doAction(s, "funds");
+      s = S.advance(s);
+    }
+    if (!s.over) throw new Error("campaign career never ended");
+    out.push({ seat: (you.ch === "S" ? "Sen " : "") + you.seat, p: you.p, own: you.own, style: "campaigner", seed, kind: s.result.kind, won: s.result.won, margin: s.result.margin ?? 0, laws: s.laws.length, houseD: s.result.houseD, week: s.week });
+    n++;
+    if (seed === 1) console.log("campaigner", you.seat, "opp", s.opp && Math.round(s.opp.raised), "spent", Math.round(s.camp?.spent || 0), "polls", (s.polls || []).length, "ears", (s.ear || []).map((e) => e.status).join("/"), "dues", s.dues?.paid, "petitions", (s.petitions || []).map((p) => p.n + p.status).join(" "), "lpac", s.lpac && s.lpac.raised);
+  } catch (e) { fail++; console.log("FAIL campaigner", you.seat, seed, "week", s.week, e.stack.split("\n").slice(0, 3).join(" | ")); }
+}
 // Long careers: keep winning and keep going, through 2034.
 const longOut = [];
 for (const [id, seed] of [[S.HOUSE.filter((m) => m.p === "D").sort((a, b) => b.own - a.own)[0].id, 1], [S.HOUSE.filter((m) => m.p === "R").sort((a, b) => b.own - a.own)[0].id, 2], [S.SENATE.find((m) => m.cls === 1).id, 3], [S.HOUSE.find((m) => m.p === "D" && m.st === "GA").id, 4]]) {

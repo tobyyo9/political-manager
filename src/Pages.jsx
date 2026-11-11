@@ -370,3 +370,106 @@ export function ElectionNight({ night, real }) {
     </section>
   );
 }
+
+// ── Your campaign, and money in politics ──
+const fmtK = (k) => (Math.abs(k) >= 1000 ? `$${(k / 1000).toFixed(1)}M` : `$${Math.round(k)}K`);
+function Polls({ s }) {
+  const ps = s.polls || [];
+  if (ps.length < 1) return <p className="muted small">No polls yet. Public polls start once you have an opponent, and you can commission your own.</p>;
+  const W = 600, h = 170, pad = 30, w0 = ps[0].w, w1 = Math.max(ps[ps.length - 1].w, w0 + 1);
+  const xs = (w) => pad + ((w - w0) / (w1 - w0)) * (W - pad - 12), ys = (v) => h - 22 - ((v - 25) / 50) * (h - 34);
+  const line = (k) => ps.map((p) => `${xs(p.w)},${ys(p[k])}`).join(" ");
+  const last = ps[ps.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${h}`} className="pm-trend" role="img" aria-label="Your polls over time">
+      {[30, 50, 70].map((v) => <g key={v}><line x1={pad} x2={W - 12} y1={ys(v)} y2={ys(v)} stroke="var(--line)" strokeDasharray={v === 50 ? "" : "3 4"} /><text x={4} y={ys(v) + 4} fontSize="10" fill="var(--muted)">{v}%</text></g>)}
+      <polyline fill="none" stroke="#2fbf71" strokeWidth="2.4" points={line("you")} />
+      <polyline fill="none" stroke="#c8443a" strokeWidth="2.4" points={line("opp")} />
+      {ps.map((p, i) => <g key={i}><circle cx={xs(p.w)} cy={ys(p.you)} r={p.internal ? 4.5 : 3} fill={p.internal ? "#fff" : "#2fbf71"} stroke="#2fbf71" strokeWidth="2" /><circle cx={xs(p.w)} cy={ys(p.opp)} r={p.internal ? 4.5 : 3} fill={p.internal ? "#fff" : "#c8443a"} stroke="#c8443a" strokeWidth="2" /></g>)}
+      <text x={pad} y={h - 4} fontSize="11" fill="#2fbf71" fontWeight="700">● You {last.you}%</text>
+      <text x={pad + 110} y={h - 4} fontSize="11" fill="#c8443a" fontWeight="700">● {s.opp ? s.opp.last : "Challenger"} {last.opp}%</text>
+      <text x={pad + 250} y={h - 4} fontSize="10" fill="var(--muted)">hollow dots: your internal polls (±{last.err})</text>
+    </svg>
+  );
+}
+export function Campaign({ s, setS, real, setCard, setToast }) {
+  const you = S.memberById[s.youId], role = S.roleOf(s), rw = s.week - (s.termStart || 0), left = S.ELECTION_WEEK - rw, race = S.yourRace(s);
+  const run = (n) => { if (n.toast && setToast) setToast(n.toast); n.toast = null; setS(n); };
+  const o = s.opp, goal = S.duesGoal(you), paid = s.dues?.paid || 0, comm = S.PARTY_COMM(you.ch, you.p), ew = S.earWindow(s), ears = (s.ear || []).filter((e) => e.term === (s.term || 1));
+  const bg = S.battleground(s, you.ch, you.p), leader = S.isLeader(s);
+  const air = S.campPts(s), airO = S.oppPts(s);
+  return (
+    <div className="pm-two">
+      <section className="stack">
+        <h2 className="pm-h">Your race</h2>
+        {!race ? <section className="panel"><p>{s.runFor ? "You're running statewide. That race is decided by statewide approval, money and the national mood." : `You're not on the ballot this Congress. ${role === "S" ? "Six-year terms buy time." : ""} You can still pay dues, help colleagues and bring money home.`}</p></section>
+          : !o ? <section className="panel"><p>No opponent yet. Challengers usually file by late summer of the first year ({S.fmtDate((s.termStart || 0) + S.CAMPAIGN_START)}). Every dollar you raise now is a reason for a strong one to stay out.</p></section>
+          : <section className="panel pm-opp">
+            <div className="pm-opp-head">
+              <Portrait id={`opp${s.seed}${o.first}${o.last}`} g={o.g} born={1972} p={o.p} size={64} />
+              <div><span className="eyebrow">Your opponent · {o.p === "D" ? "Democrat" : "Republican"}</span><h3>{o.first} {o.last}</h3><p className="small muted">{o.bio[0].toUpperCase() + o.bio.slice(1)}. {o.q > 0.6 ? "A top recruit." : o.q > 0.3 ? "A credible challenger." : "A long shot."}</p></div>
+            </div>
+            <div className="pm-vs">
+              <div><span className="stat-label">Your war chest</span><b>{fmtK(s.cash)}</b><small>spent {fmtK(s.camp?.spent || 0)}{s.camp?.auto ? `, ${fmtK(s.camp.auto)} by your campaign manager` : ""}</small></div>
+              <div><span className="stat-label">{o.last} has raised</span><b>{fmtK(o.raised)}</b><small>{left > 10 ? "banking most of it for the fall" : "spending it all now"}</small></div>
+            </div>
+            <div className="pm-air"><span className="stat-label">The air war: who voters are hearing from</span>
+              <div className="pm-air-bar"><i className="you" style={{ width: `${(air / Math.max(0.5, air + airO)) * 100}%` }} /><i className="opp" style={{ width: `${(airO / Math.max(0.5, air + airO)) * 100}%` }} /></div>
+              <small className="muted">{air + airO < 0.6 ? "Barely anyone is on the air yet." : air > airO * 1.2 ? "You're out-communicating them." : airO > air * 1.2 ? "They're out-communicating you." : "Roughly even."}</small></div>
+          </section>}
+        {race && <section className="panel"><div className="pm-headrow"><h3>Polls</h3><button type="button" className="ghost" disabled={s.cash < 25} onClick={() => run(S.buyPoll(s))}>Commission an internal poll ($25K)</button></div><Polls s={s} /></section>}
+        {race && o && left > 0 && <section className="panel">
+          <h3>Spend your war chest</h3>
+          <p className="muted small">{left} weeks to election day. Money in the bank scares off donors to your opponent, but it doesn't persuade anyone. If you don't spend, your campaign manager will buy ads on autopilot in the last ten weeks, at worse rates.</p>
+          {Object.entries(S.SPEND).map(([k, d]) => <div key={k} className="pm-spend">
+            <div><strong>{d.label}</strong><small className="muted">{d.note}</small></div>
+            <div className="bill-actions">{[50, 100, 250, 500].map((a) => <button key={a} type="button" className="ghost" disabled={s.cash < a} onClick={() => run(S.campaignSpend(s, k, a))}>{fmtK(a)}</button>)}</div>
+          </div>)}
+          <div className="pm-spend"><div><strong>Ask the {comm} for help</strong><small className="muted">Party committees spend their own money in the closest races. Whether they pick yours depends on your polls, your dues and your standing with leadership.</small></div>
+            <div className="bill-actions"><button type="button" className="ghost" disabled={s.hours < 2 || (s.askedHelp ?? -99) > s.week - 8} onClick={() => run(S.askForHelp(s))}>Make the call (2 hours)</button></div></div>
+        </section>}
+        <section className="panel">
+          <h3>Bring money home: {you.ch === "S" ? "Congressionally Directed Spending" : "Community Project Funding"}</h3>
+          <p className="muted small">Earmarks ride on the full-year funding bill. Members ask; appropriators decide. Majority members, appropriators and the chair's friends do best. Stopgap bills carry none.</p>
+          {ew ? <>
+            <p className="small">Requests for the {ew.name.toLowerCase()} are open until {S.fmtDate(ew.deadline - 3)}. You can submit {S.EAR_MAX}; each takes 2 hours of staff work.</p>
+            <div className="pm-ears">{S.earOptions(s).map((e) => { const done = ears.some((x) => x.i === e.i); return <button key={e.i} type="button" className={`pm-row ${done ? "on" : ""}`} disabled={done || ears.length >= S.EAR_MAX || s.hours < 2} onClick={() => run(S.requestEarmark(s, e.i))}><span><strong>{e.name}</strong><small>{fmtK(e.amt)}{done ? " · requested" : ""}</small></span></button>; })}</div>
+          </> : <p className="small">{ears.length ? "" : `The request window opens about six months before the full-year funding bill is due.`}</p>}
+          {ears.length > 0 && <ul className="pm-cab-pending">{ears.map((e) => <li key={e.i}><span className={`pill ${e.status === "funded" ? "pos2" : e.status === "cut" ? "neg2" : ""}`}>{e.status}</span> {e.name}, {fmtK(e.amt)}</li>)}</ul>}
+        </section>
+      </section>
+      <aside className="stack">
+        <h2 className="pm-h">Money between politicians</h2>
+        <section className="panel">
+          <h3>Your {comm} dues</h3>
+          {goal ? <>
+            <div className="pm-money-bar"><i style={{ width: `${Math.min(100, (paid / goal) * 100)}%`, background: "#3d7bd9" }} /></div>
+            <p className="small">{fmtK(paid)} of {fmtK(goal)}. Parties expect members in safe seats to pay for the ones in tough seats, and set bigger goals for leaders and members of the top committees. Leadership remembers who paid.</p>
+            <div className="bill-actions">{[25, 50, 100, Math.max(0, goal - paid)].filter((a, i, arr) => a > 0 && arr.indexOf(a) === i).map((a) => <button key={a} type="button" className="ghost" disabled={s.cash < a} onClick={() => run(S.payDues(s, a))}>Pay {fmtK(a)}{a === goal - paid ? " (the rest)" : ""}</button>)}</div>
+          </> : <p className="small">You're a Frontline member in a competitive seat, so the {comm} doesn't ask you for dues: your money is better spent on your own race.{paid ? ` You've given ${fmtK(paid)} anyway.` : ""}</p>}
+        </section>
+        <section className="panel">
+          <h3>Leadership PAC</h3>
+          {s.lpac ? <p className="small">{fmtK(s.lpac.cash)} on hand ({fmtK(s.lpac.raised)} raised). It can give {fmtK(10)} a cycle to a candidate: $5,000 per election.</p>
+            : <><p className="small muted">A separate PAC that ambitious members use to fund colleagues and build a following. Your campaign can only give $2,000 per election; a leadership PAC can give $5,000.</p><button type="button" className="ghost" disabled={s.hours < S.LPAC_COST} onClick={() => run(S.startLpac(s))}>Start one ({S.LPAC_COST} hours)</button></>}
+        </section>
+        {leader && <section className="panel pm-pot"><h3>The battleground fund: {fmtK(s.pot || 0)}</h3><p className="small muted">As a party leader you steer money into the closest races. Dues refill it. Members you save, and challengers you elect, remember it.</p></section>}
+        <section className="panel">
+          <h3>The battleground</h3>
+          <p className="small muted">The closest {you.ch === "S" ? "Senate races this cycle" : "House races"}, as of today. Green: seats your party must hold. Purple: seats you could take, with the challenger running there.</p>
+          <div className="pm-bg">{bg.map(({ m, mm, mine }) => { const c = mine ? null : S.candFor({ ...s }, m.id), tgt = mine ? m.id : `cand:${m.id}`, g = (s.given || {})[tgt] || (s.given || {})[m.id];
+            return <div key={m.id} className={`pm-bgrow ${mine ? "hold" : "take"}`}>
+              <div><strong>{m.seat}</strong> <span className="muted small">{Math.abs(mm) < 0.5 ? "even" : `${mm > 0 ? "D" : "R"} +${Math.abs(Math.round(mm))}`}</span><br />
+                <small>{mine ? <button type="button" className="linkbtn" onClick={() => setCard(m.id)}>{S.nameOf(m, real)}</button> : <>{c.first} {c.last}, {c.bio}</>}{g ? ` · you gave ${fmtK(g.amt)}` : ""}{(s.alloc || {})[m.id] ? ` · fund ${fmtK(s.alloc[m.id])}` : ""}</small></div>
+              <div className="bill-actions">
+                <button type="button" className="ghost sm" disabled={s.cash < 4} onClick={() => run(S.giveTo(s, tgt, "check"))} title={S.GIVE.check.note}>$4K</button>
+                {s.lpac && <button type="button" className="ghost sm" disabled={s.lpac.cash < 10} onClick={() => run(S.giveTo(s, tgt, "lpac"))} title={S.GIVE.lpac.note}>PAC $10K</button>}
+                <button type="button" className="ghost sm" disabled={s.hours < 6} onClick={() => run(S.giveTo(s, tgt, "event"))} title={S.GIVE.event.note}>Fundraiser (6h)</button>
+                {leader && <><button type="button" className="ghost sm" disabled={(s.pot || 0) < 250} onClick={() => run(S.allocate(s, m.id, 250))}>Fund $250K</button><button type="button" className="ghost sm" disabled={(s.pot || 0) < 1000} onClick={() => run(S.allocate(s, m.id, 1000))}>Fund $1M</button></>}
+              </div></div>; })}</div>
+        </section>
+        <p className="muted small">The rules are real: a campaign can give another candidate $2,000 per election and a leadership PAC $5,000 (FEC, 2025-26). Transfers to the party committees are unlimited. Dues goals follow the DCCC's 2026 targets.</p>
+      </aside>
+    </div>
+  );
+}

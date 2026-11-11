@@ -4,7 +4,7 @@ import { GROUPS } from "./shared/data/typology.js";
 import { POLICIES } from "./shared/data/policies.js";
 import RollCall from "./RollCall.jsx";
 import Scene from "./Scene.jsx";
-import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight } from "./Pages.jsx";
+import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight , Campaign } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
@@ -51,13 +51,13 @@ export default function App() {
   const openBoard = (id) => { setS((cur) => S.flag(cur, "board")); setBillOpen(id); };
   const role = S.roleOf(s);
   const decide = (id, signs) => { const n = S.decide(s, id, signs); setQueue(n.events || []); n.events = []; setS(n); };
-  const ctx = { s, setS, you, real, act, setCard, setBillOpen: openBoard, setTab, reply, role, decide, setScene };
+  const ctx = { s, setS, you, real, act, setCard, setBillOpen: openBoard, setTab, reply, role, decide, setScene, setToast };
   const sceneMsg = scene && s.inbox.find((m) => m.id === scene);
   const finishScene = (out, mode) => { if (mode === "prep") { setS(S.prepScene(s, scene)); return; } setS(S.finishScene(s, scene, out)); setScene(null); };
   const desk = s.bills.filter((b) => b.stage === "desk").length;
   const TABS = role === "P"
     ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
-    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
+    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["campaign", "Campaign"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
 
   return (
     <div className="pm">
@@ -105,6 +105,7 @@ export default function App() {
         {tab === "elections" && <Elections {...ctx} />}
         {tab === "network" && <Network {...ctx} />}
         {tab === "office" && <Office {...ctx} />}
+        {tab === "campaign" && <Campaign {...ctx} />}
         {tab === "rank" && <Rankings {...ctx} />}
         {tab === "news" && <News {...ctx} />}
         <p className="pm-fine">Characters are fictionalized: names are altered, and personalities, words and actions in the game are invented. Voting records, districts and committee seats come from public data. House roster is the 2026 result as called by Nov 10, 2026: real winners in flipped and open seats, with a few close races shown with the current leader. District lines are the 2024 map.</p>
@@ -479,7 +480,13 @@ function Bills({ s, setS, act, setBillOpen, setCard, real, role, you, decide }) 
                 {(b.amends || []).map((a, i) => <span key={i} className={`pill ${a.w < 0 ? "neg2" : "pos2"}`} title={a.by === s.youId ? "Yours" : S.memberById[a.by] ? S.nameOf(S.memberById[a.by], real) : ""}>{S.AMEND_LABEL[a.kind]}{a.by === s.youId ? " (yours)" : ""}</span>)}
               </div>); })()}
             <p className="muted small pm-origin">{b.origin === "S" ? "Starts in the Senate, then the House." : "Starts in the House, then the Senate."} Count shown: {ch === "S" ? `the Senate (${b.route === "reconciliation" ? "51 under reconciliation" : "60 to end a filibuster"})` : "the House"}.{b.holds ? ` · ${b.holds} hold${b.holds > 1 ? "s" : ""}` : ""}{b.fil ? " · under a talking filibuster" : ""}{b.threat ? " · veto threatened" : ""}</p>
-            <CountBar c={c} need={ch === "S" ? (b.route === "reconciliation" ? 51 : 60) : 218} total={ch === "S" ? 100 : 434} />
+            <CountBar c={c} need={ch === "S" ? (b.route === "reconciliation" || b.privileged ? 51 : 60) : 218} total={ch === "S" ? 100 : 434} />
+            {(() => { const pt = S.petitionOf(s, b); if (!pt) return b.privileged ? <p className="small pm-pet">Forced to the floor under {S.PRIVILEGED[b.pid]}.</p> : null; return (
+              <div className="pm-pet small"><span className="eyebrow">Discharge petition</span> <b>{pt.n}</b> of 218 signatures{pt.status === "ripe" ? " · ripe: floor vote coming" : pt.status === "done" ? " · discharged" : ""}
+                <div className="pm-money-bar"><i style={{ width: `${Math.min(100, (pt.n / 218) * 100)}%`, background: pt.n >= 218 ? "#2fbf71" : "#e0a94a" }} /></div>
+                {role === "H" && !pt.sigs[s.youId] && pt.status === "open" && <button type="button" className="ghost sm" disabled={!S.can(s, "signpet")} onClick={() => act("signpet", { id: pt.id })}>Sign it (1h)</button>}
+                {pt.sigs[s.youId] && <span className="pill pos2">You signed</span>}
+                <span className="muted"> · Whip majority members on the whip board to win their signatures.</span></div>); })()}
             {(() => { const said = (s.pres || []).find((x) => x.pid === b.pid); return said ? <blockquote className="pm-said">{said.text}</blockquote> : null; })()}
             {(() => { const pv = S.presView(s, b); return <p className="small pm-pres"><Face m={S.PRES_M} size={26} /> {role === "P" ? "Your instinct" : "The President"}: <strong className={pv.signs ? "ok" : "no"}>{pv.signs ? "likely signs" : pv.gap > -0.15 ? "leaning veto, movable" : "likely veto"}</strong>{pv.firm ? " · firm views on this" : ""}{b.wh ? ` · your lobbying ${b.wh > 0 ? "helped" : "hurt"}` : ""}</p>; })()}
             <div className="bill-actions">
@@ -489,6 +496,8 @@ function Bills({ s, setS, act, setBillOpen, setCard, real, role, you, decide }) 
               {role === "P" && !b.threat && <button type="button" className="ghost danger" disabled={!S.can(s, "threat")} onClick={() => act("threat", { bill: b.id })}>Threaten a veto (1h)</button>}
               {role === "S" && !mine && <button type="button" className="ghost" disabled={!S.can(s, "hold")} onClick={() => act("hold", { bill: b.id })} title="Delays the bill three weeks. The sponsor will know.">Place a hold (2h)</button>}
               {role === "S" && !mine && b.route !== "reconciliation" && !b.fil && <button type="button" className="ghost danger" disabled={!S.can(s, "filibuster")} onClick={() => act("filibuster", { bill: b.id })} title="Hold the floor for hours. Stiffens your party against cloture.">Talking filibuster (12h)</button>}
+              {role === "H" && S.canPetition(s, b) && <button type="button" className="ghost" disabled={!S.can(s, "petition")} onClick={() => act("petition", { bill: b.id })} title="Needs 218 signatures to force a floor vote leadership won't schedule.">Discharge petition (6h)</button>}
+              {role !== "P" && S.PRIVILEGED[b.pid] && !b.privileged && <button type="button" className="ghost" disabled={!S.can(s, "privileged")} onClick={() => act("privileged", { bill: b.id })} title={`Privileged under ${S.PRIVILEGED[b.pid]}: any member can force a vote, and the Senate needs only 51.`}>Force a vote (4h)</button>}
               {role !== "P" && !mine && !b.cos.includes(s.youId) && <button type="button" className="ghost" disabled={!S.can(s, "cosponsor")} onClick={() => act("cosponsor", { bill: b.id })}>Cosponsor (2 hours)</button>}
             </div>
           </article>
@@ -773,6 +782,7 @@ function End({ s, you, real, setS }) {
       <div className="desk-verdict">
         <span className="rc-stamp">{r.kind === "primary" ? "DEFEATED IN THE PRIMARY" : won ? "REELECTED" : "DEFEATED"}</span>
         <p>{r.kind === "primary" ? `Your own party's voters chose someone else. You took ${r.share}%.` : `${S.nameOf(you, real)} ${won ? "wins" : "loses"} ${you.seat} by ${Math.abs(r.margin)} points. The national mood ran ${r.env >= 0 ? "with" : "against"} your party by ${Math.abs(r.env)}. Democrats will hold ${r.houseD} House seats.`}</p>
+        {r.opp && <p className="small muted">Your opponent, {r.opp.name}, raised {money(r.opp.raised)}. Your campaign spent {money(r.spent)}.</p>}
       </div>
       {s.night && <ElectionNight night={s.night} real={real} />}
       <div className="grades">

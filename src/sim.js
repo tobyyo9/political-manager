@@ -277,6 +277,7 @@ export const ACTIONS = {
   eo: { label: "Sign an executive order", hours: 6, role: "P" }, rally: { label: "Hold a rally", hours: 8, role: "P" }, fire: { label: "Fire a cabinet member", hours: 4, role: "P" },
   hire: { label: "Hire a better staffer", hours: 4, role: "HS" },
   pacs: { label: "Corporate PAC fundraiser", hours: 6, role: "HS" }, smalldollar: { label: "Small-dollar email blast", hours: 3, role: "HS" },
+  petition: { label: "File a discharge petition", hours: 6, role: "H" }, signpet: { label: "Sign a discharge petition", hours: 1, role: "H" }, privileged: { label: "Force a privileged vote", hours: 4, role: "HS" },
   rider: { label: "Add a rider", hours: 6 }, strip: { label: "Strip a rider", hours: 4 },
   sign: { label: "Sign", hours: 0, role: "P" }, veto: { label: "Veto", hours: 0, role: "P" }};
 export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom = null, diff = null) {
@@ -366,6 +367,13 @@ export function doAction(s0, act, arg = {}) {
     s.log.push(`Met with ${nameOf(m)}.`); s.flags.met = true;
     s.toast = { title: `Coffee with ${nameOf(m)}`, text: s.know[m.id] >= 2 ? `You get a real read on them: ${TRAIT_LABEL[m.t.label]}. ${TRAIT_DESC[m.t.label]}` : "A friendly first conversation. You'll need more time to really know them.", tone: "good" };
   }
+  if (act === "petition") { const b = s.bills.find((x) => x.id === arg.bill); if (b && canPetition(s, b)) { newPetition(s, b, s.youId); defyLeaders(s, 2); s.profile = clamp(s.profile + 3, 0, 100);
+    pushNews(s, `${nameOf(you)} files a discharge petition to force a vote on ${byId[b.pid].name}.`, "event");
+    s.toast = { title: "Petition filed", text: `It needs 218 signatures. ${you.p === houseMaj() ? "You just went around your own leadership, and they noticed." : "Your party will mostly sign. The fight is for majority members willing to defy their leaders; whip them from the Bills tab."}`, tone: "good" }; } else s.hours += ACTIONS.petition.hours; }
+  if (act === "signpet") { const p = (s.petitions || []).find((x) => x.id === arg.id); if (p && !p.sigs[s.youId] && p.status === "open") { p.sigs[s.youId] = 1; p.n++; defyLeaders(s, 1); s.profile = clamp(s.profile + 1, 0, 100); s.toast = { title: "You signed", text: `Signature ${p.n} of 218.`, tone: "good" }; } else s.hours += 1; }
+  if (act === "privileged") { const b = s.bills.find((x) => x.id === arg.bill); if (b && PRIVILEGED[b.pid] && !b.dead && b.stage === "committee" && !b.privileged) { b.privileged = b.discharged = b.marked = true; b.floorWeek = s.week + 2; s.profile = clamp(s.profile + 2, 0, 100);
+    pushNews(s, `${nameOf(you)} uses ${PRIVILEGED[b.pid]} to force a vote on ${byId[b.pid].name}. Leaders can't stop it.`, "event");
+    s.toast = { title: "You forced a vote", text: `Under ${PRIVILEGED[b.pid]}, the vote comes in about two weeks${you.ch === "S" ? ", and it needs only 51 in the Senate: no filibuster" : ""}. Everyone has to go on the record.`, tone: "good" }; } else s.hours += ACTIONS.privileged.hours; }
   if (act === "funds") { const amt = Math.round((40 + s.profile * 0.9 + you.seniority * 2 + r() * 50) * (you.chair ? 1.4 : 1)); s.cash += amt; addMoney(s, "large", amt); s.toast = { title: "Call time", text: `Four hours on the phone. You raised $${amt}K.`, tone: "good" }; }
   if (act === "district") { const g = (1.2 + r() * 1.3) * clamp(1 - (s.approval - 45) / 30, 0.1, 1); /* each visit matters less once people already like you */ s.approval = clamp(s.approval + g, 5, 95); s.baseApproval = clamp(s.baseApproval + g * 0.5, 5, 95); s.toast = { title: "Back home", text: `Town halls and ribbon cuttings. Approval at home is up ${g.toFixed(1)} points.`, tone: "good" }; }
   if (act === "tv") {
@@ -500,6 +508,9 @@ export function answer(s0, msgId, choice) {
   const you = memberById[s.youId];
   if (m.kind === "lead") leaderRace(s, choice, m.comm);
   if (m.kind === "donor") donorAnswer(s, m, choice);
+  if (m.kind === ATTACK_KEY) answerAttack(s, m, choice);
+  if (m.kind === "fundask" || m.kind === "potask") answerMoney(s, m, choice);
+  if (m.kind === "petask" && choice === 0) { const p = (s.petitions || []).find((x) => x.id === m.pet); if (p && !p.sigs[s.youId] && p.status === "open") { p.sigs[s.youId] = 1; p.n++; defyLeaders(s, 1); s.profile = clamp(s.profile + 1, 0, 100); } }
   if (m.kind === "higher" && choice === 0) { const seat = memberById[m.seat]; s.runFor = m.seat; s.runForDem = seat.dem; s.runForCls = seat.cls; pushNews(s, `${nameOf(you)} announces a run for the Senate in ${you.st}.`, "event"); s.toast = { title: "You're running statewide", text: `The race is in November ${electionYear(s)}. Your House seat goes to someone else either way. Statewide approval, money and the national mood decide it.`, tone: "good" }; }
   if (m.kind === "markup") { const b = s.bills.find((x) => x.id === m.bill); const opts = m.oppose ? ["pill", "fix", "district", null] : ["fix", "district", "sweet", null]; if (b && !b.dead && opts[choice]) { b.amends = b.amends || []; const ok = offerAmend(s, b, opts[choice]); s.toast = { title: ok ? "Amendment adopted" : "Amendment rejected", text: ok ? `Your ${AMEND[opts[choice]].label} is in the bill.` : "The committee voted it down. You still get your markup vote.", tone: ok ? "good" : "" }; } }
   if (m.kind === "mpdesk") { const mp = s.mp.find((x) => x.id === m.mp); if (mp && mp.stage === "desk") { if (choice === 0) { mpSettle(s, mp, true); s.legacy += 1; } else { mp.blame = "pres"; s.vetoes++; const oh = mpVote(s, mp, "H", true), os = mpVote(s, mp, "S", true); const ov = oh.yes >= 290 && os.yes >= 67; mp.hist.push(`You veto it. Override: House ${oh.yes}, Senate ${os.yes}`); if (ov) { s.presApproval -= 1.5; s.clout -= 6; pushNews(s, `Congress overrides your veto of ${mp.name.toLowerCase()}.`, "bad"); } mpSettle(s, mp, ov); } } }
@@ -588,6 +599,9 @@ export function advance(s0) {
   if (roleOf(s) !== "P") inbox(s, r);
   sceneWeek(s, R(s, "scene"));
   donorWeek(s, R(s, "donor"));
+  campaignWeek(s, R(s, "camp"));
+  moneyWeek(s, R(s, "money"));
+  if (roleOf(s) !== "P" || s.week % 2 === 0) petitionWeek(s, R(s, "pet"));
   wireWeek(s, R(s, "wire"));
   { const rr = R(s, "react"); for (const ev of events.slice(0, 2)) voteReactions(s, ev, rr); }
   // 6. Primary and general.
@@ -604,7 +618,7 @@ function floor(s, b) {
   const out = [], first = b.origin === "S" ? "S" : "H", second = first === "H" ? "S" : "H";
   // The majority only schedules what it wants; a minority bill needs real support to reach the floor.
   const ctx = billCtx(s, b);
-  if (b.party === "R") {
+  if (b.party === "R" && !b.discharged) {
     const pool = first === "H" ? HOUSE : SENATE, need = first === "H" ? 218 : 51;
     const support = pool.filter((m) => lean(m, b.pid, ctx).p > 0.5).length;
     if (support < need) { b.dead = true; b.stage = "died"; b.hist.push("Never scheduled: the majority would not bring it up."); pushNews(s, `${p.name} dies in committee. Democratic leaders won't schedule it.`); return out; }
@@ -615,7 +629,7 @@ function floor(s, b) {
   const mine = role !== "P" ? lean(you, b.pid, c2) : null;
   const yv = role !== "P" ? b.yourVote ?? mine.L > 0 : null;
   const forced = role !== "P" ? { [s.youId]: yv } : {};
-  const needOf = (ch) => (ch === "H" ? (info.amendment ? NEED.H.amendment : NEED.H.passage) : info.amendment ? NEED.S.amendment : b.route === "reconciliation" ? NEED.S.reconciliation : NEED.S.passage);
+  const needOf = (ch) => (ch === "H" ? (info.amendment ? NEED.H.amendment : NEED.H.passage) : info.amendment ? NEED.S.amendment : b.route === "reconciliation" || b.privileged ? NEED.S.reconciliation : NEED.S.passage);
   const ev = { bill: b.id, pid: b.pid, yourVote: yv, auto: b.yourVote === null, stages: [], first };
   if (role !== "P") cast(s, b, yv, mine);
   for (const ch of [first, second]) {
@@ -721,11 +735,11 @@ function general(s, r) {
   const env = you.p === "D" ? s.mood : -s.mood;                       // national swing toward your party, in points
   const lean2 = (you.own - 50) * 2;                                   // the seat's 2024 margin for your party
   const gg = groupElection(s, "general");
-  const margin = lean2 + env * 0.9 + 3 + (s.approval - 50) * 0.45 + Math.min(4, s.cash / 900) + gg.net * 0.5 + (r() - 0.5) * 5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2;
+  const margin = projMargin(s) + (r() - 0.5) * 5; void lean2;
   // The whole House moves with the mood.
-  let d = 0; for (const m of HOUSE) { const mm = (m.dem - 50) * 2 + s.mood * 0.9 + (m.p === "D" ? 3 : -3) + noise(`${s.seed}:gen:${m.id}`) * 5; if (m.id === s.youId ? (you.p === "D" ? margin > 0 : margin <= 0) : mm > 0) d++; }
+  let d = 0; for (const m of HOUSE) { const mm = (m.dem - 50) * 2 + s.mood * 0.9 + (m.p === "D" ? 3 : -3) + noise(`${s.seed}:gen:${m.id}`) * 5 + aidPts(s, m); if (m.id === s.youId ? (you.p === "D" ? margin > 0 : margin <= 0) : mm > 0) d++; }
   s.over = true;
-  s.result = { kind: "general", margin: Math.round(margin * 10) / 10, won: margin > 0, houseD: d, env: Math.round(env * 10) / 10, groups: gg };
+  s.result = { kind: "general", margin: Math.round(margin * 10) / 10, won: margin > 0, houseD: d, env: Math.round(env * 10) / 10, groups: gg, opp: s.opp ? { name: `${s.opp.first} ${s.opp.last}`, raised: Math.round(s.opp.raised) } : null, spent: Math.round(s.camp?.spent || 0) };
   pushNews(s, `Election night: ${nameOf(you)} ${margin > 0 ? "wins" : "loses"} by ${Math.abs(s.result.margin)} points. Democrats hold ${d} House seats.`, margin > 0 ? "good" : "bad");
 }
 
@@ -1392,7 +1406,7 @@ function mpWeek(s, r) {
   }
 }
 function mpSettle(s, mp, ok) {
-  if (ok) { mp.stage = "law"; for (const x of mp.riders) if (!s.laws.includes(x.pid)) s.laws.push(x.pid);
+  if (ok) { mp.stage = "law"; for (const x of mp.riders) if (!s.laws.includes(x.pid)) s.laws.push(x.pid); earSettle(s, mp);
     pushNews(s, `${mp.name} becomes law${mp.riders.length ? `, carrying ${mp.riders.map((x) => byId[x.pid].name).join(" and ")}` : ", clean"}.${mp.lapsed ? ` The ${mp.kind === "funding" ? "shutdown" : "default crisis"} ends after ${mp.lapsed} week${mp.lapsed > 1 ? "s" : ""}.` : ""}`, "good"); return; }
   mp.stage = "lapsed"; mp.lapsed++;
   const blame = mp.blame === "pres" ? 0.25 : mp.blame === "gop" ? 0.15 : -0.15;      // + = voters blame Republicans
@@ -1462,10 +1476,10 @@ function electWorld(s) {
     if (m.id === s.youId) continue;
     if (m.ch === "S" && m.cls !== cls) continue;
     const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`);
-    const margin = (m.dem - 50) * 2 + s.mood * (m.ch === "H" ? 0.9 : 0.8) + inc * (m.ch === "H" ? 4 : 4) + n * (m.ch === "H" ? 5 : 6);
+    const margin = (m.dem - 50) * 2 + s.mood * (m.ch === "H" ? 0.9 : 0.8) + inc * (m.ch === "H" ? 4 : 4) + n * (m.ch === "H" ? 5 : 6) + aidPts(s, m);
     const winner = margin > 0 ? "D" : "R";
     const retires = noise(`${s.seed}:ret${s.term}:${m.id}`) < -0.86 || (YEAR + 1 - (m.born || 1960) > 82);
-    if (winner !== m.p) { out.flips[m.ch]++; newcomer(s, m, winner, year); }
+    if (winner !== m.p) { out.flips[m.ch]++; newcomer(s, m, winner, year); backersWin(s, m, year); }
     else if (retires) { out.retire++; newcomer(s, m, m.p, year); }
   }
   // The White House, every four years.
@@ -1500,13 +1514,17 @@ export function nextCongress(s0) {
   const s = structuredClone(s0);
   if (!canContinue(s)) return s;
   s.career.push({ congress: 119 + s.term, year: electionYear(s), kind: s.result.kind, margin: s.result.margin, role: roleOf(s), laws: s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length });
+  const fundedSeats = [...new Set([...Object.keys(s.alloc || {}), ...Object.keys(s.given || {}), ...Object.values(s.cands || {}).filter((c) => c.backed).map((c) => c.seat)])], mineP = memberById[s.youId].p;
   const w = electWorld(s);
+  const fundedWon = fundedSeats.filter((id) => memberById[id]?.p === mineP).length;
   s.term++; s.termStart = Math.ceil((731 * (s.term - 1)) / 7); s.debateBonus = 0; s.week = s.termStart; s.hours = HOURS; s.over = false; s.result = null; s.primary = null; s.rivals = 0; s.endorsed = false;
   s.bills = []; s.youOwe = []; s.promises = []; s.flags.punished = s.flags.rewarded = false; s.inbox = s.inbox.filter((m) => !m.done).slice(0, 0); s.trend = [];
   s.noms = s.noms.filter((n) => !n.done); s.imp = s.imp.filter((i) => !i.done); s.runFor = null;
   s.clout += 4; s.profile = clamp(s.profile + 3, 0, 100); s.approval = clamp(s.approval * 0.6 + 52 * 0.4, 5, 95);
   const you = memberById[s.youId]; derive(you); keep(s, you);
   seedBills(s); mpSeed(s);
+  s.opp = null; s.camp = null; s.polls = []; s.dues = { paid: 0 }; s.aid = {}; s.alloc = {}; s.given = {}; s.askedHelp = null; s.petitions = [];
+  if (fundedSeats.length) pushInbox(s, { kind: "staff", from: "Your finance director", title: `Your money on the map: ${fundedWon} of ${fundedSeats.length}`, done: true, body: `Of the ${fundedSeats.length} races you put money or time into, your party won ${fundedWon}.${(s.backedWon || []).filter((x) => x.year === electionYear({ ...s, term: s.term - 1 })).length ? ` New members you backed as challengers: ${(s.backedWon || []).filter((x) => x.year === electionYear({ ...s, term: s.term - 1 })).map((x) => x.name).join(", ")}. They start out in your corner.` : ""}` });
   const congress = 119 + s.term, hMaj = w.after.H, sMaj = w.after.S;
   pushNews(s, `The ${ord(congress)} Congress convenes. ${w.presMsg} Democrats hold ${w.house} House seats and ${w.senate} Senate seats. ${w.flips.H + w.flips.S} seats changed parties and ${w.retire} members retired.`, "event");
   pushInbox(s, { kind: "staff", from: `${s.staff[0].name}, chief of staff`, title: `Welcome to the ${ord(congress)} Congress`, done: true,
@@ -1527,7 +1545,8 @@ function leaderRace(s, choice, commCode) {
   const party = (you.ch === "H" ? HOUSE : SENATE).filter((m) => m.p === you.p && m.id !== you.id);
   const avgRel = party.reduce((a, m) => a + (s.rel[m.id] || 0), 0) / party.length;
   if (choice === 0) {
-    const odds = clamp(0.08 + s.clout / 180 + avgRel * 3 + s.loyalty * 0.025 + you.seniority * 0.01, 0.03, 0.8);
+    const backed = Object.keys(s.given || {}).filter((id) => memberById[id]?.p === you.p).length + (s.backedWon || []).length, dg = duesGoal(you);
+    const odds = clamp(0.08 + s.clout / 180 + avgRel * 3 + s.loyalty * 0.025 + you.seniority * 0.01 + Math.min(0.12, backed * 0.012) + (dg ? Math.min(1, (s.dues?.paid || 0) / dg) * 0.08 - 0.04 : 0.03), 0.03, 0.8);
     const title = `${you.ch === "H" ? "House" : "Senate"} ${you.p === maj ? "Majority" : "Minority"} Whip`;
     if (r() < odds) { const old = party.find((m) => (m.lead || []).some((t) => /Whip/.test(t))); if (old) { old.lead = []; derive(old); keep(s, old); s.rel[old.id] = clamp((s.rel[old.id] || 0) - 0.4, -1, 1); }
       you.lead = [title]; derive(you); keep(s, you); s.clout += 15; s.profile = clamp(s.profile + 10, 0, 100); pushNews(s, `${nameOf(you)} is elected ${title}.`, "good"); s.toast = { title: `You're the whip`, text: "You count the votes now, and members come to you. Your clout jumps.", tone: "good" }; }
@@ -1585,7 +1604,7 @@ export function presMap(s, final = false, year = electionYear(s)) {
 export function senateMap(s, final = false) {
   const cls = cycleClass(s.term), states = {};
   for (const m of SENATE.filter((x) => x.cls === cls)) {
-    const inc = m.p === "D" ? 1 : -1, base = (m.dem - 50) * 2 + s.mood * 0.8 + inc * 4;
+    const inc = m.p === "D" ? 1 : -1, base = (m.dem - 50) * 2 + s.mood * 0.8 + inc * 4 + aidPts(s, m);
     const mm = final ? base + noise(`${s.seed}:el${s.term}:${m.id}`) * 6 : base;
     states[m.st] = { m: Math.round(mm * 10) / 10, pD: final ? (mm > 0 ? 1 : 0) : phi(mm / 6), w: mm > 0 ? "D" : "R", holder: m.p, who: m.id };
   }
@@ -1717,7 +1736,7 @@ function voteReactions(s, ev, r) {
 export const wireAbout = (s, id) => (s.wire || []).filter((a) => a.who === id || a.target === id).slice(0, 4);
 
 // Election night: the presidential map (every four years), the Senate races and the House, as they'll be reported.
-function houseCount(s) { let d = 0; for (const m of HOUSE) { if (m.id === s.youId) { d += m.p === "D" ? 1 : 0; continue; } const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`); if ((m.dem - 50) * 2 + s.mood * 0.9 + inc * 4 + n * 5 > 0) d++; } return d; }
+function houseCount(s) { let d = 0; for (const m of HOUSE) { if (m.id === s.youId) { d += m.p === "D" ? 1 : 0; continue; } const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`); if ((m.dem - 50) * 2 + s.mood * 0.9 + inc * 4 + n * 5 + aidPts(s, m) > 0) d++; } return d; }
 function electionNight(s) {
   const year = electionYear(s), pres = s.term % 2 === 1 ? (s.lastPres && s.lastPres.year === year ? s.lastPres : presMap(s, true)) : null;
   if (pres) s.lastPres = pres;
@@ -1785,3 +1804,308 @@ function donorAnswer(s, m, choice) {
 }
 
 export const GROUP_NAME = (id) => groupById[id]?.name || id;
+
+// ════════ Campaigns: your opponent, spending the war chest, polls ════════
+// Money is in $K, like the war chest. Effects are points of margin on election night.
+export const CAMPAIGN_START = 30;   // about August of the first year: challengers file and start raising
+const rweek = (s) => s.week - (s.termStart || 0);
+export const yourRace = (s) => roleOf(s) !== "P" && !s.runFor && upThisTerm(s, memberById[s.youId]);
+export const SPEND = {
+  tv: { label: "TV and digital ads", note: "The biggest punch, but it fades within weeks. Best saved for the last two months.", decay: 0.13, k: 1.5, unit: 500 },
+  field: { label: "Field organizing", note: "Organizers, offices, door knocking. It lasts, but it only pays off if you start early.", decay: 0, k: 1.1, unit: 400 },
+  mail: { label: "Mail", note: "Cheap and targeted. A small lift that fades slowly.", decay: 0.04, k: 0.8, unit: 300 },
+};
+const stockPts = (st) => Object.entries(SPEND).reduce((a, [k, d]) => a + d.k * Math.sqrt(Math.max(0, st?.[k] || 0) / d.unit), 0);
+export const campPts = (s) => stockPts(s.camp);
+export const oppPts = (s) => (s.opp ? stockPts(s.opp.st) : 0);
+// Party money spent in a seat: points toward Democrats.
+export const aidPts = (s, m) => { const a = s.aid?.[m.id]; return a ? 1.3 * (Math.sqrt((a.D || 0) / 1000) - Math.sqrt((a.R || 0) / 1000)) : 0; };
+const addAid = (s, id, p, amt) => { s.aid = s.aid || {}; const a = (s.aid[id] = s.aid[id] || { D: 0, R: 0 }); a[p] += amt; };
+// Your margin on election night, before luck. Polls are this plus sampling error.
+export function projMargin(s) {
+  const you = memberById[s.youId], env = you.p === "D" ? s.mood : -s.mood, gg = groupElection(s, "general");
+  return (you.own - 50) * 2 + env * 0.9 + 3 + (s.approval - 50) * 0.45 + Math.min(2, s.cash / 1200) + gg.net * 0.5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2
+    + campPts(s) - oppPts(s) + (you.p === "D" ? 1 : -1) * aidPts(s, you);
+}
+const OPP_BIO = { strong: ["a state senator with a big donor list", "a former federal prosecutor", "a self-funding businessman", "a decorated combat veteran", "the mayor of the district's biggest city", "a popular local TV anchor"],
+  weak: ["a first-time candidate", "a perennial candidate on his fourth try", "a local talk radio host", "a small-business owner with no campaign experience", "a county commissioner from the far corner of the district"] };
+function makeOpp(s, r) {
+  const you = memberById[s.youId], env = you.p === "D" ? s.mood : -s.mood;
+  const q = clamp(0.2 + (55 - you.own) / 16 - env / 12 + (48 - s.approval) / 35 + (r() - 0.5) * 0.3, 0.04, 1);
+  const pool = q > 0.45 ? OPP_BIO.strong : OPP_BIO.weak, g = r() < 0.4 ? "F" : "M";
+  let bio = pool[Math.floor(r() * pool.length)]; if (g === "F") bio = bio.replace(" his ", " her ").replace("businessman", "businesswoman");
+  if (you.ch === "S") bio = q > 0.45 ? ["the state attorney general", "a two-term former governor", "a self-funding executive", "a sitting member of the House"][Math.floor(r() * 4)] : bio.replace("district's", "state's").replace("the district", "the state");
+  s.opp = { first: PF[Math.floor(r() * PF.length)], last: PL[Math.floor(r() * PL.length)], p: you.p === "D" ? "R" : "D", g, q, bio, cash: Math.round(40 + q * 300), raised: 0, st: { tv: 0, field: 0, mail: 0 }, since: s.week };
+  pushInbox(s, { kind: "staff", from: "Your campaign manager", title: `${s.opp.first} ${s.opp.last} is running against you`, body: `${s.opp.first} ${s.opp.last} (${s.opp.p}), ${bio}, filed to run for your seat. ${q > 0.6 ? "This is a serious recruit, and the other party's committee is behind them. Expect real money." : q > 0.3 ? "Credible, not scary. They'll raise enough to be annoying." : "Not a strong recruit. Don't get lazy."} Your race is on the Campaign tab.`, done: true });
+  pushNews(s, `${s.opp.first} ${s.opp.last} launches a campaign against ${nameOf(you)}.`, "event");
+}
+const ATTACK_KEY = "attack";
+function attackLine(s) {
+  const you = memberById[s.youId], bad = (s.votesCast || []).filter((v) => v.d < -0.3).sort((a, b) => a.d - b.d)[0];
+  if (bad) return { topic: `your vote on ${byId[bad.pid].name}`, ad: `"${nameOf(you)} voted ${bad.vote ? "for" : "against"} ${byId[bad.pid].name}. Washington first, ${you.st} last."` };
+  if (moneyMix(s).pac > 0.4) return { topic: "your corporate PAC money", ad: `"${nameOf(you)} has taken millions from corporate PACs. Guess who gets the call back."` };
+  if (s.loyalty < -2) return { topic: "breaking with your party", ad: `"You can't trust ${nameOf(you)}. Just ask ${you.p === "D" ? "Democrats" : "Republicans"}."` };
+  return { topic: "your record", ad: `"${nameOf(you)} votes with party leaders 9 times out of 10. Time for someone who works for us."` };
+}
+function campaignWeek(s, r) {
+  if (!yourRace(s)) return;
+  const rw = rweek(s), you = memberById[s.youId], left = ELECTION_WEEK - rw;
+  for (const [k, d] of Object.entries(SPEND)) if (s.camp?.[k]) s.camp[k] *= 1 - d.decay;
+  if (rw < CAMPAIGN_START) return;
+  if (!s.opp) makeOpp(s, r);
+  const o = s.opp, env = you.p === "D" ? s.mood : -s.mood;
+  // The opponent raises, then spends: some field early, everything on TV at the end.
+  const raise = (4 + 30 * o.q) * (1 + Math.max(0, env) / 8) + (s.oppMoney || 0) * 6 + (r() - 0.5) * 6;
+  o.cash += Math.max(0, raise); o.raised += Math.max(0, raise);
+  for (const [k, d] of Object.entries(SPEND)) o.st[k] *= 1 - d.decay;
+  if (left > 10) { const f = o.cash * 0.12; o.cash -= f; o.st.field += f * clamp(left / 40, 0.25, 1.1); }
+  else { const t = o.cash / Math.max(1, left); o.cash -= t; o.st.tv += t * 0.85; o.st.mail += t * 0.15; }
+  // Your campaign manager spends on autopilot in the last ten weeks if you haven't.
+  if (left <= 10 && left > 0 && !(s.camp?.last > s.week - 3)) { const t = Math.round(s.cash * 0.08); if (t > 10) { s.cash -= t; s.camp = s.camp || { tv: 0, field: 0, mail: 0, spent: 0 }; s.camp.tv += t * 0.7; s.camp.spent += t; s.camp.auto = (s.camp.auto || 0) + t; } }
+  // Polls: public ones every six weeks, every two at the end.
+  if ((left > 12 && rw % 6 === 0) || (left <= 12 && rw % 2 === 0)) pollNow(s, false);
+  // Attacks.
+  const lastAtk = s.inbox.find((x) => x.kind === ATTACK_KEY);
+  for (const m of s.inbox) if (m.kind === ATTACK_KEY && !m.done && m.week < s.week - 1) answerAttack(s, m, 2);
+  if (rw >= PRIMARY_WEEK - 16 && left > 0 && (!lastAtk || lastAtk.week < s.week - 4) && r() < 0.1 + 0.18 * o.q) {
+    const a = attackLine(s), hit = Math.round((0.8 + 1.8 * o.q) * 10) / 10;
+    pushInbox(s, { kind: ATTACK_KEY, hit, from: "Your campaign manager", title: `${o.first} ${o.last} is attacking you on ${a.topic}`, body: `A new ad is running across the ${you.ch === "S" ? "state" : "district"}: ${a.ad} If it goes unanswered it could cost you about ${hit} points of approval. How do you want to respond?`, choices: ["Answer with an ad of our own ($150K)", "Answer it in person at home (6 hours)", "Let it go"] });
+    pushNews(s, `${o.first} ${o.last} (${o.p}) goes on the attack against ${nameOf(you)} over ${a.topic}.`, "bad");
+  }
+}
+function answerAttack(s, m, choice) {
+  m.done = true; m.choice = choice;
+  if (choice === 0 && s.cash >= 150) { s.cash -= 150; s.camp = s.camp || { tv: 0, field: 0, mail: 0, spent: 0 }; s.camp.tv += 150; s.camp.spent += 150; s.approval = clamp(s.approval - m.hit * 0.2, 5, 95); s.toast = { title: "You hit back", text: "Your response ad is on the air within two days. Most of the damage is contained.", tone: "good" }; }
+  else if (choice === 1 && s.hours >= 6) { s.hours -= 6; s.approval = clamp(s.approval - m.hit * 0.4, 5, 95); s.toast = { title: "You answered it at home", text: "Town halls and local radio. You take some of the sting out of it.", tone: "" }; }
+  else { s.approval = clamp(s.approval - m.hit, 5, 95); if (choice !== 2) s.toast = { title: "Not enough to answer it", text: `You didn't have the ${choice === 0 ? "money" : "time"}, so the ad went unanswered.`, tone: "bad" }; }
+}
+function pollNow(s, internal) {
+  const pol = s.staff?.find((x) => x.role === "poll"), err = internal ? 1 + (20 - (pol?.skill || 10)) / 8 : 4.5;
+  const m = projMargin(s) + noise(`${s.seed}:poll:${s.week}:${internal}:${(s.polls || []).length}`) * err * 1.4;
+  const und = clamp((ELECTION_WEEK - rweek(s)) / 6, 3, 14), you = Math.round((100 - und + m) / 2), opp = Math.round(100 - und - you);
+  (s.polls = s.polls || []).push({ w: s.week, you, opp, m: Math.round(m * 10) / 10, err: Math.round(err * 10) / 10, internal });
+  if (s.polls.length > 40) s.polls.shift();
+  if (!internal) pushNews(s, `New poll in ${memberById[s.youId].seat}: ${nameOf(memberById[s.youId])} ${you}%, ${s.opp ? `${s.opp.first} ${s.opp.last}` : "a generic challenger"} ${opp}%.`, m < 3 ? "bad" : "");
+}
+export function buyPoll(s0) { const s = structuredClone(s0); if (s.cash < 25) return s; s.cash -= 25; pollNow(s, true); const p = s.polls[s.polls.length - 1]; s.toast = { title: "Your internal poll", text: `You ${p.you}%, ${s.opp ? s.opp.last : "challenger"} ${p.opp}%. Margin of error about ${p.err} points.`, tone: p.m > 3 ? "good" : "bad" }; return s; }
+export function campaignSpend(s0, kind, amt) {
+  const s = structuredClone(s0), d = SPEND[kind];
+  if (!d || s.cash < amt || !yourRace(s) || rweek(s) >= ELECTION_WEEK) return s;
+  const left = ELECTION_WEEK - rweek(s), eff = kind === "field" ? clamp(left / 40, 0.25, 1.1) : 1;
+  s.cash -= amt; s.camp = s.camp || { tv: 0, field: 0, mail: 0, spent: 0 }; s.camp[kind] += amt * eff; s.camp.spent += amt; s.camp.last = s.week;
+  s.toast = { title: d.label, text: kind === "tv" && left > 16 ? `$${amt}K of ads this early will mostly be forgotten by November.` : kind === "field" && left < 12 ? "Late field money buys less: there isn't time to recruit and train volunteers." : `$${amt}K spent. Your next poll will show whether it's working.`, tone: "" };
+  return s;
+}
+
+// ════════ Earmarks: Community Project Funding ════════
+// Requests ride on the full-year funding bill. Stopgaps carry none, which is why members hate them.
+const EAR_TYPES = [["Water and sewer upgrade", 3500], ["New fire station", 2500], ["Community health center expansion", 3000], ["Road and bridge repair", 4000], ["Police radios and body cameras", 1500], ["Community college job training lab", 2000],
+  ["Affordable housing infrastructure", 3000], ["Flood protection project", 4500], ["Rural broadband buildout", 2500], ["Veterans' resource center", 1200], ["Regional airport runway repair", 5000], ["Food bank warehouse", 900]];
+export const EAR_MAX = 3;
+const earMp = (s) => (s.mp || []).find((x) => x.kind === "funding" && /Fiscal \d{4} funding bill/.test(x.name));
+export function earWindow(s) { const mp = earMp(s); return mp && mp.stage !== "law" && s.week >= mp.deadline - 26 && s.week <= mp.deadline - 3 ? mp : null; }
+export function earOptions(s) {
+  const r = rng(hash(`${s.seed}:ear:${s.term || 1}`)), pool = [...EAR_TYPES].sort(() => r() - 0.5).slice(0, 6);
+  return pool.map(([name, amt], i) => ({ i, name, amt: Math.round(amt * (0.7 + r() * 0.6) / 50) * 50 }));
+}
+const onApprops = (you) => (you.comm || []).some((c) => c.c === "HSAP" || c.c === "SSAP");
+export function requestEarmark(s0, i) {
+  const s = structuredClone(s0), mp = earWindow(s), you = memberById[s.youId];
+  s.ear = s.ear || [];
+  if (!mp || s.hours < 2 || s.ear.filter((e) => e.term === (s.term || 1)).length >= EAR_MAX || s.ear.some((e) => e.term === (s.term || 1) && e.i === i)) return s;
+  const o = earOptions(s)[i]; s.hours -= 2;
+  s.ear.push({ ...o, term: s.term || 1, mp: mp.id, status: "requested" });
+  if (you.p === "R" && /Freedom/.test(you.faction || "")) { s.baseApproval = clamp(s.baseApproval - 1.5, 5, 95); s.toast = { title: "Request filed", text: "Filed. Some of your conservative base calls earmarks pork, and they noticed.", tone: "" }; }
+  else s.toast = { title: "Request filed", text: `$${(o.amt / 1000).toFixed(1)}M for ${o.name.toLowerCase()}. Appropriators decide when they write the funding bill.${onApprops(you) ? " Being on Appropriations helps a lot." : ""}`, tone: "good" };
+  return s;
+}
+function earSettle(s, mp) {
+  const mine = (s.ear || []).filter((e) => e.mp === mp.id && e.status === "requested"); if (!mine.length) return;
+  const you = memberById[s.youId], maj = (you.ch === "H" ? HOUSE.filter((m) => m.p === "D").length >= 218 : SENATE.filter((m) => m.p === "D").length >= 51) ? "D" : "R";
+  const chair = commChair(you.ch === "S" ? "SSAP" : "HSAP"), r = rng(hash(`${s.seed}:earset:${mp.id}`));
+  let won = 0;
+  for (const e of mine) {
+    const p = clamp((you.p === maj ? 0.55 : 0.35) + (onApprops(you) ? 0.25 : 0) + (chair ? (s.rel[chair.id] || 0) * 0.25 : 0) + s.clout / 800, 0.1, 0.95);
+    if (r() < p) { e.status = "funded"; won++; s.approval = clamp(s.approval + 1.1, 5, 95); }
+    else e.status = "cut";
+  }
+  if (won) pushNews(s, `${nameOf(you)} brings home $${(mine.filter((e) => e.status === "funded").reduce((a, e) => a + e.amt, 0) / 1000).toFixed(1)}M for ${mine.filter((e) => e.status === "funded").map((e) => e.name.toLowerCase()).join(", ")}.`, "good");
+  pushInbox(s, { kind: "staff", from: "Your appropriations staffer", title: `${won} of ${mine.length} of your projects made it into the bill`, body: `${mine.map((e) => `${e.name}: ${e.status === "funded" ? "funded" : "cut"}`).join(". ")}. ${won ? "Each one is a ribbon cutting and a local headline. Approval at home is up." : "Appropriators had more requests than money. Getting on the committee, or closer to its chair, changes that."}`, done: true });
+}
+
+// ════════ Money between politicians: dues, checks, leadership PACs, the party's battleground fund ════════
+// Real rules (FEC, 2025-26): a campaign can give another candidate $2,000 per election; a leadership PAC $5,000.
+// Transfers to the party committees are unlimited, and the parties set "dues" for members (DCCC 2026 goals:
+// $165K rank-and-file, $275K on exclusive committees, $660K for their top members, $880K whip, $1.1M leader).
+export const PARTY_COMM = (ch, p) => (ch === "S" ? (p === "D" ? "DSCC" : "NRSC") : p === "D" ? "DCCC" : "NRCC");
+const EXCLUSIVE = ["HSAP", "HSIF", "HSBA", "HSWM", "SSAP", "SSFI"];
+export const isFrontline = (m) => m.own < 54;
+export function duesGoal(m) {
+  if (isFrontline(m)) return 0;
+  const lead = m.lead?.[0] || "", top = (m.comm || []).find((c) => c.role === "Chair" || c.role === "Ranking Member"), excl = (m.comm || []).some((c) => EXCLUSIVE.includes(c.c));
+  let g = /Speaker|Majority Leader|Minority Leader|Republican Leader|Democratic Leader/.test(lead) ? 1100 : /Whip/.test(lead) ? 880 : lead ? 500 : top ? (EXCLUSIVE.includes(top.c) ? 660 : 400) : excl ? 275 : 165;
+  return m.ch === "S" ? Math.round(g * 1.3) : g;
+}
+export const isLeader = (s) => !!memberById[s.youId]?.lead?.length && roleOf(s) !== "P";
+const leadersOf = (ch, p) => MEMBERS.filter((m) => m.ch === ch && m.p === p && m.lead?.length);
+export function payDues(s0, amt) {
+  const s = structuredClone(s0), you = memberById[s.youId];
+  if (s.cash < amt || amt <= 0) return s;
+  s.cash -= amt; s.dues = s.dues || { paid: 0 }; s.dues.paid += amt;
+  for (const l of leadersOf(you.ch, you.p)) if (l.id !== you.id) s.rel[l.id] = clamp((s.rel[l.id] || 0) + amt / 3000, -1, 1);
+  s.clout += amt / 120; if (isLeader(s)) s.pot = (s.pot || 0) + amt;
+  const g = duesGoal(you);
+  s.toast = { title: `$${amt}K to the ${PARTY_COMM(you.ch, you.p)}`, text: g ? `You've paid $${s.dues.paid}K of your $${g}K goal. Leadership keeps the list, and it comes up when committee seats and leadership races are decided.` : "Frontline members owe nothing, so leadership notices when you give anyway.", tone: "good" };
+  return s;
+}
+export const LPAC_COST = 4;   // hours to set one up
+export function startLpac(s0) {
+  const s = structuredClone(s0), you = memberById[s.youId];
+  if (s.lpac || s.hours < LPAC_COST) return s;
+  s.hours -= LPAC_COST; s.lpac = { cash: 0, raised: 0 };
+  s.toast = { title: "Your leadership PAC is open", text: "It raises separately from your campaign and can give $5,000 per election to other candidates, more than your campaign's $2,000. It's how ambitious members build a following.", tone: "good" };
+  pushNews(s, `${nameOf(you)} launches a leadership PAC, a sign of bigger ambitions.`);
+  return s;
+}
+// What you can do for a colleague or candidate. kind: check | lpac | event
+export const GIVE = { check: { label: "Campaign check", amt: 4, note: "$2,000 for the primary and $2,000 for the general, the legal limit." }, lpac: { label: "Leadership PAC check", amt: 10, note: "$5,000 per election." }, event: { label: "Headline a fundraiser", hours: 6, note: "Your name on the invitation brings in your donors: tens of thousands for them." } };
+export function giveTo(s0, target, kind) {
+  const s = structuredClone(s0), you = memberById[s.youId], g = GIVE[kind];
+  const isC = String(target).startsWith("cand:"), m = isC ? null : memberById[target], cand = isC ? candFor(s, target.slice(5)) : null; if (!m && !cand) return s;
+  s.given = s.given || {}; const rec = (s.given[target] = s.given[target] || { amt: 0, events: 0, kinds: {} });
+  if (kind !== "event" && rec.kinds[kind] >= (s.term || 1)) { s.toast = { title: "Already at the limit", text: "You've given the most the law allows this cycle.", tone: "" }; return s; }
+  if (kind === "check" && s.cash < 4) return s;
+  if (kind === "lpac" && (!s.lpac || s.lpac.cash < 10)) return s;
+  if (kind === "event" && s.hours < 6) return s;
+  let amt = g.amt || 0;
+  if (kind === "check") s.cash -= 4;
+  if (kind === "lpac") s.lpac.cash -= 10;
+  if (kind === "event") { s.hours -= 6; amt = Math.round(30 + s.profile * 0.8 + (you.lead?.length ? 60 : 0)); rec.events++; }
+  if (kind !== "event") rec.kinds[kind] = s.term || 1;
+  rec.amt += amt; const party = m ? m.p : cand.p;
+  addAid(s, m ? m.id : cand.seat, party, amt * 3);   // money from colleagues also signals donors and the party
+  if (m) { s.rel[m.id] = clamp((s.rel[m.id] || 0) + (kind === "event" ? 0.2 : kind === "lpac" ? 0.1 : 0.06), -1, 1); s.know[m.id] = Math.max(s.know[m.id] || 0, 1); if (kind === "event") s.owedToYou[m.id] = (s.owedToYou[m.id] || 0) + 1; }
+  else { cand.backed = (cand.backed || 0) + amt; }
+  const who = m ? nameOf(m) : `${cand.first} ${cand.last}`;
+  s.toast = { title: kind === "event" ? `You headlined a fundraiser for ${who}` : `You gave $${amt}K to ${who}`, text: kind === "event" ? `It raised about $${amt}K for them. ${m ? "They owe you one." : "If they win, they'll remember who showed up first."}` : m ? "A small check by Washington standards. They'll notice it, and so will the people they talk to." : "Candidates remember the members who helped before anyone else did.", tone: "good" };
+  return s;
+}
+// Challengers: named candidates running for seats the other party holds. They become members if they win.
+export function candFor(s, seatId) {
+  const m = memberById[seatId]; if (!m) return null;
+  s.cands = s.cands || {}; if (s.cands[seatId]?.term === (s.term || 1)) return s.cands[seatId];
+  const r = rng(hash(`${s.seed}:cand:${seatId}:${s.term || 1}`)), g = r() < 0.45 ? "F" : "M";
+  const bios = ["a state legislator", "a Marine veteran", "a former prosecutor", "a small-business owner", "a county commissioner", "a nurse and union leader", "a former local news anchor", "a pastor and youth coach", "a farmer and school board member"];
+  return (s.cands[seatId] = { seat: seatId, st: m.st, d: m.d, ch: m.ch, p: m.p === "D" ? "R" : "D", first: PF[Math.floor(r() * PF.length)], last: PL[Math.floor(r() * PL.length)], g, bio: bios[Math.floor(r() * bios.length)], term: s.term || 1, backed: 0 });
+}
+// The battleground: the closest seats each party has to defend or can take.
+export function battleground(s, ch, p) {
+  const pool = ch === "S" ? SENATE.filter((m) => m.cls === cycleClass(s.term)) : HOUSE;
+  return pool.filter((m) => m.id !== s.youId).map((m) => { const mm = (m.dem - 50) * 2 + s.mood * 0.9 + (m.p === "D" ? 4 : -4) + aidPts(s, m); return { m, mm, mine: m.p === p }; })
+    .filter((x) => Math.abs(x.mm) < (ch === "S" ? 14 : 9)).sort((a, b) => Math.abs(a.mm) - Math.abs(b.mm)).slice(0, 16);
+}
+export function allocate(s0, seatId, amt) {
+  const s = structuredClone(s0), you = memberById[s.youId], m = memberById[seatId];
+  if (!isLeader(s) || !m || (s.pot || 0) < amt) return s;
+  s.pot -= amt; addAid(s, seatId, you.p, amt); (s.alloc = s.alloc || {})[seatId] = (s.alloc[seatId] || 0) + amt;
+  if (m.p === you.p) { s.rel[m.id] = clamp((s.rel[m.id] || 0) + (amt >= 1000 ? 0.25 : 0.12), -1, 1); if (amt >= 1000) s.owedToYou[m.id] = (s.owedToYou[m.id] || 0) + 1; }
+  else { const c = candFor(s, seatId); c.backed = (c.backed || 0) + amt; }
+  s.toast = { title: `$${amt >= 1000 ? (amt / 1000).toFixed(1) + "M" : amt + "K"} to ${m.seat}`, text: m.p === you.p ? `${nameOf(m)} knows where it came from.` : `For ${candFor(s, seatId).first} ${candFor(s, seatId).last}, the challenger. If they win, they owe you their first vote in the caucus.`, tone: "good" };
+  return s;
+}
+export function askForHelp(s0) {
+  const s = structuredClone(s0), you = memberById[s.youId];
+  if (!yourRace(s) || s.hours < 2 || (s.askedHelp || -99) > s.week - 8) return s;
+  s.hours -= 2; s.askedHelp = s.week;
+  const g = duesGoal(you), duesR = g ? Math.min(1, (s.dues?.paid || 0) / g) : 1;
+  const ls = leadersOf(you.ch, you.p), relL = ls.length ? ls.reduce((a, m) => a + (s.rel[m.id] || 0), 0) / ls.length : 0, need = projMargin(s);
+  const odds = clamp(0.15 + duesR * 0.3 + s.loyalty * 0.03 + relL * 0.4 + (need < 6 ? 0.25 : -0.2), 0.03, 0.92);
+  if (rng(hash(`${s.seed}:help:${s.week}`))() < odds) { const amt = Math.round(need < 3 ? 1500 : need < 8 ? 800 : 300); addAid(s, you.id, you.p, amt);
+    s.toast = { title: `The ${PARTY_COMM(you.ch, you.p)} is coming in`, text: `They'll spend about $${(amt / 1000).toFixed(1)}M in your race, on their own ads. You don't control the message, but you'll take it.`, tone: "good" }; }
+  else s.toast = { title: "Not this time", text: need >= 8 ? "They looked at your polls and said you're fine. Their money goes to closer races." : duesR < 0.5 ? "They noticed you haven't paid your dues. Nobody said so out loud." : "Leadership has more races than money. Try again in a couple of months.", tone: "bad" };
+  return s;
+}
+function moneyWeek(s, r) {
+  if (roleOf(s) === "P") return;
+  const you = memberById[s.youId], rw = rweek(s), maj = you.p;
+  if (s.lpac && r() < 0.5) { const x = Math.round(5 + s.profile * 0.25); s.lpac.cash += x; s.lpac.raised += x; }
+  if (isLeader(s) && rw >= 16) s.pot = (s.pot || 0) + Math.round(250 + (you.lead[0].match(/Speaker|Leader/) ? 400 : 100) + r() * 100);
+  // Dues reminders.
+  const g = duesGoal(you);
+  if (g && (rw === 52 || rw === 84) && (s.dues?.paid || 0) < g * (rw === 52 ? 0.4 : 0.8)) { for (const l of leadersOf(you.ch, you.p)) if (l.id !== you.id) s.rel[l.id] = clamp((s.rel[l.id] || 0) - 0.08, -1, 1);
+    pushInbox(s, { kind: "staff", from: `The ${PARTY_COMM(you.ch, you.p)}`, title: "A reminder about your dues", body: `You've paid $${s.dues?.paid || 0}K of your $${g}K goal. Members in safe seats are expected to help pay for the ones in tough seats. Leadership has the list. Pay from the Campaign tab.`, done: true }); }
+  if (rw < 20 || rw >= ELECTION_WEEK) return;
+  // Requests: colleagues in tough races and challengers ask you for help.
+  const bg = battleground(s, you.ch, you.p);
+  if (bg.length && r() < (isLeader(s) ? 0.4 : 0.22)) {
+    const x = bg[Math.floor(r() * Math.min(bg.length, 10))], cand = x.mine ? null : candFor(s, x.m.id), who = x.mine ? nameOf(x.m) : `${cand.first} ${cand.last}`;
+    if (!s.inbox.some((i) => (i.kind === "fundask" || i.kind === "potask") && i.seat === x.m.id && i.week > s.week - 12)) {
+      if (isLeader(s)) pushInbox(s, { kind: "potask", seat: x.m.id, from: x.mine ? `${titleOf(x.m)} ${who}` : `${who}, candidate in ${x.m.seat}`, title: x.mine ? `${who} needs help holding ${x.m.seat}` : `${who} can flip ${x.m.seat}`, body: x.mine ? `"The other side just reserved $2 million in my market. I need air cover." Their seat is within ${Math.max(1, Math.round(Math.abs(x.mm)))} points. Your battleground fund has $${((s.pot || 0) / 1000).toFixed(1)}M.` : `${who} is ${cand.bio} running against ${nameOf(x.m)}. The race is within ${Math.max(1, Math.round(Math.abs(x.mm)))} points, and they're being outspent. Your battleground fund has $${((s.pot || 0) / 1000).toFixed(1)}M.`, choices: ["Send $1M", "Send $300K", "Not now"] });
+      else pushInbox(s, { kind: "fundask", seat: x.m.id, from: x.mine ? `${titleOf(x.m)} ${who}` : `${who}, candidate in ${x.m.seat}`, title: x.mine ? `${who} asks for your help` : `A candidate in ${x.m.seat} asks for your support`, body: x.mine ? `${who} is in one of the closest races in the country (${x.m.seat}). A check helps a little; your name on a fundraiser helps a lot, and they won't forget it.` : `${who}, ${cand.bio}, is challenging ${nameOf(x.m)}. Early help from a sitting member opens donors' wallets. If they win, you have a friend in the next Congress.`, choices: ["Write a check ($4K)", "Headline a fundraiser for them (6 hours)", "Not this time"] });
+    }
+  }
+}
+function answerMoney(s, m, choice) {
+  const you = memberById[s.youId], target = memberById[m.seat];
+  if (m.kind === "potask") {
+    const amt = [1000, 300, 0][choice] || 0;
+    if (amt && (s.pot || 0) >= amt) { const n = allocate(s, m.seat, amt); Object.assign(s, n); }
+    else if (amt) s.toast = { title: "The fund is short", text: "There isn't enough in the battleground fund. Dues from safe-seat members refill it.", tone: "bad" };
+    else if (target?.p === you.p) s.rel[target.id] = clamp((s.rel[target.id] || 0) - 0.12, -1, 1);
+  }
+  if (m.kind === "fundask") {
+    if (choice === 0 || choice === 1) { const n = giveTo(s, target?.p === you.p ? m.seat : `cand:${m.seat}`, choice === 0 ? "check" : "event"); Object.assign(s, n); }
+    else if (target?.p === you.p) s.rel[target.id] = clamp((s.rel[target.id] || 0) - 0.04, -1, 1);
+  }
+}
+// After the election: candidates you backed who won join Congress remembering it.
+function backersWin(s, m, year) {
+  const c = s.cands?.[m.id]; if (!c || !c.backed || c.p !== m.p) return;
+  m.first = m.sf = c.first; m.last = m.sl = c.last; m.g = c.g; keep(s, m);
+  s.rel[m.id] = clamp(0.35 + Math.min(0.4, c.backed / 2500), -1, 1); s.know[m.id] = 2; s.owedToYou[m.id] = (s.owedToYou[m.id] || 0) + 1;
+  (s.backedWon = s.backedWon || []).push({ id: m.id, name: `${c.first} ${c.last}`, seat: m.seat || `${m.st}-${m.d}`, year });
+}
+
+// ════════ Forcing votes: discharge petitions and privileged resolutions ════════
+// A House majority (218 signatures) can pull a bill out of committee over the Speaker's objection.
+// War Powers and National Emergencies Act resolutions are privileged: any member can force a vote,
+// and in the Senate they need only a simple majority.
+export const PRIVILEGED = { war_powers: "the War Powers Resolution", tariff_repeal: "the National Emergencies Act" };
+const houseMaj = () => (HOUSE.filter((m) => m.p === "D").length >= 218 ? "D" : "R");
+export const canPetition = (s, b) => roleOf(s) === "H" && !b.dead && b.stage === "committee" && b.origin === "H" && !b.discharged && !(s.petitions || []).some((p) => p.bill === b.id && p.status !== "off")
+  && (b.party !== houseMaj() || (!b.marked && b.floorWeek - s.week > 4));
+export const petitionOf = (s, b) => (s.petitions || []).find((p) => p.bill === b.id && p.status !== "off");
+function newPetition(s, b, by) {
+  const p = { id: `pet${s.week}-${(s.petitions || []).length}`, bill: b.id, pid: b.pid, by, sigs: { [by]: 1 }, n: 1, start: s.week, status: "open" };
+  if (b.sponsor !== by) { p.sigs[b.sponsor] = 1; p.n++; }
+  (s.petitions = s.petitions || []).push(p); return p;
+}
+const defyLeaders = (s, hit) => { const you = memberById[s.youId]; if (you.p !== houseMaj()) return; s.loyalty -= hit; for (const l of leadersOf("H", you.p)) s.rel[l.id] = clamp((s.rel[l.id] || 0) - 0.1 * hit, -1, 1); };
+function petitionWeek(s, r) {
+  const maj = houseMaj(), you = memberById[s.youId];
+  // Now and then the minority starts one on something popular.
+  if (r() < 0.035) {
+    const b = s.bills.find((x) => !x.dead && x.stage === "committee" && x.origin === "H" && x.party !== maj && !petitionOf(s, x) && x.sponsor !== s.youId && (billInfo(x.pid, x.party).pop > 0.05 || billInfo(x.pid, x.party).bipartisan));
+    if (b) { const p = newPetition(s, b, b.sponsor); pushNews(s, `${nameOf(memberById[b.sponsor])} files a discharge petition to force a vote on ${byId[b.pid].name} over leadership's objection.`, "event");
+      if (roleOf(s) === "H" && !p.sigs[s.youId]) pushInbox(s, { kind: "petask", pet: p.id, from: `${titleOf(memberById[b.sponsor])} ${nameOf(memberById[b.sponsor])}`, title: `Sign the discharge petition on ${byId[b.pid].name}?`, body: `It needs 218 signatures to force a floor vote the ${maj === "D" ? "Democratic" : "Republican"} majority doesn't want. ${you.p === maj ? "Signing is a public break with your own leadership, and they keep track." : "Every minority signature counts; the hard part is getting majority members to defy their leaders."}`, choices: ["Sign it", "Stay off it"] }); }
+  }
+  for (const p of s.petitions || []) {
+    if (p.status !== "open" && p.status !== "ripe") continue;
+    const b = s.bills.find((x) => x.id === p.bill);
+    if (!b || b.dead || b.stage !== "committee") { p.status = "off"; continue; }
+    if (p.status === "ripe") { if (s.week >= p.ripeAt) { b.discharged = true; b.marked = true; b.floorWeek = s.week; p.status = "done"; b.hist.push(`Discharge petition: ${p.n} signatures.`); pushNews(s, `The discharge petition ripens: ${byId[b.pid].name} comes to the House floor.`, "event"); } continue; }
+    const ctx = billCtx(s, b);
+    for (const m of HOUSE) {
+      if (p.sigs[m.id] || m.id === s.youId) continue;
+      const L = lean(m, b.pid, ctx).p, rr = rng(hash(`${s.seed}:pet:${p.id}:${m.id}:${s.week}`))();
+      const prob = m.p !== maj ? (L > 0.6 ? 0.3 : 0) : L > 0.78 ? 0.05 * (1.3 - m.t.loyalty) + (b.deals[m.id] ? 0.1 : 0) : 0;
+      if (rr < prob) { p.sigs[m.id] = 1; p.n++; }
+    }
+    if (p.n >= 218) {
+      const majSigners = Object.keys(p.sigs).filter((id) => memberById[id]?.p === maj).length, majSeats = HOUSE.filter((m) => m.p === maj).length;
+      if (r() < 0.5 && majSeats - majSigners >= 218) { p.status = "off"; b.hist.push("Leadership turned off the discharge petition with a rule vote."); pushNews(s, `${maj === "D" ? "Democratic" : "Republican"} leaders use a rule vote to turn off the discharge petition on ${byId[b.pid].name}.`, "bad"); continue; }
+      p.status = "ripe"; p.ripeAt = s.week + 2;
+      pushNews(s, `The discharge petition on ${byId[b.pid].name} hits ${p.n} signatures${majSigners ? `, with ${majSigners} from the majority` : ""}. A floor vote is coming whether leaders like it or not.`, "event");
+    }
+  }
+}
