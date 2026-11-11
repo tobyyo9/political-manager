@@ -279,7 +279,7 @@ export const HOURS = 50;
 export const ACTIONS = {
   meet: { label: "Meet a colleague", hours: 6 }, funds: { label: "Call time with donors", hours: 8 }, district: { label: "District events", hours: 8 },
   tv: { label: "Go on TV", hours: 4 }, committee: { label: "Committee work", hours: 8 }, whip: { label: "Whip a member", hours: 5 }, wh: { label: "Lobby the White House", hours: 8 }, cosponsor: { label: "Cosponsor a bill", hours: 2 }, introduce: { label: "Write and introduce a bill", hours: 12 },
-  hold: { label: "Place a hold", hours: 2, role: "S" }, filibuster: { label: "Lead a talking filibuster", hours: 12, role: "S" },
+  hold: { label: "Place a hold", hours: 2, role: "S" }, filibuster: { label: "Lead a talking filibuster", hours: 12, role: "S" }, nuke: { label: "Push to end the filibuster", hours: 6, role: "S" }, probe: { label: "Open an investigation", hours: 10, role: "HS" },
   hearing: { label: "Oversight hearing", hours: 8, role: "HS" }, defend: { label: "Defend a cabinet member", hours: 4, role: "HS" },
   call: { label: "Call a member", hours: 3, role: "P" }, push: { label: "Use the bully pulpit", hours: 4, role: "P" }, threat: { label: "Threaten a veto", hours: 1, role: "P" },
   eo: { label: "Sign an executive order", hours: 6, role: "P" }, rally: { label: "Hold a rally", hours: 8, role: "P" }, fire: { label: "Fire a cabinet member", hours: 4, role: "P" },
@@ -311,6 +311,7 @@ export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom 
   pushInbox(s, { kind: "staff", from: "Your chief of staff", title: "Welcome to the 120th Congress", body: `You have ${HOURS} hours a week. Spend them on colleagues, your district, donors and bills. Votes come to the floor most weeks; I'll flag the ones that matter at home. The election is ${fmtDate(ELECTION_WEEK)}.` });
   govOffer(s, you);
   speakerBallot(s, you);
+  lastTermAsk(s, you);
   return s;
 }
 const R = (s, tag) => rng(hash(`${s.seed}:${tag}:${s.week}:${s.n++}`));
@@ -466,6 +467,22 @@ export function doAction(s0, act, arg = {}) {
     pushNews(s, `${titleOf(you)} ${nameOf(you)} holds the Senate floor for ${hrs} hours against ${byId[b.pid].name}.`, "event");
     s.toast = { title: `${hrs} hours on your feet`, text: "Cable carries it live. Your side rallies; colleagues in your party feel the pressure to hold the line on cloture.", tone: "good" };
   }
+  if (act === "nuke") {
+    if (s.filOff || s.nuke) { s.hours += ACTIONS.nuke.hours; s.toast = { title: "Nothing to push", text: s.filOff ? "The filibuster is already gone." : "The vote is already scheduled.", tone: "" }; return s; }
+    if (you.p !== senMaj()) { s.hours += ACTIONS.nuke.hours; s.toast = { title: "Not your call", text: "Only the majority can change the rules. In the minority, the filibuster is your best friend.", tone: "" }; return s; }
+    if ((you.lead || []).some((t) => /Majority Leader/.test(t)) && !(s.nukeFailed && s.week - s.nukeFailed < 26)) { scheduleNuke(s, "you"); s.toast = { title: "You're going nuclear", text: "The vote is in two weeks. Count your votes.", tone: "good" }; }
+    else { s.filStreak = (s.filStreak || 0) + 1; s.profile = clamp(s.profile + 2, 0, 100); s.baseApproval = clamp(s.baseApproval + 1, 5, 99); pushNews(s, `${nameOf(you)} calls on Senate leaders to end the filibuster.`); s.toast = { title: "You make the case", text: "Floor speech, op-ed, cable hits. Leadership is feeling the pressure.", tone: "good" }; }
+    return s;
+  }
+  if (act === "probe") {
+    const c = s.cab.find((x) => x.id === arg.id);
+    if (!c || c.vacant || c.id === "vp" || you.p === PP || (s.probes || []).some((p) => p.cab === c.id && p.stage !== "done")) { s.hours += ACTIONS.probe.hours; s.toast = { title: "Can't open that one", text: you.p === PP ? "Investigating your own party's administration is career suicide." : "There's already an investigation, or nobody to investigate.", tone: "" }; return s; }
+    openProbe(s, c, s.youId, you.ch); const p = s.probes[s.probes.length - 1];
+    s.profile = clamp(s.profile + 2, 0, 100); s.rapport = clamp(s.rapport - 0.1, -1, 1);
+    pushNews(s, `${nameOf(you)} opens an investigation into ${c.post} ${cabName(c)}.`, "event");
+    s.toast = { title: "Investigation opened", text: p.power ? "Your party runs the chamber, so you can subpoena. First, the document requests." : "You're in the minority: letters, press conferences and a report, but no subpoenas.", tone: "good" };
+    return s;
+  }
   if (act === "hearing" || act === "defend") {
     const c = s.cab.find((x) => x.id === arg.id);
     if (act === "hearing") {
@@ -527,6 +544,9 @@ export function answer(s0, msgId, choice) {
   if (m.kind === "cabstyle" && s.presCareer) answerCab(s, choice);
   if (m.kind === "senapt") answerSenApt(s, m, choice);
   if (m.kind === "govask") answerGov(s, m, choice);
+  if (m.kind === "probedefy") answerProbe(s, m, choice);
+  if (m.kind === "lastterm" && choice === 1) { s.lastTerm = true; newsBoth(s, (real) => `${titleOf(you)} ${nameOf(you, real)} announces this will be ${you.g === "F" ? "her" : "his"} last term.`, "event"); s.toast = { title: "Your last term", text: "No campaign this time. Use the time you have; the clock is now visible to everyone.", tone: "" }; }
+  if (m.kind === "caboffer" && choice === 0 && !s.cabNom) { s.cabNom = { post: m.post, week: s.week + 4 }; newsBoth(s, (real) => `The President nominates ${titleOf(you)} ${nameOf(you, real)} to be ${s.cab.find((c) => c.id === m.post)?.post}.`, "event"); }
   if (m.kind === "spkrun" && choice === 0 && s.spkRace) s.spkRace.you = true;
   if (m.kind === "spkvote") s.spkVote = { choice };
   if (m.kind === "vacate" && choice === 1) s.loyalty -= 3;
@@ -641,6 +661,10 @@ export function advance(s0) {
   vacancyWeek(s, R(s, "vac"));
   speakerWeek(s, R(s, "spk"));
   govWeek(s, R(s, "gov"));
+  rulesWeek(s, R(s, "rules"));
+  probeWeek(s, R(s, "probe"));
+  agingWeek(s, R(s, "age"));
+  cabConfirm(s, R(s, "cabc"));
   foreignWeek(s, R(s, "foreign"));
   wireWeek(s, R(s, "wire"));
   { const rr = R(s, "react"); for (const ev of events.slice(0, 2)) voteReactions(s, ev, rr); }
@@ -648,6 +672,7 @@ export function advance(s0) {
   const rw = s.week - (s.termStart || 0);
   if (roleOf(s) === "P") { if (rw >= ELECTION_WEEK && !s.over) presVerdict(s, r); }
   else if (!upThisTerm(s, you) && !s.runFor) { if (rw >= ELECTION_WEEK && !s.over) termReview(s, r); }
+  else if (s.lastTerm && !s.runFor) { if (rw >= ELECTION_WEEK && !s.over) { electionNight(s); s.over = true; s.result = { kind: "retired", won: true, age: yourAge(s) }; newsBoth(s, (real) => `${titleOf(you)} ${nameOf(you, real)} retires after ${s.career.length + 1} terms in this game, at ${yourAge(s)}.`, "event"); } }
   else { if (rw === PRIMARY_WEEK && s.runFor !== "pres") primary(s, r); if (rw >= ELECTION_WEEK && !s.over) { if (s.runFor === "pres") presGeneral(s, r); else if (s.runFor === "gov") govGeneral(s, r); else if (s.runFor) runHigher(s, r); else general(s, r); } }
   s.events = events;
   return s;
@@ -658,26 +683,30 @@ function floor(s, b) {
   const out = [], first = b.origin === "S" ? "S" : "H", second = first === "H" ? "S" : "H";
   // The majority only schedules what it wants; a minority bill needs real support to reach the floor.
   const ctx = billCtx(s, b);
-  if (b.party === "R" && !b.discharged) {
+  const maj1 = first === "H" ? houseMaj() : senMaj();
+  if (b.party !== maj1 && !b.discharged) {
     const pool = first === "H" ? HOUSE : SENATE, need = first === "H" ? 218 : 51;
     const support = pool.filter((m) => lean(m, b.pid, ctx).p > 0.5).length;
-    if (support < need) { b.dead = true; b.stage = "died"; b.hist.push("Never scheduled: the majority would not bring it up."); pushNews(s, `${p.name} dies in committee. Democratic leaders won't schedule it.`); return out; }
+    if (support < need) { b.dead = true; b.stage = "died"; b.hist.push("Never scheduled: the majority would not bring it up."); pushNews(s, `${p.name} dies in committee. ${maj1 === "D" ? "Democratic" : "Republican"} leaders won't schedule it.`); return out; }
   }
-  if (info.reconcilable && b.party === "D" && !info.mustPass && !s.reconUsed[dateOf(s.week).getUTCFullYear()] && !info.bipartisan) { b.route = "reconciliation"; s.reconUsed[dateOf(s.week).getUTCFullYear()] = b.id; }
+  if (info.reconcilable && b.party === houseMaj() && b.party === senMaj() && !info.mustPass && !s.reconUsed[dateOf(s.week).getUTCFullYear()] && !info.bipartisan) { b.route = "reconciliation"; s.reconUsed[dateOf(s.week).getUTCFullYear()] = b.id; }
   const c2 = billCtx(s, b);
   // Your vote (members only): your choice, or your staff's call if you left it blank.
   const mine = role !== "P" ? lean(you, b.pid, c2) : null;
   const yv = role !== "P" ? b.yourVote ?? mine.L > 0 : null;
   const forced = role !== "P" ? { [s.youId]: yv } : {};
-  const needOf = (ch) => (ch === "H" ? (info.amendment ? NEED.H.amendment : NEED.H.passage) : info.amendment ? NEED.S.amendment : b.route === "reconciliation" || b.privileged ? NEED.S.reconciliation : NEED.S.passage);
+  const needOf = (ch) => (ch === "H" ? (info.amendment ? NEED.H.amendment : NEED.H.passage) : info.amendment ? NEED.S.amendment : b.route === "reconciliation" || b.privileged || s.filOff ? NEED.S.reconciliation : NEED.S.passage);
   const ev = { bill: b.id, pid: b.pid, yourVote: yv, auto: b.yourVote === null, stages: [], first };
   if (role !== "P") cast(s, b, yv, mine);
   for (const ch of [first, second]) {
-    const rc = rollCall(ch, b.pid, c2, forced), need = needOf(ch);
+    let rc = rollCall(ch, b.pid, c2, forced); const need = needOf(ch);
+    // A 50-50 tie on a majority vote: the Vice President breaks it, the way the White House wants.
+    if (ch === "S" && need === 51 && rc.yes === 50 && presView(s, b).score >= 0) { rc = { ...rc, yes: 51, vp: true }; const vpC = s.cab?.find((c) => c.id === "vp"); pushNews(s, `Vice President ${vpC ? cabName(vpC) : ""} breaks a 50-50 tie to pass ${p.name} in the Senate.`, "event"); }
     if (ch === "H") { ev.house = rc; ev.needH = need; } else { ev.senate = rc; ev.needS = need; }
     b.hist.push(ch === "H" ? `House: ${rc.yes}-${rc.no}` : `Senate: ${rc.yes}-${rc.no} (${need} needed)`);
     if (rc.yes < need) {
       b.dead = true; b.stage = "failed"; ev.result = ch === "S" && need === 60 ? "filibustered" : ch === "H" ? "failed-house" : "failed-senate";
+      if (ev.result === "filibustered" && b.party === senMaj() && rc.yes >= 50) s.filStreak = (s.filStreak || 0) + 1;
       pushNews(s, ch === "S" && need === 60 ? `${p.name} is filibustered in the Senate, ${rc.yes}-${rc.no}.${b.fil ? " The talking filibuster held." : ""}` : `${p.name} fails in the ${ch === "H" ? "House" : "Senate"}, ${rc.yes}-${rc.no}.`, "bad");
       out.push(ev); settle(s, b, false); return out;
     }
@@ -759,7 +788,7 @@ function primary(s, r) {
   const you = memberById[s.youId];
   const fit = 1 - Math.min(1, Math.abs(you.x - (you.p === "D" ? -0.42 : 0.52)) * 1.6);
   const gp = groupElection(s, "primary");
-  const strength = s.baseApproval + fit * 8 + Math.min(10, s.cash / 400) - (you.prisk > 0.5 ? 6 : 0) + gp.net - (s.rivals || 0) * 3 - (memberById[s.youId].p === "D" && memberById[s.youId].prisk > 0.4 ? Math.max(0, moneyMix(s).pac - 0.45) * 20 : 0) + (s.pledge ? 3 : 0);
+  const strength = -Math.max(0, yourAge(s) - 75) * 0.8 + s.baseApproval + fit * 8 + Math.min(10, s.cash / 400) - (you.prisk > 0.5 ? 6 : 0) + gp.net - (s.rivals || 0) * 3 - (memberById[s.youId].p === "D" && memberById[s.youId].prisk > 0.4 ? Math.max(0, moneyMix(s).pac - 0.45) * 20 : 0) + (s.pledge ? 3 : 0);
   s.primaryGroups = gp;
   const c = s.pchal, challenged = !!c || strength < 60 || r() < 0.2;
   // Incumbents almost always win primaries; you only lose if your own party's voters have really turned on you, or a real threat shows up.
@@ -1131,7 +1160,7 @@ function vacate(s, c, how) {
     const r = R(s, "bench"), used = new Set(s.noms.map((n) => n.last).concat(s.cab.map((x) => x.last)));
     const picks = BENCH.filter((b) => !used.has(b[1])).sort(() => r() - 0.5).slice(0, 3);
     pushInbox(s, { kind: "nominate", from: `${s.cab.find((x) => x.id === "cos")?.first || "Susie"} ${s.cab.find((x) => x.id === "cos")?.last || "Wiles"}, chief of staff`, title: `Who do you want at ${c.short}?`, post: c.id,
-      body: `The Senate has to confirm whoever you pick, and Democrats run it with ${SENATE.filter((m) => m.p === "D").length} seats. A loyalist is satisfying. A confirmable pick actually gets the job.`,
+      body: `The Senate has to confirm whoever you pick, and ${senMaj() === "D" ? "Democrats" : "Republicans"} run it with ${SENATE.filter((m) => m.p === senMaj()).length} seats. A loyalist is satisfying. A confirmable pick actually gets the job.`,
       picks, choices: picks.map(([f, l, cont]) => `${f} ${l} (${cont > 0.55 ? "a brawl to confirm" : cont > 0.35 ? "a fight" : "confirmable"})`) });
   } else if (c.need) s.vacQ = [...(s.vacQ || []), { post: c.id, week: s.week + 2 }];
 }
@@ -1602,7 +1631,7 @@ export function nextCongress(s0) {
   pushInbox(s, { kind: "lead", from: "Your chief of staff", title: "Leadership elections are this week", comm: myComm?.c || null,
     body: `Your caucus votes on its leaders, and the Steering Committee picks committee posts. You can run for whip, go for the top spot${myComm ? ` on ${myComm.n}` : ""}, or sit it out. Losing a race costs you something with whoever won.`,
     top: true, choices: [you.ch === "H" ? (hMaj === you.p ? "Run for Speaker" : "Run for party leader") : `Run for ${sMaj === you.p ? "Majority" : "Minority"} Leader`, "Run for party whip", myComm ? `Seek the top spot on ${myComm.n}` : "Ask for a better committee", "Sit it out"] });
-  govOffer(s, you); speakerBallot(s, you);
+  govOffer(s, you); speakerBallot(s, you); cabOffer(s, you); lastTermAsk(s, you);
   // A shot at higher office: a Senate seat in your state on the next ballot.
   if (you.ch === "H") { const seat = SENATE.find((m) => m.st === you.st && m.cls === cycleClass(s.term));
     if (seat) pushInbox(s, { kind: "higher", seat: seat.id, from: "Your campaign manager", title: `A Senate seat in ${you.st} is up in ${electionYear(s)}`,
@@ -1929,7 +1958,7 @@ export function projMargin(s) {
   const you = memberById[s.youId], env = you.p === "D" ? s.mood : -s.mood, gg = groupElection(s, "general");
   // Personal popularity matters, but only so much: even a well-liked member in a district that leans the other way rarely wins by double digits.
   const shift = (you.p === "D" ? 1 : -1) * (you.ch === "S" ? (LEAN[you.st] ?? (you.dem - 50) * 2) - (you.dem - 50) * 2 : 0.5 * ((LEAN[you.st] ?? 0) - (REL24[you.st] ?? 0)));   // the 2026 shift in your state
-  return (you.own - 50) * 2 + shift + env * 0.9 + 3 + clamp((s.approval - 50) * 0.3, -8, 5) + Math.min(2, s.cash / 1200) + gg.net * 0.5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2
+  return (you.own - 50) * 2 + shift - Math.max(0, yourAge(s) - 78) * 0.4 + env * 0.9 + 3 + clamp((s.approval - 50) * 0.3, -8, 5) + Math.min(2, s.cash / 1200) + gg.net * 0.5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2
     + campPts(s) - oppPts(s) + (you.p === "D" ? 1 : -1) * aidPts(s, you);
 }
 const OPP_BIO = { strong: ["a state senator with a big donor list", "a former federal prosecutor", "a self-funding businessman", "a decorated combat veteran", "the mayor of the district's biggest city", "a popular local TV anchor"],
@@ -2244,7 +2273,6 @@ function courtSeed(s) {
 const weekOfDate = (s, y, m, d) => Math.round((Date.UTC(y, m, d) - dateOf(0).getTime()) / (7 * 86400000));
 export const onBench = (s) => (s.court?.j || []).filter((j) => !j.gone);
 export function courtMedian(s) { const xs = onBench(s).map((j) => j.x).sort((a, b) => a - b), n = xs.length; return n ? (n % 2 ? xs[(n - 1) / 2] : (xs[n / 2 - 1] + xs[n / 2]) / 2) : 0; }
-const senMaj = () => (SENATE.filter((m) => m.p === "D").length >= 51 ? "D" : "R");
 function newJusticeNom(s, pick, consensus) {
   const [first, last, cont, x, born] = pick, [sf, sl] = swapPair(first, last);
   s.court.nom = { first, last, sf: consensus ? first : sf, sl: consensus ? last : sl, cont, x: PP === "R" ? x : -x, born, g: /a$|i$|e$/.test(first) ? "F" : "M", consensus: !!consensus, hearing: s.week + 4, vote: s.week + 7, by: PP };
@@ -2860,10 +2888,11 @@ const CHAL_BIO = {
   left: [["a 31-year-old tenant organizer with a viral launch video", "jd"], ["a state legislator and DSA member", "dsa"], ["a former Sunrise organizer who now sits on the city council", "sunrise"]],
   center: [["a former prosecutor backed by crypto money", "fairshake"], ["a self-funding health care executive", null], ["a state senator who says you've lost touch with the district", "aipac"]],
   right: [["a combat veteran and talk-radio regular who calls you a RINO", "cfg"], ["a MAGA influencer with a million followers", "tpusa"], ["a state senator with Club money behind him", "cfg"]],
-  estab: [["a former county judge backed by business groups", "uscc"], ["a farm-bureau president running as the grown-up in the room", "afp"]] };
-const CHAL_LINE = { left: "You've gone soft. This district deserves a fighter.", center: "You're out of step with the people who actually live here.", right: "You voted with Democrats when it counted.", estab: "You're more interested in TV than in getting anything done." };
+  estab: [["a former county judge backed by business groups", "uscc"], ["a farm-bureau president running as the grown-up in the room", "afp"]],
+  young: [["a 34-year-old state legislator running on generational change", null], ["a 38-year-old veteran who says it's time to pass the torch", null]] };
+const CHAL_LINE = { young: "You've served long enough. It's time for a new generation.", left: "You've gone soft. This district deserves a fighter.", center: "You're out of step with the people who actually live here.", right: "You voted with Democrats when it counted.", estab: "You're more interested in TV than in getting anything done." };
 function makeChallenger(s, r) {
-  const you = memberById[s.youId], side = you.p === "D" ? (you.x > -0.5 ? "left" : "center") : (you.x < 0.75 ? "right" : "estab");
+  const you = memberById[s.youId], side = yourAge(s) >= 72 && r() < 0.6 ? "young" : you.p === "D" ? (you.x > -0.5 ? "left" : "center") : (you.x < 0.75 ? "right" : "estab");
   const [bio, backer] = CHAL_BIO[side][Math.floor(r() * CHAL_BIO[side].length)], g = /\bhim\b|his\b/.test(bio) ? "M" : r() < 0.5 ? "F" : "M";
   let first = PF[Math.floor(r() * PF.length)]; const last = PL[Math.floor(r() * PL.length)];
   const fit = 1 - Math.min(1, Math.abs(you.x - BASE_X[you.p]) * 1.6), q = clamp(0.2 + r() * 0.4 + (1 - fit) * 0.3 + (55 - s.baseApproval) / 60, 0.1, 0.95);
@@ -3239,6 +3268,145 @@ function govGeneral(s, r) {
   newsBoth(s, (real) => `${nameOf(you, real)} loses the race for governor of ${STATE_NAME[st] || st} to ${pname(res.now, real)}.`, "bad");
   if (upNow(s, you)) { s.over = true; s.result = { kind: "gov", won: false, margin, st }; return; }
   termReview(s, r); s.result.govLost = { margin, winner: pname(res.now, false), winnerR: pname(res.now, true) }; s.runFor = null;
+}
+
+// ════════ Senate rules: the nuclear option and the Vice President's tie-breaking vote ════════
+// The legislative filibuster stands until a majority votes to change the precedent. Institutionalists (senior members,
+// moderates, dealmakers) are the holdouts. In a 50-50 Senate the Vice President breaks ties, so the White House's party
+// organizes the chamber and can go nuclear with exactly 50.
+export const senMaj = () => { const d = SENATE.filter((m) => m.p === "D").length, r = SENATE.filter((m) => m.p === "R").length; return d > r ? "D" : r > d ? "R" : PP; };
+function nukeOdds(m) { return clamp(0.04 + ((m.seniority || 0) > 18 ? 0.18 : 0) + (Math.abs(m.x) < 0.3 ? 0.25 : 0) + (m.t.label === "dealmaker" ? 0.12 : 0), 0, 0.7); }
+function scheduleNuke(s, by) {
+  const maj = senMaj(), you = memberById[s.youId], lead = SENATE.find((m) => m.p === maj && /Majority Leader/.test(m.lead?.[0] || ""));
+  s.nuke = { week: s.week + 2, by };
+  newsBoth(s, (real) => `${lead ? `Senate Majority Leader ${nameOf(lead, real)}` : "The Senate majority"} moves to end the legislative filibuster${s.filStreak ? ` after ${s.filStreak} of the party's bills were blocked` : ""}. The vote is in two weeks.`, "event");
+  if (you?.ch === "S") pushInbox(s, { kind: "nuke", from: you.p === maj ? "Your leader's office" : "Your leader's office", choices: ["Vote to end the filibuster", "Vote to keep it"], title: "The nuclear option",
+    body: you.p === maj ? `Your party wants to pass bills with 51 votes instead of 60. Every vote counts: with ${SENATE.filter((m) => m.p === maj).length} members, a few institutionalists can sink it. Voting no protects the minority's power, which you'll want back someday.` : `The majority wants to end the filibuster. Your side can't stop it alone; the question is how many of theirs get cold feet. Voting yes would be a strange signal from the minority.` });
+}
+function nukeVote(s, r) {
+  const maj = senMaj(), you = memberById[s.youId]; s.nuke = null;
+  const msg = s.inbox.find((m) => m.kind === "nuke" && s.week - m.week <= 4); const yourYes = msg?.done ? msg.choice === 0 : you?.p === maj; if (msg && !msg.done) msg.done = true;
+  let yes = 0; for (const m of SENATE) { if (m.id === s.youId) { if (yourYes) yes++; continue; } if (m.p === maj && r() >= nukeOdds(m)) yes++; }
+  const vp = yes === 50 && PP === maj, ok = yes >= 51 || vp, vpC = s.cab?.find((c) => c.id === "vp");
+  s.filStreak = 0;
+  if (ok) { s.filOff = { since: s.week, by: maj }; newsBoth(s, (real) => `The Senate votes ${yes}${vp ? `-50, with Vice President ${vpC ? cabName(vpC, real) : ""} breaking the tie,` : `-${100 - yes}`} to end the legislative filibuster. Bills now pass with a simple majority.`, "event"); }
+  else { s.nukeFailed = s.week; } if (!ok) newsBoth(s, (real) => `The move to end the filibuster fails, ${yes}-${100 - yes}. ${SENATE.filter((m) => m.p === maj).length - yes} ${maj === "D" ? "Democrats" : "Republicans"} wouldn't go along.`, "event");
+  if (you?.ch === "S") { if (you.p === maj) { if (yourYes) { s.loyalty += 2; s.baseApproval = clamp(s.baseApproval + 1.5, 5, 99); } else { s.loyalty -= 3; s.integrity += 2; s.baseApproval = clamp(s.baseApproval - 2, 5, 99); } } else if (yourYes) { s.loyalty -= 2; s.integrity += 1; } }
+  if (you?.ch === "S" && yourYes !== undefined) s.moments.push({ week: s.week, text: `You voted ${yourYes ? "to end" : "to keep"} the filibuster. It ${ok ? "ended" : "survived"}.` });
+}
+function rulesWeek(s, r) {
+  if (s.filOff) return;
+  if (s.nuke && s.week >= s.nuke.week) return nukeVote(s, r);
+  const maj = senMaj(), n = SENATE.filter((m) => m.p === maj).length, rw = s.week - (s.termStart || 0);
+  // A failed attempt costs leaders a lot; they wait most of a year and a longer list of blocked bills before trying again.
+  const cool = s.nukeFailed && s.week - s.nukeFailed < 40, bar = s.nukeFailed ? 6 : 4;
+  if (!s.nuke && !cool && (s.filStreak || 0) >= bar && n >= 50 && rw < 88 && r() < 0.1) scheduleNuke(s, "leader");
+}
+
+// ════════ A Cabinet offer ════════
+const CAB_FOR = [[/Armed Services/, "defense"], [/Foreign/, "state"], [/Ways and Means|Finance|Banking|Budget/, "treasury"], [/Judiciary/, "ag"], [/Homeland/, "dhs"], [/Energy and Commerce|Health|HELP/, "hhs"],
+  [/Veterans/, "va"], [/Transportation|Commerce, Science/, "dot"], [/Natural Resources|Energy and Natural/, "interior"], [/Education|Labor/, "labor"], [/Intelligence/, "dni"], [/Agriculture|Small Business/, "commerce"]];
+function cabOffer(s, you) {
+  if (!s.newPres || s.newPres.party !== you.p || s.newPres.year !== electionYear({ ...s, term: s.term - 1 }) || s.presRec?.you) return;
+  const r = R(s, "cabofr"), rival = !!s.amb?.pr?.[you.p]?.c.some((c) => c.you);
+  const odds = clamp(0.08 + s.clout / 300 + s.profile / 300 + (you.seniority || 0) * 0.005 + s.loyalty * 0.01 + (rival ? 0.35 : 0), 0.05, 0.65);
+  if (r() >= odds) return;
+  const posts = (you.comm || []).map((c) => CAB_FOR.find(([re]) => re.test(c.n))?.[1]).filter(Boolean);
+  const id = posts[0] || ["commerce", "labor", "hud", "va"][Math.floor(r() * 4)], c = s.cab.find((x) => x.id === id); if (!c) return;
+  inboxBoth(s, { kind: "caboffer", post: id, from: "The President's transition team", choices: [`Accept: ${c.post}`, "Stay in Congress"] }, (real) => ({ title: `The President wants you as ${c.post}`,
+    body: `${pname(PRES_M, real)} is calling. ${rival ? "You ran against each other in the primaries; this is the olive branch. " : ""}The job is ${c.post}. Saying yes means a Senate confirmation fight and giving up your seat${you.ch === "S" ? " (the governor appoints your replacement)" : " (a special election fills it)"}. Saying no keeps you here, with a President who now owes you less.` }));
+}
+function cabConfirm(s, r) {
+  const n = s.cabNom; if (!n || s.week < n.week) return; s.cabNom = null;
+  const you = memberById[s.youId], c = s.cab.find((x) => x.id === n.post);
+  // Your own party votes for you; the other side splits on how much they like you.
+  const v = chamberVote(s, SENATE.filter((m) => m.id !== s.youId), (m) => (m.p === PP ? 0.97 : clamp(0.12 + (s.rel[m.id] || 0) * 0.6 + (s.integrity - 60) / 150 + (you.ch === "S" ? 0.12 : 0), 0, 0.85)), `cab${s.week}`);
+  if (v.yes >= 50) {
+    Object.assign(c, { first: you.first, last: you.last, sf: you.sf, sl: you.sl, born: you.born, tone: you.look?.skin, vacant: false, heat: 0.1, loyal: 0.8, note: "Confirmed from Congress." });
+    s.over = true; s.result = { kind: "cabinet", won: true, post: c.post, yes: v.yes, no: v.no };
+    newsBoth(s, (real) => `The Senate confirms ${nameOf(you, real)} as ${c.post}, ${v.yes}-${v.no}.`, "good");
+  } else { s.clout -= 6; s.toast = { title: "The Senate says no", text: `${v.yes}-${v.no}. You keep your seat, and everyone saw you try to leave it.`, tone: "bad" }; s.approval = clamp(s.approval - 2, 5, 95);
+    newsBoth(s, (real) => `The Senate rejects ${nameOf(you, real)} for ${c.post}, ${v.yes}-${v.no}.`, "bad"); }
+}
+
+// ════════ Getting older ════════
+export const yourAge = (s) => { const y = memberById[s.youId]; return y?.born ? gameYear(s) - y.born : 0; };
+function agingWeek(s, r) {
+  if (roleOf(s) === "P") return;
+  const age = yourAge(s), you = memberById[s.youId];
+  if (age >= 72 && r() < 0.0006 * (age - 70)) {
+    s.hours = Math.max(0, s.hours - 15); s.approval = clamp(s.approval - 1.5, 5, 95); s.healthScares = (s.healthScares || 0) + 1;
+    newsBoth(s, (real) => `${titleOf(you)} ${nameOf(you, real)}, ${age}, takes several days off after a health scare.${s.healthScares > 1 ? " Questions about the future are getting louder." : ""}`, "event");
+    pushInbox(s, { kind: "staff", from: "Your chief of staff", done: true, title: "Take the week", body: `Doctor's orders: fewer hours this week. ${s.healthScares > 1 ? "The press is asking whether you'll run again, and some colleagues are quietly asking too." : "The staff has it covered. The story should pass."}` });
+  }
+  if (age >= 80) s.baseApproval = clamp(s.baseApproval - 0.02 * (age - 79), 5, 99);
+}
+function lastTermAsk(s, you) {
+  const age = (gameYear(s) || 2027) - (you.born || 1970); if (age < 75 || !upNow(s, you)) return;
+  pushInbox(s, { kind: "lastterm", from: "Your family", choices: ["Run again", "Make this my last term"], title: "The question everyone is asking",
+    body: `You're ${age}. ${s.healthScares ? `You've had ${s.healthScares === 1 ? "a health scare" : `${s.healthScares} health scares`}. ` : ""}Your staff, your family and the reporters back home all want to know if you're running again. Announcing now lets your party recruit a successor and lets you finish on your own terms. Running again means a younger challenger will make your age the issue.` });
+}
+
+// ════════ Oversight with teeth: investigations, subpoenas and contempt ════════
+// The party out of the White House investigates it. With a majority in the chamber, a committee can subpoena; without one,
+// it can only write letters and hold press conferences. An administration that stonewalls risks contempt and a court fight.
+const STAGE_NAME = { docs: "Document requests", subpoena: "Subpoena issued", contempt: "Contempt vote", hearing: "Public hearing", report: "Writing the report", done: "Closed" };
+export const probeStage = (p) => STAGE_NAME[p.stage] || p.stage;
+function openProbe(s, c, by, chamber) {
+  (s.probes = s.probes || []).push({ id: `pr${s.week}${c.id}`, cab: c.id, by, ch: chamber, stage: "docs", next: s.week + 3, power: (chamber === "H" ? houseMaj() : senMaj()) !== PP });
+}
+function probeWeek(s, r) {
+  const you = memberById[s.youId], role = roleOf(s);
+  // The opposition's committees open investigations on their own.
+  if (houseMaj() !== PP && r() < 0.05 && (s.probes || []).filter((p) => p.stage !== "done").length < 3) {
+    const c = s.cab.filter((x) => !x.vacant && x.id !== "vp" && !(s.probes || []).some((p) => p.cab === x.id && p.stage !== "done")).sort((a, b) => b.heat - a.heat)[0];
+    const chair = HOUSE.find((m) => m.p !== PP && (m.comm || []).some((k) => /Oversight/.test(k.n) && k.role === "Chair"));
+    if (c) { openProbe(s, c, chair?.id || "comm", "H"); newsBoth(s, (real) => `${chair ? `Oversight Chair ${nameOf(chair, real)}` : "House Oversight"} opens an investigation into ${c.post} ${cabName(c, real)}.`, "event"); }
+  }
+  for (const p of s.probes || []) {
+    if (p.stage === "done" || s.week < p.next) continue;
+    const c = s.cab.find((x) => x.id === p.cab); if (!c || c.vacant) { p.stage = "done"; continue; }
+    const mine = p.by === s.youId, who = (real) => `${c.post} ${cabName(c, real)}`;
+    if (p.stage === "docs") {
+      if (role === "P") { pushInbox(s, { kind: "probedefy", probe: p.id, from: "White House Counsel", choices: ["Hand over the documents", "Claim executive privilege"], title: `Congress wants ${c.short} documents`,
+          body: `House investigators want records from ${who(false)}. Complying feeds their story but ends the fight. Claiming privilege rallies your base and invites a subpoena, a contempt vote and a court case.` }); p.stage = "await"; p.next = s.week + 2; continue; }
+      const stonewall = r() < 0.35 + c.loyal * 0.3;
+      if (!stonewall) { p.stage = "hearing"; p.next = s.week + 3; newsBoth(s, (real) => `The administration turns over documents on ${who(real)} to congressional investigators.`); if (mine) pushScene(s, "hearing", { cab: c.id, mine: true }, `Your investigation's hearing: ${c.post} ${cabName(c)}`, "Committee staff"); }
+      else if (p.power) { p.stage = "subpoena"; p.next = s.week + 3; newsBoth(s, (real) => `The administration refuses to turn over records. Investigators subpoena ${who(real)}.`, "event"); }
+      else { p.stage = "report"; p.next = s.week + 4; newsBoth(s, (real) => `The administration ignores the minority's letters about ${who(real)}. Without subpoena power, all they can do is publish what they have.`); }
+      continue;
+    }
+    if (p.stage === "await") { p.stage = "subpoena"; p.next = s.week + 2; continue; }        // the President never answered: treated as privilege
+    if (p.stage === "subpoena") {
+      if (r() < 0.5 || p.defied) { p.stage = "contempt"; p.next = s.week + 2; newsBoth(s, (real) => `${who(real)} defies a congressional subpoena.`, "event"); }
+      else { p.stage = "hearing"; p.next = s.week + 3; newsBoth(s, (real) => `${who(real)} agrees to testify under subpoena.`); if (mine) pushScene(s, "hearing", { cab: c.id, mine: true }, `Your investigation's hearing: ${c.post} ${cabName(c)}`, "Committee staff"); }
+      continue;
+    }
+    if (p.stage === "contempt") {
+      const ms = p.ch === "H" ? HOUSE : SENATE, opp = PP === "D" ? "R" : "D";
+      const v = chamberVote(s, ms, (m) => (m.p === opp ? 0.96 : 0.03), `cont${p.id}`, you?.ch === p.ch ? { [s.youId]: you.p === opp } : null);
+      const need = Math.floor(ms.length / 2) + 1;
+      if (v.yes >= need) { c.heat = clamp(c.heat + 0.12, 0, 1); s.presHeat = clamp(s.presHeat + 0.03, 0, 1);
+        newsBoth(s, (real) => `The ${p.ch === "H" ? "House" : "Senate"} holds ${who(real)} in contempt of Congress, ${v.yes}-${v.no}. The administration's Justice Department declines to prosecute; the case goes to court.`, "event");
+      }
+      else newsBoth(s, (real) => `A contempt vote against ${who(real)} fails, ${v.yes}-${v.no}.`);
+      p.stage = "report"; p.next = s.week + 4; continue;
+    }
+    if (p.stage === "hearing") { c.heat = clamp(c.heat + 0.06, 0, 1); p.stage = "report"; p.next = s.week + 4; continue; }
+    if (p.stage === "report") {
+      const bump = (p.power ? 0.08 : 0.04) + r() * 0.06; c.heat = clamp(c.heat + bump, 0, 1); p.stage = "done";
+      newsBoth(s, (real) => `${p.power ? "Investigators" : "The committee minority"} release${p.power ? "" : "s"} a report on ${who(real)}${c.heat > 0.7 ? ", and calls for resignation grow" : ""}.`, c.heat > 0.7 ? "event" : "");
+      if (mine) { s.profile = clamp(s.profile + (p.power ? 5 : 3), 0, 100); s.baseApproval = clamp(s.baseApproval + 2, 5, 99); s.rapport = clamp(s.rapport - 0.15, -1, 1); s.legis += 2;
+        s.toast = { title: "Your report is out", text: `It lands on every front page for a day. ${c.short} heat: ${Math.round(c.heat * 100)}.`, tone: "good" }; }
+      if (role === "P") s.presApproval = clamp(s.presApproval - 0.6, 20, 70);
+    }
+  }
+}
+function answerProbe(s, m, choice) {
+  const p = (s.probes || []).find((x) => x.id === m.probe); if (!p) return;
+  const c = s.cab.find((x) => x.id === p.cab);
+  if (choice === 0) { p.stage = "hearing"; p.next = s.week + 3; if (c) c.heat = clamp(c.heat + 0.04, 0, 1); s.toast = { title: "Documents delivered", text: "The story runs, then fades. No subpoena, no contempt fight.", tone: "" }; }
+  else { p.stage = p.power ? "subpoena" : "report"; p.defied = true; p.next = s.week + 2; s.baseApproval = clamp(s.baseApproval + 1, 5, 99); s.presHeat = clamp(s.presHeat + 0.04, 0, 1); s.toast = { title: "Executive privilege", text: p.power ? "Your base cheers. The committee is drafting a subpoena." : "The minority can't do much about it.", tone: "" }; }
 }
 
 // ════════ Your presidency: the oath, the midterms and a second term ════════

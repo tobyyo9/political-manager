@@ -621,3 +621,4 @@ body.pm-desk .pm-start{background:transparent}
 .pm-cal-w{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:9px;font-size:.82em;font-weight:600;color:#fff}
 .pm-cal-w.D{background:#2f62b8}.pm-cal-w.R{background:#c8443a}
 .pm-prim{align-self:start}
+.pm-probe{margin:4px 0;color:#a3281f}.pm-probe b{font-weight:700}

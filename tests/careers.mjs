@@ -182,7 +182,27 @@ for (const seed of [1, 2, 3, 4, 5]) {
 }
 S.resetWorld();
 console.log("Speakers and governors:", govOut.join(" · "), "· multi-ballot Speaker votes", multi, "· motions to vacate", vacates, "· runs for governor", govRuns);console.log("Long careers:", longOut.join(" · "));
-console.log("President:", presOut.map((r) => `${r.kind} ${r.won ? "W" : "L"} ${r.margin ?? ""} appr ${r.approval ?? ""} laws ${r.laws ?? ""} vetoes ${r.vetoes ?? ""}`).join(" · "));
+
+// Cabinet offers, the nuclear option, investigations and getting older.
+let offers = 0, confirmed = 0, retiredN = 0, nukeVotes = 0, probesDone = 0;
+for (const q of ["Murphy CT", "Sanders VT", "Waters CA", "Raskin MD", "Schiff CA"]) for (let seed = 1; seed <= 2; seed++) {
+  S.resetWorld(); const y = S.MEMBERS.find((m) => `${m.last} ${m.st}` === q); let s = S.newCareer(y.id, seed), guard = 0, terms = 0;
+  try {
+    while (guard++ < 900) {
+      for (const m of s.inbox.filter((x) => !x.done && x.choices).slice(0, 5)) { if (m.kind === "caboffer") offers++; s = S.answer(s, m.id, m.kind === "foreign" ? 1 : m.kind === "lastterm" ? seed % 2 : m.kind === "nuke" ? seed % 2 : 0); }
+      if (s.week % 11 === 0) { const c = s.cab.find((x) => !x.vacant && x.id !== "vp"); if (c && S.can(s, "probe")) s = S.doAction(s, "probe", { id: c.id }); if (S.can(s, "nuke")) s = S.doAction(s, "nuke"); }
+      for (const m of s.inbox.filter((x) => !x.done && x.kind === "scene")) s = S.finishScene(s, m.id, { score: 1, headline: "A scene" });
+      s = S.advance(s);
+      nukeVotes += s.news.filter((n) => n.week === s.week && /filibuster fails|end the legislative filibuster\. Bills/.test(n.text)).length;
+      if (s.over) { if (s.result.kind === "cabinet") confirmed++; if (s.result.kind === "retired") retiredN++; if (S.canContinue(s) && terms < 3) { s = S.nextCongress(s); terms++; } else break; }
+    }
+    probesDone += (s.probes || []).filter((p) => p.stage === "done").length; n++;
+  } catch (e) { fail++; console.log("FAIL rules/oversight/aging", q, seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
+}
+S.resetWorld();
+if (!probesDone) { fail++; console.log("FAIL oversight: no investigation ever finished"); }
+if (!retiredN) { fail++; console.log("FAIL aging: nobody retired on their own terms"); }
+console.log("Rules, oversight, aging:", { offers, confirmed, retired: retiredN, nukeVotes, probesDone });console.log("President:", presOut.map((r) => `${r.kind} ${r.won ? "W" : "L"} ${r.margin ?? ""} appr ${r.approval ?? ""} laws ${r.laws ?? ""} vetoes ${r.vetoes ?? ""}`).join(" · "));
 const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});
 for (const [k, rs] of Object.entries(by((r) => `${r.seat} ${r.p} own ${r.own} · ${r.style}`)))
   console.log(k.padEnd(34), "won", rs.filter((r) => r.won).length + "/" + rs.length, "avg margin", (rs.reduce((a, r) => a + r.margin, 0) / rs.length).toFixed(1), "laws", (rs.reduce((a, r) => a + r.laws, 0) / rs.length).toFixed(1), "ended by", [...new Set(rs.map((r) => r.kind))].join("/"));

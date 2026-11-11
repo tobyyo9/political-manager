@@ -283,10 +283,12 @@ export function Cabinet({ s, real, act, role, you }) {
           <article key={c.id} className={`pm-cab ${c.vacant ? "vacant" : ""} ${c.heat >= 0.7 ? "hot" : ""}`}>
             <header>{c.vacant ? <span className="pm-cab-empty">?</span> : <Face m={cabFace(c)} size={52} />}<div><small>{c.post}</small><strong>{c.vacant ? "Vacant (acting)" : S.cabName(c, real)}</strong></div></header>
             {!c.vacant && <div className="pm-heat" title="Scandal heat"><span>Heat</span><i><b style={{ width: `${c.heat * 100}%`, background: c.heat >= 0.7 ? "#c8443a" : c.heat >= 0.45 ? "#e0a94a" : "#2fbf71" }} /></i><em>{Math.round(c.heat * 100)}</em></div>}
+            {(() => { const pr = (s.probes || []).find((x) => x.cab === c.id && x.stage !== "done"); return pr ? <p className="pm-probe small"><b>Under investigation</b> · {S.probeStage(pr)}{pr.by === s.youId ? " · yours" : ""}{!pr.power ? " · minority, no subpoenas" : ""}</p> : null; })()}
             {!c.vacant && <p className="small muted">{c.note}{c.area?.length ? ` Fights over: ${c.area.slice(0, 3).map((id) => S.byId[id]?.name).filter(Boolean).join(", ")}.` : ""}</p>}
             <div className="bill-actions">
               {!c.vacant && role === "P" && c.id !== "vp" && <button type="button" className="ghost danger" disabled={!S.can(s, "fire")} onClick={() => act("fire", { id: c.id })}>Fire (4h)</button>}
               {!c.vacant && role !== "P" && rival && c.id !== "vp" && <button type="button" className="ghost" disabled={!S.can(s, "hearing")} onClick={() => act("hearing", { id: c.id })}>Oversight hearing (8h)</button>}
+              {!c.vacant && role !== "P" && rival && c.id !== "vp" && !(s.probes || []).some((x) => x.cab === c.id && x.stage !== "done") && <button type="button" className="ghost" disabled={!S.can(s, "probe")} onClick={() => act("probe", { id: c.id })}>Open an investigation (10h)</button>}
               {!c.vacant && role !== "P" && !rival && <button type="button" className="ghost" disabled={!S.can(s, "defend")} onClick={() => act("defend", { id: c.id })}>Defend on TV (4h)</button>}
             </div>
           </article>
