@@ -54,7 +54,7 @@ export function Capitol({ s, real, setCard }) {
 
       {view === "leaders" && (
         <section className="pm-pyramid">
-          <div className="pm-pyr-head"><span className="avatar rep">DT</span><div><strong>The President</strong><small>{ch === "H" ? "Leads the Republican Party from the White House" : "Signs or vetoes everything both chambers pass"}</small></div></div>
+          <div className="pm-pyr-head"><Face m={S.PRES_M} size={40} /><div><strong>The President</strong><small>{ch === "H" ? `Leads the ${S.presParty() === "R" ? "Republican" : "Democratic"} Party from the White House` : "Signs or vetoes everything both chambers pass"}</small></div></div>
           {[["Party leaders", L.top, "lvl0"], [p === "D" ? "Committee chairs" : "Ranking members", L.chairs, "lvl1"], ["Most influential members", L.influential, "lvl2"]].map(([title, list, cls]) => list.length > 0 && (
             <div key={title} className={`pm-tier ${cls}`}>
               <div className="pm-tier-band">{title}</div>
@@ -140,7 +140,7 @@ export function Network({ s, real, setCard }) {
 }
 
 // ── Your office: your attributes and your staff ──
-export function Office({ s, real }) {
+export function Office({ s, real, act }) {
   const you = S.memberById[s.youId], a = S.yourAttrs(s);
   return (
     <div className="pm-two">
@@ -158,11 +158,13 @@ export function Office({ s, real }) {
         <h2 className="pm-h">Your staff</h2>
         {s.staff.map((x) => (
           <article key={x.id} className="panel pm-staff">
-            <Portrait id={x.id + s.seed} g={x.first.match(/a$|e$|y$|ine$|Ines|Joy|Grace/) ? "F" : "M"} born={2027 - 26 - x.exp} p="N" size={56} />
+            <Portrait id={x.id + s.seed + x.name} g={x.first.match(/a$|e$|y$|ine$|Ines|Joy|Grace/) ? "F" : "M"} born={2027 - 26 - x.exp} p="N" size={56} />
             <div><strong>{x.name}</strong><small>{x.title} · {x.exp} years in politics</small><p className="small muted">{x.note}</p>
-              <div className="pm-attrs mini"><div className="pm-attr"><span>Skill</span><b className={tint(x.skill)}>{x.skill}</b></div><div className="pm-attr"><span>Loyalty</span><b className={tint(x.loyalty)}>{x.loyalty}</b></div></div></div>
+              <div className="pm-attrs mini"><div className="pm-attr"><span>Skill</span><b className={tint(x.skill)}>{x.skill}</b></div><div className="pm-attr"><span>Loyalty</span><b className={tint(x.loyalty)}>{x.loyalty}</b></div></div>
+              {x.skill < 20 && S.roleOf(s) !== "P" && <button type="button" className="ghost pm-hire" disabled={!S.can(s, "hire") || s.cash < S.hireCost(x)} onClick={() => act("hire", { role: x.role })}>Replace with a better hire (${S.hireCost(x)}K, 4h)</button>}</div>
           </article>
         ))}
+        {(s.career || []).length > 0 && <section className="panel"><h3>Your career</h3><ul className="pm-cab-pending">{s.career.map((c) => <li key={c.congress}><span className="pill">{S.ord(c.congress)} Congress</span> {c.kind === "higher" ? `Won a Senate seat in ${c.year}` : c.kind === "term" ? "Finished the term" : `Reelected in ${c.year} by ${c.margin} points`} · {c.laws} of your bills became law</li>)}</ul></section>}
         <p className="muted small">Your legislative director's skill sets how accurate your whip counts are; your pollster's sets the margin of error on your polls.</p>
       </aside>
     </div>
@@ -191,11 +193,11 @@ export function WhiteHouse({ s, act }) {
     <div className="pm-two">
       <section className="stack">
         <section className="pm-wh-hero">
-          <span className="avatar rep pm-wh-av">DT</span>
+          <span className="pm-wh-av"><Face m={S.PRES_M} size={72} /></span>
           <div><span className="rc-live"><i className="live-dot" /> The White House</span><h2>The President</h2>
             <p>Approval <b>{Math.round(s.presApproval)}%</b> · Your rapport: <b>{S.RAPPORT(s.rapport || 0)}</b> · Executive orders this term: <b>{s.eo || 0}</b></p></div>
         </section>
-        <h2 className="pm-h">What he's saying</h2>
+        <h2 className="pm-h">What the President is saying</h2>
         <ul className="pm-wh-feed">{(s.pres || []).map((x, i) => <li key={i} className={x.text.startsWith("REVERSAL") ? "flip" : x.text.startsWith("EXECUTIVE") ? "eo" : ""}><small>{S.fmtDate(x.week)}</small>{x.text}</li>)}</ul>
         {!(s.pres || []).length && <p className="muted">Nothing yet. He'll weigh in on every bill, sooner or later.</p>}
       </section>
@@ -220,7 +222,7 @@ const FEMALE = new Set(["Susie", "Brooke", "Linda", "Pam", "Jeanine", "Kari"]);
 const cabFace = (c) => ({ id: "cab" + c.last, g: FEMALE.has(c.first) ? "F" : "M", born: c.born || 1970, p: "R", look: c.tone !== undefined ? { skin: c.tone } : undefined });
 export function Cabinet({ s, real, act, role, you }) {
   const [eoQ, setEoQ] = useState("");
-  const P = S.PRES_M, rival = role !== "P" && you.p === "D";
+  const P = S.PRES_M, rival = role !== "P" && you.p !== S.presParty();
   const imps = (s.imp || []).filter((i) => !i.done), noms = (s.noms || []).filter((n) => !n.done);
   const orders = role === "P" ? S.POLICIES.filter((p) => (S.PRESIDENT_STANCE[p.id] || 0) > 0.3 && !s.laws.includes(p.id) && !(s.eos || []).some((e) => e.pid === p.id) && p.name.toLowerCase().includes(eoQ.toLowerCase())).slice(0, 10) : [];
   return (

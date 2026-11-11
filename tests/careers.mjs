@@ -57,6 +57,23 @@ for (let seed = 1; seed <= 8; seed++) {
     presOut.push(s.result); n++;
   } catch (e) { fail++; console.log("FAIL president", seed, "week", s.week, e.stack.split("\n").slice(0, 3).join(" | ")); }
 }
+// Long careers: keep winning and keep going, through 2034.
+const longOut = [];
+for (const [id, seed] of [[S.HOUSE.filter((m) => m.p === "D").sort((a, b) => b.own - a.own)[0].id, 1], [S.HOUSE.filter((m) => m.p === "R").sort((a, b) => b.own - a.own)[0].id, 2], [S.SENATE.find((m) => m.cls === 1).id, 3], [S.HOUSE.find((m) => m.p === "D" && m.st === "GA").id, 4]]) {
+  let s = S.newCareer(id, seed), guard = 0, terms = 1;
+  try {
+    while (guard++ < 900) {
+      for (const m of s.inbox.filter((x) => !x.done && x.kind !== "staff")) s = S.answer(s, m.id, m.kind === "higher" ? (seed === 4 ? 0 : 1) : 0);
+      if (S.can(s, "district")) s = S.doAction(s, "district");
+      if (S.can(s, "funds")) s = S.doAction(s, "funds");
+      s = S.advance(s);
+      if (s.over) { if (S.canContinue(s) && terms < 4) { s = S.nextCongress(s); terms++; } else break; }
+    }
+    if (!s.over) throw new Error("long career never ended");
+    longOut.push(`${S.memberById[s.youId].seat} terms ${terms} ${s.result.kind} ${s.result.won ? "W" : "L"} pp ${S.presParty()} H-D ${S.HOUSE.filter((m) => m.p === "D").length} S-D ${S.SENATE.filter((m) => m.p === "D").length} lead ${S.memberById[s.youId].lead?.[0] || "-"}`); n++;
+  } catch (e) { fail++; console.log("FAIL long", id, seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
+}
+console.log("Long careers:", longOut.join(" · "));
 console.log("President:", presOut.map((r) => `${r.kind} ${r.won ? "W" : "L"} ${r.margin ?? ""} appr ${r.approval ?? ""} laws ${r.laws ?? ""} vetoes ${r.vetoes ?? ""}`).join(" · "));
 const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});
 for (const [k, rs] of Object.entries(by((r) => `${r.seat} ${r.p} own ${r.own} · ${r.style}`)))

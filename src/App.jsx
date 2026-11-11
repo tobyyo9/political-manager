@@ -7,7 +7,7 @@ import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet } from "./Pa
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
-const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.s?.custom) S.applyCustom(v.s.custom); return v; } catch { return null; } };
+const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.s) S.restore(v.s); if (v?.s?.custom) S.applyCustom(v.s.custom); return v; } catch { return null; } };
 const save = (v) => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* storage may be unavailable */ } };
 const ini = (m, real) => (real ? m.first[0] + m.last[0] : m.sf[0] + m.sl[0]).toUpperCase();
 const pc = (p) => (p === "D" ? "dem" : "rep");
@@ -47,10 +47,10 @@ export default function App() {
       <header className="pm-top">
         <div className="pm-id">
           <Face m={you} size={48} ring="#ffcf5a" />
-          <div><strong>{S.titleOf(you)} {S.nameOf(you, real)}</strong><small>{role === "P" ? `Republican · second term · can't run again` : `${you.p === "D" ? "Democrat" : "Republican"} · ${role === "S" ? `Senator from ${you.st}${S.upIn2028(you) ? " · up in 2028" : ` · up in ${you.cls === 1 ? 2030 : 2032}`}` : you.seat} · ${you.faction}`}</small></div>
+          <div><strong>{S.titleOf(you)} {S.nameOf(you, real)}</strong><small>{role === "P" ? `Republican · second term · can't run again` : `${you.p === "D" ? "Democrat" : "Republican"} · ${role === "S" ? `Senator from ${you.st}${S.upThisTerm(s, you) ? ` · up in ${S.electionYear(s)}` : ""}` : you.seat} · ${you.faction}`}</small></div>
         </div>
         <div className="pm-meters">
-          <Meter label="Week" value={`${Math.min(s.week + 1, S.WEEKS)} / ${S.WEEKS}`} sub={S.fmtDate(s.week)} />
+          <Meter label={s.term > 1 ? `${S.ord(119 + s.term)} Congress` : "Week"} value={`${Math.min(s.week - (s.termStart || 0) + 1, S.WEEKS)} / ${S.WEEKS}`} sub={S.fmtDate(s.week)} />
           <Meter label="Hours left" value={s.hours} sub={`of ${S.HOURS}`} />
           {role === "P" ? <>
             <Meter label="Approval" value={`${Math.round(s.presApproval)}%`} tone={s.presApproval >= 42 ? "ok" : "no"} />
@@ -75,7 +75,7 @@ export default function App() {
         <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) setS(null); }}>New career</button>
       </nav>
       <main className="pm-main">
-        {s.over ? (role === "P" || s.result?.kind === "term" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
+        {s.over ? (role === "P" || s.result?.kind === "term" || s.result?.kind === "higher" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
         {tab === "inbox" && <Inbox {...ctx} />}
         {tab === "floor" && <Bills {...ctx} />}
         {tab === "chamber" && <ChamberTab {...ctx} />}
@@ -375,7 +375,7 @@ function Bills({ s, setS, act, setBillOpen, setCard, real, role, you, decide }) 
             <p className="muted small pm-origin">{b.origin === "S" ? "Starts in the Senate, then the House." : "Starts in the House, then the Senate."} Count shown: {ch === "S" ? `the Senate (${b.route === "reconciliation" ? "51 under reconciliation" : "60 to end a filibuster"})` : "the House"}.{b.holds ? ` · ${b.holds} hold${b.holds > 1 ? "s" : ""}` : ""}{b.fil ? " · under a talking filibuster" : ""}{b.threat ? " · veto threatened" : ""}</p>
             <CountBar c={c} need={ch === "S" ? (b.route === "reconciliation" ? 51 : 60) : 218} total={ch === "S" ? 100 : 434} />
             {(() => { const said = (s.pres || []).find((x) => x.pid === b.pid); return said ? <blockquote className="pm-said">{said.text}</blockquote> : null; })()}
-            {(() => { const pv = S.presView(s, b); return <p className="small pm-pres"><span className="avatar rep sm">DT</span> {role === "P" ? "Your instinct" : "The President"}: <strong className={pv.signs ? "ok" : "no"}>{pv.signs ? "likely signs" : pv.gap > -0.15 ? "leaning veto, movable" : "likely veto"}</strong>{pv.firm ? " · firm views on this" : ""}{b.wh ? ` · your lobbying ${b.wh > 0 ? "helped" : "hurt"}` : ""}</p>; })()}
+            {(() => { const pv = S.presView(s, b); return <p className="small pm-pres"><Face m={S.PRES_M} size={26} /> {role === "P" ? "Your instinct" : "The President"}: <strong className={pv.signs ? "ok" : "no"}>{pv.signs ? "likely signs" : pv.gap > -0.15 ? "leaning veto, movable" : "likely veto"}</strong>{pv.firm ? " · firm views on this" : ""}{b.wh ? ` · your lobbying ${b.wh > 0 ? "helped" : "hurt"}` : ""}</p>; })()}
             <div className="bill-actions">
               <button type="button" className="ghost" onClick={() => setBillOpen(b.id)}>Whip board →</button>
               {role !== "P" && <button type="button" className="ghost" disabled={!S.can(s, "wh")} onClick={() => act("wh", { bill: b.id })}>Lobby the White House (8 hours)</button>}
@@ -512,7 +512,7 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
       <div className="modal pm-card" role="dialog" aria-modal="true" aria-label={S.nameOf(m, real)} onClick={(e) => e.stopPropagation()}>
         <div className={`pm-cardtop ${pc(m.p)}`}>
           <Face m={m} size={84} />
-          <div><h2>{S.titleOf(m)} {S.nameOf(m, real)}</h2><p>{m.p === "D" ? "Democrat" : "Republican"} · {m.seat} · in office since {m.since}{m.placeholder ? " · placeholder: this seat's real 2026 winner isn't in the data yet" : m.uncalled ? " · newcomer · race not yet called, leading" : m.new || m.gen ? " · newcomer" : ""}{m.flip ? " · flipped the seat" : ""}</p>{m.lead?.[0] && <span className="cast-trait">{m.lead[0]}</span>}</div>
+          <div><h2>{S.titleOf(m)} {S.nameOf(m, real)}</h2><p>{m.p === "D" ? "Democrat" : "Republican"} · {m.seat} · in office since {m.since}{m.fictional ? ` · fictional: won this seat in ${m.since - 1}` : m.placeholder ? " · placeholder: this seat's real 2026 winner isn't in the data yet" : m.uncalled ? " · newcomer · race not yet called, leading" : m.new || m.gen ? " · newcomer" : ""}{m.flip ? " · flipped the seat" : ""}</p>{m.lead?.[0] && <span className="cast-trait">{m.lead[0]}</span>}</div>
         </div>
         <div className="modal-body">
           <dl className="pm-facts">
@@ -568,8 +568,8 @@ function YourSeat({ s, you, real, setCard }) {
         <section className="panel">
           <h3>Reelection outlook</h3>
           <dl className="pm-facts">
-            <div><dt>Primary ({S.fmtDate(S.PRIMARY_WEEK)})</dt><dd>{s.primary ? (s.primary.challenged ? `Won with ${s.primary.share}%` : "Unopposed") : primary}</dd></div>
-            <div><dt>General ({S.fmtDate(S.ELECTION_WEEK)})</dt><dd className={outlook > 0 ? "ok" : "no"}>{outlook > 4 ? "Favored" : outlook > 0 ? "Leaning your way" : outlook > -4 ? "Leaning against you" : "In serious trouble"} ({outlook > 0 ? "+" : ""}{outlook.toFixed(0)})</dd></div>
+            <div><dt>Primary ({S.fmtDate((s.termStart || 0) + S.PRIMARY_WEEK)})</dt><dd>{s.primary ? (s.primary.challenged ? `Won with ${s.primary.share}%` : "Unopposed") : primary}</dd></div>
+            <div><dt>General ({S.fmtDate((s.termStart || 0) + S.ELECTION_WEEK)})</dt><dd className={outlook > 0 ? "ok" : "no"}>{outlook > 4 ? "Favored" : outlook > 0 ? "Leaning your way" : outlook > -4 ? "Leaning against you" : "In serious trouble"} ({outlook > 0 ? "+" : ""}{outlook.toFixed(0)})</dd></div>
             <div><dt>National mood</dt><dd>{s.mood >= 0 ? `Democrats +${s.mood.toFixed(1)}` : `Republicans +${(-s.mood).toFixed(1)}`} vs. 2024</dd></div>
             <div><dt>President's approval</dt><dd>{Math.round(s.presApproval)}%</dd></div>
           </dl>
@@ -637,7 +637,7 @@ function End({ s, you, real, setS }) {
   const against = s.votesCast.filter((v) => v.d < -0.5).length;
   return (
     <section className={`desk pm-end ${won ? "won" : "lost"}`}>
-      <span className="rc-live"><i className="live-dot" /> {r.kind === "primary" ? "Primary night" : "Election night · November 7, 2028"}</span>
+      <span className="rc-live"><i className="live-dot" /> {r.kind === "primary" ? "Primary night" : `Election night · November ${S.electionYear(s)}`}</span>
       <div className="desk-verdict">
         <span className="rc-stamp">{r.kind === "primary" ? "DEFEATED IN THE PRIMARY" : won ? "REELECTED" : "DEFEATED"}</span>
         <p>{r.kind === "primary" ? `Your own party's voters chose someone else. You took ${r.share}%.` : `${S.nameOf(you, real)} ${won ? "wins" : "loses"} ${you.seat} by ${Math.abs(r.margin)} points. The national mood ran ${r.env >= 0 ? "with" : "against"} your party by ${Math.abs(r.env)}. Democrats will hold ${r.houseD} House seats.`}</p>
@@ -654,18 +654,18 @@ function End({ s, you, real, setS }) {
         <h3>How it happened</h3>
         <ul>{S.afterAction(s).map((l, i) => <li key={i}>{l}</li>)}</ul>
       </div>
-      <div className="rc-actions"><button type="button" className="cold-go" onClick={() => setS(null)}>Start a new career →</button></div>
+      <ContinueBar s={s} setS={setS} />
     </section>
   );
 }
 
 function EndOther({ s, you, real, setS, role }) {
   const r = s.result;
-  const stamp = r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
-  const line = r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
+  const stamp = r.kind === "higher" ? (r.won ? "ELECTED TO THE SENATE" : "THE SENATE RUN FAILS") : r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
+  const line = r.kind === "higher" ? (r.won ? `You win statewide by ${Math.abs(r.margin)} points. You'll be sworn in as a senator.` : `You lose statewide by ${Math.abs(r.margin)} points, and you gave up your House seat to run.`) : r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
   return (
     <section className={`desk pm-end ${r.won ? "won" : "lost"}`}>
-      <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? "January 3, 2029" : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>
+      <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? `January 3, ${S.electionYear(s) + 1}` : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>
       <div className="desk-verdict"><span className="rc-stamp">{stamp}</span><p>{line}</p></div>
       <div className="grades">
         {role === "P" ? <>
@@ -682,8 +682,16 @@ function EndOther({ s, you, real, setS, role }) {
           <div className="grade"><b>{Math.round(s.baseApproval)}%</b><span>Your base</span></div>
         </>}
       </div>
-      <div className="rc-actions"><button type="button" className="cold-go" onClick={() => setS(null)}>Start a new career →</button></div>
+      <ContinueBar s={s} setS={setS} />
     </section>
+  );
+}
+function ContinueBar({ s, setS }) {
+  return (
+    <div className="rc-actions">
+      {S.canContinue(s) && <button type="button" className="cold-go" onClick={() => { setS(S.nextCongress(s)); window.scrollTo(0, 0); }}>Serve in the {S.ord(120 + s.term)} Congress →</button>}
+      <button type="button" className={S.canContinue(s) ? "ghost" : "cold-go"} onClick={() => setS(null)}>{S.canContinue(s) ? "Retire and start over" : "Start a new career →"}</button>
+    </div>
   );
 }
 
