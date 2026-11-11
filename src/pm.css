@@ -383,3 +383,6 @@ button.danger{color:#c8443a;border-color:#e8a093}
 .pm-react i.up{background:#12351fee;color:#9be27b}.pm-react i.down{background:#3a1717ee;color:#f0a9a0}
 @keyframes reactrise{0%{opacity:0;transform:translateY(16px)}12%{opacity:1;transform:translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateY(-18px)}}
 @media (prefers-reduced-motion: reduce){.sc-person.talking .portrait{animation:none}}
+.pm-money{display:flex;flex-direction:column;gap:6px;margin:4px 0}
+.pm-money-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:#e6e9ef}.pm-money-bar i{display:block;height:100%}
+.pm-money-key{display:flex;flex-wrap:wrap;gap:10px;font-size:12px}.pm-money-key span{display:inline-flex;gap:5px;align-items:center}.pm-money-key i{width:9px;height:9px;border-radius:2px;display:inline-block}

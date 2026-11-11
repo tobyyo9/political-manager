@@ -78,12 +78,12 @@ export const FACTION_NOTE = {
   "Freedom Caucus": "The House Freedom Caucus, the hard right. Will sink its own party's bills over spending or process.",
   "Republican Study Committee": "The conservative mainstream and the biggest Republican bloc. Membership here is estimated from voting records.",
   "Main Street Caucus": "Governing-wing Republicans, many from competitive seats, who want bills to pass. Membership here is estimated from voting records.",
-  "Progressives": "The most liberal Senate Democrats by voting record.",
-  "Mainstream Democrats": "The middle of the Senate Democrats; follows leadership.",
-  "Moderate Democrats": "The least liberal Senate Democrats, many from purple states.",
-  "Hard-right conservatives": "The most conservative Senate Republicans.",
-  "Mainstream Republicans": "The bulk of the Senate Republican conference.",
-  "Governing-wing Republicans": "The least conservative Senate Republicans, often deal-makers.",
+  "Progressive wing": "Senate Democrats aligned with Sanders and Warren: Medicare for All, taxes on the rich, skeptical of corporate money. An informal wing; the Senate has no formal ideological caucuses.",
+  "Senate Democrats": "The bulk of the Democratic caucus. Follows the leader on most votes.",
+  "Moderate Democrats": "Democrats from purple and red states who cut deals and break with the party on taxes, energy and the border. An informal grouping.",
+  "MAGA wing": "Republicans closest to the President, or to his base: hard on the border, skeptical of foreign aid, ready to fight. An informal wing.",
+  "Senate Republicans": "The bulk of the Republican conference. Follows the leader on most votes.",
+  "Institutionalists": "Republicans who defend the Senate's rules and norms, work across the aisle on spending, and sometimes cross the President."
 };
 // Real caucus rosters (House). Matched by last name and state; seats not on a roster are placed by voting record and flagged estimated.
 const normN = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/-/g, " ").trim();
@@ -91,6 +91,13 @@ const ROSTER = {};
 for (const k of ["Progressive Caucus", "Freedom Caucus", "Blue Dog Coalition"]) ROSTER[k] = CAUCUS[k].split(";").map((e) => e.split(","));
 const onRoster = (m, k) => !m.placeholder && !m.custom && ROSTER[k].some(([l, st]) => st === m.st && (normN(m.last) === normN(l) || normN(m.last).endsWith(normN(l)) || normN(l).endsWith(normN(m.last))));
 export const CAUCUS_CHAIR = CAUCUS.chairs;
+// The Senate has no formal caucuses like the House. Well-known members are placed in the informal wing the press uses for them; everyone else is mainstream.
+const WINGS = { "Progressive wing": "Sanders VT,Warren MA,Markey MA,Merkley OR,Van Hollen MD,Welch VT,El-Sayed MI,Flanagan MN,Jackson ME",
+  "Moderate Democrats": "Fetterman PA,Cortez Masto NV,Rosen NV,Hassan NH,Kelly AZ,Coons DE,Warner VA,Kaine VA,King ME,Hickenlooper CO,Bennet CO,Pappas NH,Cooper NC,Peltola AK,Colom MS,Turek IA,Hamilton KS,Andrews SC,Slotkin MI",
+  "MAGA wing": "Lee UT,Johnson WI,Scott FL,Blackburn TN,Moreno OH,Banks IN,Schmitt MO,Moore AL,Cruz TX,Hawley MO,Hagerty TN,Lummis WY,Sheehy MT,Paul KY",
+  "Institutionalists": "Murkowski AK,Grassley IA,Capito WV,Young IN,Cassidy LA,Moran KS,Curtis UT,Rounds SD,Boozman AR,Wicker MS,Thune SD" };
+const WING_OF = {}; for (const [w, list] of Object.entries(WINGS)) for (const e of list.split(",")) WING_OF[e] = w;
+function senateWings(ms) { for (const m of ms) if (m.ch === "S") { const w = WING_OF[`${m.last} ${m.st}`]; m.faction = w || (m.p === "D" ? "Senate Democrats" : "Senate Republicans"); m.cauEst = !w; m.caucus = [m.faction]; } }
 function houseCaucus(ms) {
   const H = ms.filter((m) => m.ch === "H");
   for (const m of H) { m.caucus = []; m.cauEst = false; }
@@ -119,8 +126,31 @@ function buildMembers() {
     for (const m of ms) if (m.ch === ch) m.faction = factionOf(m, q);
   }
   houseCaucus(ms);
+  senateWings(ms);
+  for (const m of ms) m.fund = fundOf(m);
   for (const m of ms) derive(m);
   return ms;
+}
+// Where a member's money comes from (estimated from role, ideology and committees; a few known pledges are set by hand).
+const NO_CORP_PAC = new Set(["Sanders VT", "Warren MA", "Ocasio-Cortez NY", "Tlaib MI", "Pressley MA", "Omar MN", "Khanna CA", "Jayapal WA", "Casar TX", "Hawley MO"]);
+const MONEY_COMM = { HSWM: ["chamber", "pharma"], HSBA: ["chamber"], HSIF: ["pharma", "tech", "energy"], HSAP: ["defense", "chamber"], HSAS: ["defense"], HSAG: ["chamber"], HSPW: ["chamber"],
+  SSFI: ["chamber", "pharma"], SSBK: ["chamber"], SSCM: ["tech"], SSAP: ["defense", "chamber"], SSAS: ["defense"], SSHR: ["pharma"], SSEG: ["energy"] };
+const ENERGY_ST = new Set(["TX", "OK", "WV", "ND", "WY", "LA", "AK", "NM", "PA"]);
+function fundOf(m) {
+  const h = noise(m.id + "fund"), left = m.p === "D" && (m.faction === "Progressive Caucus" || m.faction === "Progressive wing"), right = m.p === "R" && (m.faction === "Freedom Caucus" || m.faction === "MAGA wing");
+  let pac = m.ch === "H" ? 0.38 : 0.16, large = m.ch === "H" ? 0.4 : 0.54, small = m.ch === "H" ? 0.22 : 0.3;
+  if (left) { small += 0.25; pac -= 0.17; } else if (m.p === "D" && /Moderate|Blue Dog|New Democrat/.test(m.faction || "")) pac += 0.08;
+  if (right) { small += 0.17; pac -= 0.1; } else if (/Main Street|Institutionalists/.test(m.faction || "")) pac += 0.08;
+  const posts = (m.comm || []).filter((c) => /Chair|Ranking/.test(c.role || c.title || "")).length + (m.lead?.length ? 1 : 0);
+  pac += posts * 0.07; small += h * 0.08; large -= h * 0.04;
+  const pledge = NO_CORP_PAC.has(`${m.last} ${m.st}`);
+  if (pledge) { small += pac - 0.03 + large * 0.4; large *= 0.6; pac = 0.03; }
+  const tot = pac + large + small; pac /= tot; large /= tot; small /= tot;
+  const sec = new Set(); for (const c of m.comm || []) for (const g of MONEY_COMM[c.c] || []) sec.add(g);
+  if (ENERGY_ST.has(m.st) && m.p === "R") sec.add("energy");
+  if (pledge) sec.clear();
+  if (m.p === "D") sec.add("labor"); else sec.add("lowtax");
+  return { pac: Math.round(pac * 100) / 100, large: Math.round(large * 100) / 100, small: Math.round(small * 100) / 100, sectors: [...sec].slice(0, 4), pledge };
 }
 function derive(m) {
     m.mix = mixFor(m.dem);
@@ -245,6 +275,7 @@ export const ACTIONS = {
   call: { label: "Call a member", hours: 3, role: "P" }, push: { label: "Use the bully pulpit", hours: 4, role: "P" }, threat: { label: "Threaten a veto", hours: 1, role: "P" },
   eo: { label: "Sign an executive order", hours: 6, role: "P" }, rally: { label: "Hold a rally", hours: 8, role: "P" }, fire: { label: "Fire a cabinet member", hours: 4, role: "P" },
   hire: { label: "Hire a better staffer", hours: 4, role: "HS" },
+  pacs: { label: "Corporate PAC fundraiser", hours: 6, role: "HS" }, smalldollar: { label: "Small-dollar email blast", hours: 3, role: "HS" },
   rider: { label: "Add a rider", hours: 6 }, strip: { label: "Strip a rider", hours: 4 },
   sign: { label: "Sign", hours: 0, role: "P" }, veto: { label: "Veto", hours: 0, role: "P" }};
 export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom = null, diff = null) {
@@ -262,6 +293,9 @@ export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom 
     role: you.ch === "S" ? "S" : "H", cab: freshCabinet(), noms: [], presHeat: 0.35, imp: [], term: 1, termStart: 0, edits: {}, pp: "R", career: [],
   };
   mpSeed(s);
+  startRelations(s, you);
+  s.money = { small: Math.round(s.cash * you.fund.small), large: Math.round(s.cash * you.fund.large), pac: Math.round(s.cash * you.fund.pac) }; s.pledge = !!you.fund.pledge; s.ties = {};
+  for (const g of you.fund.sectors) if (!["labor", "lowtax"].includes(g) && !s.pledge) s.ties[g] = Math.round(s.cash * you.fund.pac / Math.max(1, you.fund.sectors.length));
   seedBills(s);
   if (you.ch === "S") pushInbox(s, { kind: "staff", from: "Your chief of staff", title: upIn2028(you) ? "You're on the ballot in 2028" : "You're not up until " + (you.cls === 1 ? 2030 : 2032), body: upIn2028(you) ? "Your seat is one of the 34 up in November 2028. Six years usually buys freedom; you don't have it." : "No election this Congress. That buys you room to take hard votes, but leadership, donors and the President still keep score. At the end of 2028 you'll get a verdict on your term." });
   pushInbox(s, { kind: "staff", from: "Your chief of staff", title: "Welcome to the 120th Congress", body: `You have ${HOURS} hours a week. Spend them on colleagues, your district, donors and bills. Votes come to the floor most weeks; I'll flag the ones that matter at home. The election is ${fmtDate(ELECTION_WEEK)}.` });
@@ -331,7 +365,7 @@ export function doAction(s0, act, arg = {}) {
     s.log.push(`Met with ${nameOf(m)}.`); s.flags.met = true;
     s.toast = { title: `Coffee with ${nameOf(m)}`, text: s.know[m.id] >= 2 ? `You get a real read on them: ${TRAIT_LABEL[m.t.label]}. ${TRAIT_DESC[m.t.label]}` : "A friendly first conversation. You'll need more time to really know them.", tone: "good" };
   }
-  if (act === "funds") { const amt = Math.round((40 + s.profile * 0.9 + you.seniority * 2 + r() * 50) * (you.chair ? 1.4 : 1)); s.cash += amt; s.toast = { title: "Call time", text: `Four hours on the phone. You raised $${amt}K.`, tone: "good" }; }
+  if (act === "funds") { const amt = Math.round((40 + s.profile * 0.9 + you.seniority * 2 + r() * 50) * (you.chair ? 1.4 : 1)); s.cash += amt; addMoney(s, "large", amt); s.toast = { title: "Call time", text: `Four hours on the phone. You raised $${amt}K.`, tone: "good" }; }
   if (act === "district") { const g = (1.2 + r() * 1.3) * clamp(1 - (s.approval - 45) / 30, 0.1, 1); /* each visit matters less once people already like you */ s.approval = clamp(s.approval + g, 5, 95); s.baseApproval = clamp(s.baseApproval + g * 0.5, 5, 95); s.toast = { title: "Back home", text: `Town halls and ribbon cuttings. Approval at home is up ${g.toFixed(1)} points.`, tone: "good" }; }
   if (act === "tv") {
     const gaffe = r() < 0.08;
@@ -375,6 +409,22 @@ export function doAction(s0, act, arg = {}) {
       if (act === "rider") { mp.riders.push({ pid: arg.pid, p: role === "P" ? "R" : you.p, by: role === "P" ? "the President" : nameOf(you), you: true }); s.profile = clamp(s.profile + 2, 0, 100); s.baseApproval = clamp(s.baseApproval + 1.5, 5, 99); pushNews(s, `${role === "P" ? "The President" : nameOf(you)} gets ${byId[arg.pid].name} attached to ${mp.name.toLowerCase()}.`); s.toast = { title: "Rider attached", text: `${byId[arg.pid].name} now rides on ${mp.name.toLowerCase()}. Watch the Senate count: every rider costs votes on the other side.`, tone: "good" }; }
       else { const x = mp.riders.splice(mp.riders.findIndex((y) => y.pid === arg.pid), 1)[0]; pushNews(s, `${byId[x.pid].name} comes off ${mp.name.toLowerCase()}.`); s.toast = { title: "Rider stripped", text: `${byId[x.pid].name} is out. ${x.p === (role === "P" ? "R" : you.p) ? "Your own side is annoyed." : "The other side is furious."}`, tone: "good" }; if (role !== "P" && x.p === you.p) s.loyalty -= 1; }
     } else s.toast = { title: "Leadership said no", text: act === "rider" ? "The appropriators wouldn't take it. Build clout, or get a seat on Appropriations." : "The rider stays. Its backers had the votes in the room.", tone: "" };
+  }
+  if (act === "pacs") {
+    if (s.pledge) { s.hours += ACTIONS.pacs.hours; s.toast = { title: "You took the pledge", text: "No corporate PAC money. That's the point.", tone: "" }; return s; }
+    const sec = you.fund?.sectors.filter((g) => g !== "labor" && g !== "lowtax") || [], g = sec.length ? sec[Math.floor(r() * sec.length)] : "chamber";
+    const amt = Math.round((90 + s.clout * 2.2 + (you.chair ? 120 : 0) + (you.lead?.length ? 150 : 0) + r() * 60));
+    s.cash += amt; addMoney(s, "pac", amt); s.ties = s.ties || {}; s.ties[g] = (s.ties[g] || 0) + amt;
+    const left = you.p === "D" && /Progressive/.test(you.faction || ""), pop = you.p === "R" && /Freedom|MAGA/.test(you.faction || "");
+    if (left || pop) s.baseApproval = clamp(s.baseApproval - 2.5, 5, 95);
+    pushNews(s, `${titleOf(you)} ${nameOf(you)} holds a fundraiser with ${groupById[g]?.name || "industry"} PACs.`);
+    s.toast = { title: `$${amt}K from the ${groupById[g]?.model || "industry"} crowd`, text: `Big checks, fast. ${groupById[g]?.name || "They"} will remember it, and they'll call when their bills come up.${left || pop ? " Your base noticed who was in the room." : ""}`, tone: "good" };
+  }
+  if (act === "smalldollar") {
+    const v = voiceOf(you), loud = v === "firebrand" || v === "showboat" || v === "devotee";
+    const amt = Math.round((15 + s.profile * 1.3 + Math.max(0, s.baseApproval - 55) * 1.6) * (loud ? 1.5 : 1) * (0.8 + r() * 0.4));
+    s.cash += amt; addMoney(s, "small", amt); s.baseApproval = clamp(s.baseApproval + 0.6, 5, 95);
+    s.toast = { title: `$${amt}K from ${Math.round(amt * 1000 / 34).toLocaleString()} donors`, text: `An average gift of about $34. ${amt < 60 ? "A bigger national profile would raise more." : "Your list is working."} Nobody on it will ask you for a favor.`, tone: "good" };
   }
   if (act === "hold") {
     const b = s.bills.find((x) => x.id === arg.bill);
@@ -447,6 +497,7 @@ export function answer(s0, msgId, choice) {
   m.done = true; m.choice = choice;
   const you = memberById[s.youId];
   if (m.kind === "lead") leaderRace(s, choice, m.comm);
+  if (m.kind === "donor") donorAnswer(s, m, choice);
   if (m.kind === "higher" && choice === 0) { const seat = memberById[m.seat]; s.runFor = m.seat; s.runForDem = seat.dem; s.runForCls = seat.cls; pushNews(s, `${nameOf(you)} announces a run for the Senate in ${you.st}.`, "event"); s.toast = { title: "You're running statewide", text: `The race is in November ${electionYear(s)}. Your House seat goes to someone else either way. Statewide approval, money and the national mood decide it.`, tone: "good" }; }
   if (m.kind === "markup") { const b = s.bills.find((x) => x.id === m.bill); const opts = m.oppose ? ["pill", "fix", "district", null] : ["fix", "district", "sweet", null]; if (b && !b.dead && opts[choice]) { b.amends = b.amends || []; const ok = offerAmend(s, b, opts[choice]); s.toast = { title: ok ? "Amendment adopted" : "Amendment rejected", text: ok ? `Your ${AMEND[opts[choice]].label} is in the bill.` : "The committee voted it down. You still get your markup vote.", tone: ok ? "good" : "" }; } }
   if (m.kind === "mpdesk") { const mp = s.mp.find((x) => x.id === m.mp); if (mp && mp.stage === "desk") { if (choice === 0) { mpSettle(s, mp, true); s.legacy += 1; } else { mp.blame = "pres"; s.vetoes++; const oh = mpVote(s, mp, "H", true), os = mpVote(s, mp, "S", true); const ov = oh.yes >= 290 && os.yes >= 67; mp.hist.push(`You veto it. Override: House ${oh.yes}, Senate ${os.yes}`); if (ov) { s.presApproval -= 1.5; s.clout -= 6; pushNews(s, `Congress overrides your veto of ${mp.name.toLowerCase()}.`, "bad"); } mpSettle(s, mp, ov); } } }
@@ -534,6 +585,7 @@ export function advance(s0) {
   // 5. Your inbox.
   if (roleOf(s) !== "P") inbox(s, r);
   sceneWeek(s, R(s, "scene"));
+  donorWeek(s, R(s, "donor"));
   wireWeek(s, R(s, "wire"));
   { const rr = R(s, "react"); for (const ev of events.slice(0, 2)) voteReactions(s, ev, rr); }
   // 6. Primary and general.
@@ -651,7 +703,7 @@ function primary(s, r) {
   const you = memberById[s.youId];
   const fit = 1 - Math.min(1, Math.abs(you.x - (you.p === "D" ? -0.42 : 0.52)) * 1.6);
   const gp = groupElection(s, "primary");
-  const strength = s.baseApproval + fit * 8 + Math.min(10, s.cash / 400) - (you.prisk > 0.5 ? 6 : 0) + gp.net - (s.rivals || 0) * 3;
+  const strength = s.baseApproval + fit * 8 + Math.min(10, s.cash / 400) - (you.prisk > 0.5 ? 6 : 0) + gp.net - (s.rivals || 0) * 3 - (memberById[s.youId].p === "D" && memberById[s.youId].prisk > 0.4 ? Math.max(0, moneyMix(s).pac - 0.45) * 20 : 0) + (s.pledge ? 3 : 0);
   s.primaryGroups = gp;
   const challenged = strength < 60 || r() < 0.2;
   // Incumbents almost always win primaries; you only lose if your own party's voters have really turned on you.
@@ -667,7 +719,7 @@ function general(s, r) {
   const env = you.p === "D" ? s.mood : -s.mood;                       // national swing toward your party, in points
   const lean2 = (you.own - 50) * 2;                                   // the seat's 2024 margin for your party
   const gg = groupElection(s, "general");
-  const margin = lean2 + env * 0.9 + 3 + (s.approval - 50) * 0.45 + Math.min(4, s.cash / 900) + gg.net * 0.5 + (r() - 0.5) * 5 + (s.debateBonus || 0);
+  const margin = lean2 + env * 0.9 + 3 + (s.approval - 50) * 0.45 + Math.min(4, s.cash / 900) + gg.net * 0.5 + (r() - 0.5) * 5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2;
   // The whole House moves with the mood.
   let d = 0; for (const m of HOUSE) { const mm = (m.dem - 50) * 2 + s.mood * 0.9 + (m.p === "D" ? 3 : -3) + noise(`${s.seed}:gen:${m.id}`) * 5; if (m.id === s.youId ? (you.p === "D" ? margin > 0 : margin <= 0) : mm > 0) d++; }
   s.over = true;
@@ -718,6 +770,7 @@ export function applyCustom(c) {
   m.faction = m.p === "D" ? (m.x < -0.4 ? "Progressive Caucus" : m.x > -0.1 ? "Blue Dog Coalition" : "New Democrat Coalition") : (m.x > 0.62 ? "Freedom Caucus" : m.x > 0.4 ? "Republican Study Committee" : "Main Street Caucus");
   if (m.ch === "S") m.faction = senFaction(m);
   m.caucus = [m.faction]; m.cauEst = false;
+  m.fund = fundOf(m);
   m.base = { influence: 8, cash: 400 };
   for (const k in factionLine) delete factionLine[k];
 }
@@ -1346,9 +1399,9 @@ export function setMpVote(s0, id, v) { const s = structuredClone(s0); const mp =
 export const AMEND_LABEL = { district: "District amendment", fix: "Bipartisan fix", pill: "Poison pill", sweet: "Sweetener" };
 
 // ════════ Careers past 2028 ════════
-const senFaction = (m) => (m.p === "D" ? (m.x < -0.45 ? "Progressives" : m.x < -0.25 ? "Mainstream Democrats" : "Moderate Democrats") : m.x > 0.6 ? "Hard-right conservatives" : m.x > 0.35 ? "Mainstream Republicans" : "Governing-wing Republicans");
+const senFaction = (m) => WING_OF[`${m.last} ${m.st}`] || (m.p === "D" ? (m.x < -0.6 ? "Progressive wing" : m.x > -0.2 ? "Moderate Democrats" : "Senate Democrats") : m.x > 0.65 ? "MAGA wing" : m.x < 0.3 ? "Institutionalists" : "Senate Republicans");
 function regroup() { houseCaucus(MEMBERS); for (const m of SENATE) if (!m.faction || m.fictional || !m.caucus || m.caucus.length === 0 || HOUSE_FACTIONS.has(m.faction)) { m.faction = senFaction(m); m.caucus = [m.faction]; } }
-const HOUSE_FACTIONS = new Set(["Progressive Caucus", "New Democrat Coalition", "Blue Dog Coalition", "Democrats, no bloc", "Freedom Caucus", "Republican Study Committee", "Main Street Caucus"]);
+const HOUSE_FACTIONS_X = 0; const HOUSE_FACTIONS = new Set(["Progressive Caucus", "New Democrat Coalition", "Blue Dog Coalition", "Democrats, no bloc", "Freedom Caucus", "Republican Study Committee", "Main Street Caucus"]);
 function clearCaches() { for (const k in cache) delete cache[k]; for (const k in factionLine) delete factionLine[k]; for (const k in bondCache) delete bondCache[k]; }
 function rebuildChambers() { HOUSE.length = 0; SENATE.length = 0; for (const m of MEMBERS) (m.ch === "H" ? HOUSE : SENATE).push(m); }
 export function resetWorld() {
@@ -1379,7 +1432,7 @@ function newcomer(s, m, party, year) {
   const keepKeys = { ch: m.ch, st: m.st, d: m.d, dem: m.dem, id: m.id, cls: m.cls };
   for (const k of Object.keys(m)) delete m[k];
   Object.assign(m, keepKeys, { first, last, sf: first, sl: last, p: party, x: Math.round(x * 1000) / 1000, y: 0, born: 1975 + Math.floor(r() * 18), since: year + 1, comm, lead: [], t, g: r() < 0.45 ? "F" : "M", fictional: true, est: true, new: true });
-  derive(m); keep(s, m);
+  derive(m); m.fund = fundOf(m); keep(s, m);
   for (const k of ["rel", "know", "owedToYou"]) delete s[k][m.id];
 }
 function flipTitles(ch, newMaj) {
@@ -1663,3 +1716,58 @@ function electionNight(s) {
   const sen = senateMap(s, true), keep = SENATE.filter((m) => sen.states[m.st]?.who !== m.id && m.p === "D").length;
   s.night = { year, pres, senate: sen, senD: keep + Object.values(sen.states).filter((x) => x.w === "D").length, houseD: houseCount(s) };
 }
+
+// Who you already know on day one. Years served together, the same state delegation, shared committees and
+// the same caucus build real relationships; your closest colleagues are allies, your rivals are rivals.
+function startRelations(s, you) {
+  const yrs = (m) => Math.max(0, YEAR - (m.since || YEAR));
+  const mine = yrs(you), myComm = new Set((you.comm || []).filter((c) => c.c.length <= 4).map((c) => c.c));
+  const bump = (id, k, r) => { s.know[id] = Math.max(s.know[id] || 0, Math.min(3, k)); s.rel[id] = clamp((s.rel[id] || 0) + r, -1, 1); };
+  for (const m of MEMBERS) {
+    if (m.id === you.id) continue;
+    const together = Math.min(mine, yrs(m)), same = m.ch === you.ch, party = m.p === you.p, h = noise(`${s.seed}:start:${m.id}`);
+    if (same && m.st === you.st) bump(m.id, 2 + (together >= 4 ? 1 : 0), party ? 0.15 + Math.min(0.2, together * 0.015) : 0.04);
+    else if (!same && m.st === you.st && party) bump(m.id, 1 + (together >= 6 ? 1 : 0), 0.08);
+    if (same && (m.comm || []).some((c) => myComm.has(c.c))) bump(m.id, 1 + (together >= 6 ? 1 : 0), party ? 0.06 + Math.min(0.1, together * 0.008) : 0.02 + (h > 0.7 ? 0.08 : 0));
+    if (same && party && m.faction === you.faction && together >= 4) bump(m.id, 1, 0.05);
+    if (same && party && m.lead?.length) bump(m.id, together >= 6 ? 2 : 1, 0.04);
+    // Long careers leave a web of working friendships, a few across the aisle.
+    if (same && together >= 8 && h > (party ? 0.55 : 0.88)) bump(m.id, 2, party ? 0.12 : 0.2);
+  }
+  // Your closest colleagues and your rivals.
+  const B = bonds(you), extra = Math.min(6, Math.floor(mine / 4));
+  for (const { m } of B.friends) if (mine >= 2) bump(m.id, 3, 0.25 + Math.min(0.3, Math.min(mine, yrs(m)) * 0.02)); else bump(m.id, 1, 0.08);
+  const more = MEMBERS.filter((m) => m.ch === you.ch && m.p === you.p && m.id !== you.id && !B.friends.some((f) => f.m.id === m.id) && Math.min(mine, yrs(m)) >= 6)
+    .sort((a, b) => Math.abs(a.x - you.x) - Math.abs(b.x - you.x)).slice(0, extra);
+  for (const m of more) bump(m.id, 2, 0.22);
+  for (const { m } of B.rivals) bump(m.id, 2, mine >= 4 ? -0.3 : -0.12);
+  // Veterans are owed a few favors.
+  if (mine >= 8) for (const { m } of B.friends.slice(0, Math.min(3, Math.floor(mine / 6)))) s.owedToYou[m.id] = (s.owedToYou[m.id] || 0) + 1;
+}
+
+// ════════ Money: where it comes from, and what it wants ════════
+function addMoney(s, kind, amt) { s.money = s.money || { small: 0, large: 0, pac: 0 }; s.money[kind] += amt; }
+export function moneyMix(s) { const m = s.money || { small: 0, large: 0, pac: 0 }, t = m.small + m.large + m.pac || 1; return { small: m.small / t, large: m.large / t, pac: m.pac / t, total: t }; }
+export function takePledge(s0) { const s = structuredClone(s0); if (s.pledge) return s; const you = memberById[s.youId]; s.pledge = true; s.baseApproval = clamp(s.baseApproval + (you.p === "D" ? 3 : 1.5), 5, 95); s.ties = {}; s.toast = { title: "No corporate PAC money", text: "You announce you'll refuse corporate PAC checks. Your base loves it; your war chest will feel it. The industries that were writing checks stop calling.", tone: "good" }; pushNews(s, `${nameOf(you)} swears off corporate PAC money.`); return s; }
+// The industries that funded you call when their bills come up.
+function donorWeek(s, r) {
+  if (roleOf(s) === "P" || s.pledge) return;
+  const ties = s.ties || {}, you = memberById[s.youId];
+  for (const [gid, amt] of Object.entries(ties)) {
+    if (amt < 80 || r() > 0.5) continue;
+    const g = groupById[gid]; if (!g) continue;
+    const b = s.bills.find((x) => x.stage === "committee" && !x.dead && g.cares[x.pid] && x.floorWeek - s.week <= 2 && x.floorWeek > s.week && !s.inbox.some((m) => m.kind === "donor" && m.bill === x.id));
+    if (!b) continue;
+    const want = g.cares[b.pid] > 0;
+    pushInbox(s, { kind: "donor", bill: b.id, gid, want, from: `${g.name}`, title: `${g.name} wants a ${want ? "yes" : "no"} on ${byId[b.pid].name}`,
+      body: `They've put $${Math.round(amt)}K into your campaigns. Their lobbyist was polite about it, and clear. Vote their way and the checks keep coming. Cross them and they'll find someone who won't.`, choices: [`Vote ${want ? "yes" : "no"}`, "Vote your conscience"] });
+  }
+  for (const k in ties) ties[k] *= 0.97;
+}
+function donorAnswer(s, m, choice) {
+  const b = s.bills.find((x) => x.id === m.bill), you = memberById[s.youId];
+  if (choice === 0) { if (b) b.yourVote = m.want; s.cash += 40; addMoney(s, "pac", 40); s.integrity -= 3; s.toast = { title: "They're happy", text: "Another check arrives within the week.", tone: "" }; }
+  else { s.ties[m.gid] = (s.ties[m.gid] || 0) * 0.3; s.integrity += 2; s.oppMoney = (s.oppMoney || 0) + 1; s.toast = { title: "They're not happy", text: `${groupById[m.gid]?.name} stops returning calls. Expect their money to show up for your opponent.`, tone: "" }; }
+}
+
+export const GROUP_NAME = (id) => groupById[id]?.name || id;

@@ -100,3 +100,8 @@ The Senate and the President as full characters, committees and amendments as pl
 - Election night: on the end screen, the map fills in east to west as states are called, the electoral vote bars climb, and a winner is stamped at 270 (in midterm years, the Senate races). Replay button.
 - Scenes: whoever is talking bobs, and the room's reaction rises after each answer.
 - Everything respects the reduce-motion setting.
+
+## Twelfth pass: Senate wings, money, and starting relationships
+- The Senate has no formal caucuses, so senators now sit in the informal wings the press uses (Progressive wing, Moderate Democrats, MAGA wing, Institutionalists), set by hand for well-known senators; everyone else is mainstream. No senator is shown in a House caucus.
+- Money: every member has an estimated mix of small donors, big donors and PACs, with industry ties from their committees; a few known no-corporate-PAC pledges are set by hand. PAC money strengthens the pull of the industries that give it. You can raise from big donors, corporate PACs (the most money, with strings: industries call before their votes, and crossing them funds your opponent) or small-dollar email (grows with your profile and base). You can swear off corporate PAC money. PAC-heavy Democrats in safe seats pay for it in primaries.
+- Starting relationships come from shared history: years served together, the state delegation, shared committees, the same caucus or wing, and leadership. Veterans start with allies, a few cross-party friendships, rivals, and favors owed.

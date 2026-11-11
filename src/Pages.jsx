@@ -141,7 +141,7 @@ export function Network({ s, real, setCard }) {
 }
 
 // ── Your office: your attributes and your staff ──
-export function Office({ s, real, act }) {
+export function Office({ s, real, act, setS }) {
   const you = S.memberById[s.youId], a = S.yourAttrs(s);
   return (
     <div className="pm-two">
@@ -156,6 +156,15 @@ export function Office({ s, real, act }) {
         <section className="panel"><h3>Your numbers over time</h3><Trend s={s} keys={[["a", "Approval at home", "#2fbf71"], ["b", "Your base", "#3d7bd9"], ["p", "The President", "#c8443a"]]} /></section>
       </section>
       <aside className="stack">
+        {S.roleOf(s) !== "P" && (() => { const mm = S.moneyMix(s), ties = Object.entries(s.ties || {}).filter(([, v]) => v >= 20).sort((a, b) => b[1] - a[1]); return (
+          <section className="panel">
+            <h3>Where your money comes from</h3>
+            <div className="pm-money"><div className="pm-money-bar">{[["Small donors", mm.small, "#2fbf71"], ["Big donors", mm.large, "#7fa6ec"], ["PACs", mm.pac, "#e0a94a"]].map(([l, v, c]) => <i key={l} style={{ width: `${v * 100}%`, background: c }} />)}</div>
+              <div className="pm-money-key">{[["Small donors", mm.small, "#2fbf71"], ["Big donors", mm.large, "#7fa6ec"], ["PACs", mm.pac, "#e0a94a"]].map(([l, v, c]) => <span key={l}><i style={{ background: c }} />{l} <b>{Math.round(v * 100)}%</b></span>)}</div></div>
+            <p className="small muted">Raised this career: ${Math.round(mm.total).toLocaleString()}K. {mm.pac > 0.45 ? "PAC-heavy: easy money, and your primary voters may hold it against you." : mm.small > 0.5 ? "Mostly small donors: nobody owns you, but you have to keep them fired up." : "A mix."}</p>
+            {ties.length > 0 && <p className="small">Industries that expect your call back: {ties.map(([g, v]) => `${S.GROUP_NAME(g)} ($${Math.round(v)}K)`).join(", ")}.</p>}
+            {s.pledge ? <span className="pill pos2">You've sworn off corporate PAC money</span> : <button type="button" className="ghost" onClick={() => setS(S.takePledge(s))}>Swear off corporate PAC money</button>}
+          </section>); })()}
         <h2 className="pm-h">Your staff</h2>
         {s.staff.map((x) => (
           <article key={x.id} className="panel pm-staff">

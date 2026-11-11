@@ -137,6 +137,11 @@ function useCount(num) {
   }, [num]);
   return [shown, dir];
 }
+function MoneyBar({ f }) {
+  const parts = [["Small donors", f.small, "#2fbf71"], ["Big donors", f.large, "#7fa6ec"], ["PACs", f.pac, "#e0a94a"]];
+  return (<div className="pm-money"><div className="pm-money-bar">{parts.map(([l, v, c]) => <i key={l} style={{ width: `${v * 100}%`, background: c }} title={`${l}: ${Math.round(v * 100)}%`} />)}</div>
+    <div className="pm-money-key">{parts.map(([l, v, c]) => <span key={l}><i style={{ background: c }} />{l} <b>{Math.round(v * 100)}%</b></span>)}</div></div>);
+}
 function Meter({ label, value, sub, tone, num, fmt, invert }) {
   const [shown, dir] = useCount(num);
   const flash = dir && (invert ? (dir === "up" ? "down" : "up") : dir);
@@ -412,7 +417,7 @@ function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene, real, setCa
         {(s.wire || []).length > 0 && <section className="pm-today"><h2 className="pm-h">Today's papers</h2>{s.wire.slice(0, 2).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={setCard} />)}<button type="button" className="linkbtn" onClick={() => setTab("news")}>All the coverage →</button></section>}
         <h2 className="pm-h">Spend your hours</h2>
         <div className="pm-actions">
-          {(role === "P" ? [["rally", "A rally in a swing state. Lifts approval; less each time if you overdo it."]] : [["district", role === "S" ? "Tour the state. Raises approval." : "Town halls and events back home. Raises approval."], ["funds", "Dial for dollars. Fills the war chest."], ["committee", "Hearings and markups. Builds your record and clout."], ["tv", "A cable hit. Raises your profile; small risk of a gaffe."]]).map(([a, d]) => (
+          {(role === "P" ? [["rally", "A rally in a swing state. Lifts approval; less each time if you overdo it."]] : [["district", role === "S" ? "Tour the state. Raises approval." : "Town halls and events back home. Raises approval."], ["funds", "Call time with big donors. Steady money, a few favors asked."], ["pacs", "Corporate PAC checks: the most money, with strings attached."], ["smalldollar", "Email your list. Small gifts; grows with your profile and base."], ["committee", "Hearings and markups. Builds your record and clout."], ["tv", "A cable hit. Raises your profile; small risk of a gaffe."]]).map(([a, d]) => (
             <button key={a} type="button" className="pm-act" disabled={!S.can(s, a)} onClick={() => act(a)}><strong>{S.ACTIONS[a].label}</strong><span>{d}</span><small>{S.ACTIONS[a].hours} hours</small></button>
           ))}
         </div>
@@ -578,7 +583,7 @@ function ChamberTab({ s, real, setCard }) {
   const list = useMemo(() => S.seated(ch), [ch, s.youId, s.custom]);
   const { seats, dotR } = useMemo(() => S.seatsFor(list.length), [list.length]);
   const b = s.bills.find((x) => x.id === bill);
-  const FC = ch === "H" ? { "Progressive Caucus": "#1b3f8f", "Democrats, no bloc": "#3d7bd9", "New Democrat Coalition": "#7fa6ec", "Blue Dog Coalition": "#bcd0f5", "Main Street Caucus": "#f0a9a0", "Republican Study Committee": "#d4594d", "Freedom Caucus": "#7a1f1a" } : { "Progressives": "#1b3f8f", "Mainstream Democrats": "#3d7bd9", "Moderate Democrats": "#9db8f0", "Governing-wing Republicans": "#f0a9a0", "Mainstream Republicans": "#d4594d", "Hard-right conservatives": "#7a1f1a" };
+  const FC = ch === "H" ? { "Progressive Caucus": "#1b3f8f", "Democrats, no bloc": "#3d7bd9", "New Democrat Coalition": "#7fa6ec", "Blue Dog Coalition": "#bcd0f5", "Main Street Caucus": "#f0a9a0", "Republican Study Committee": "#d4594d", "Freedom Caucus": "#7a1f1a" } : { "Progressive wing": "#1b3f8f", "Senate Democrats": "#3d7bd9", "Moderate Democrats": "#9db8f0", "Institutionalists": "#f0a9a0", "Senate Republicans": "#d4594d", "MAGA wing": "#7a1f1a" };
   const BC = { yes: "#2fbf71", "lean yes": "#9be27b", undecided: "#b9c2cf", "lean no": "#f0a9a0", no: "#d4594d", you: "#ffcf5a" };
   const color = (m) => (by === "bill" && b && ch === "H" ? BC[S.estimate(s, m, b).bucket] : by === "faction" ? FC[m.faction] : by === "rel" ? ((s.rel[m.id] || 0) > 0.3 ? "#2fbf71" : (s.rel[m.id] || 0) > 0.05 ? "#9be27b" : (s.rel[m.id] || 0) < -0.05 ? "#d4594d" : (s.know[m.id] || 0) > 0 ? "#8fa1b8" : "#3a4660") : m.p === "D" ? "#3d7bd9" : "#d4594d");
   const [hover, setHover] = useState(null);
@@ -613,11 +618,12 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
       <div className="modal pm-card" role="dialog" aria-modal="true" aria-label={S.nameOf(m, real)} onClick={(e) => e.stopPropagation()}>
         <div className={`pm-cardtop ${pc(m.p)}`}>
           <Face m={m} size={84} />
-          <div><h2>{S.titleOf(m)} {S.nameOf(m, real)}</h2><p>{m.p === "D" ? "Democrat" : "Republican"} · {m.seat} · in office since {m.since}{m.fictional ? ` · fictional: won this seat in ${m.since - 1}` : m.placeholder ? " · placeholder: this seat's real 2026 winner isn't in the data yet" : m.uncalled ? " · newcomer · race not yet called, leading" : m.new || m.gen ? " · newcomer" : ""}{m.flip ? " · flipped the seat" : ""}</p>{m.lead?.[0] && <span className="cast-trait">{m.lead[0]}</span>}</div>
+          <div><h2>{S.titleOf(m)} {S.nameOf(m, real)}</h2><p>{m.ind ? "Independent, caucuses with Democrats" : m.p === "D" ? "Democrat" : "Republican"} · {m.seat} · in office since {m.since}{m.fictional ? ` · fictional: won this seat in ${m.since - 1}` : m.placeholder ? " · placeholder: this seat's real 2026 winner isn't in the data yet" : m.uncalled ? " · newcomer · race not yet called, leading" : m.new || m.gen ? " · newcomer" : ""}{m.flip ? " · flipped the seat" : ""}</p>{m.lead?.[0] && <span className="cast-trait">{m.lead[0]}</span>}</div>
         </div>
         <div className="modal-body">
           <dl className="pm-facts">
-            <div><dt>{m.ch === "H" ? "Caucus" : "Bloc"}</dt><dd title={S.FACTION_NOTE[m.faction]}>{S.caucusOf(m).join(" · ")}{m.cauEst ? <small className="muted"> (estimated)</small> : m.ch === "H" ? <small className="muted"> (real roster)</small> : null}</dd></div>
+            <div><dt>{m.ch === "H" ? "Caucus" : "Wing"}</dt><dd title={S.FACTION_NOTE[m.faction]}>{S.caucusOf(m).join(" · ")}{m.ch === "S" ? <small className="muted"> (informal{m.cauEst ? ", mainstream" : ""})</small> : m.cauEst ? <small className="muted"> (estimated)</small> : <small className="muted"> (real roster)</small>}</dd></div>
+            {m.fund && <div className="wide"><dt>Money <small className="muted">(estimated)</small></dt><dd><MoneyBar f={m.fund} />{m.fund.pledge ? <span className="pill pos2">No corporate PAC money</span> : null} {m.fund.sectors.filter((g) => !["labor", "lowtax"].includes(g)).length ? <small className="muted">Industry ties: {m.fund.sectors.filter((g) => !["labor", "lowtax"].includes(g)).map((g) => S.GROUP_NAME(g)).join(", ")}</small> : null}</dd></div>}
             {(() => { const v = S.voiceOf(m), info = S.VOICES[v]; return <div className="wide"><dt>Personality</dt><dd><strong>{info.label}.</strong> {info.desc}</dd></div>; })()}
             <div><dt>Voting record</dt><dd>More conservative than {lr}% of the {m.ch === "H" ? "House" : "Senate"}{m.est || m.gen ? " (estimated)" : ""}</dd></div>
             <div><dt>{m.ch === "H" ? "District" : "State"} in 2024</dt><dd>{m.dem >= 50 ? `Democrats +${((m.dem - 50) * 2).toFixed(0)}` : `Republicans +${((50 - m.dem) * 2).toFixed(0)}`}</dd></div>

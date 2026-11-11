@@ -41,6 +41,7 @@ export const IGROUPS = [
   { id: "reform", name: "Clean Government Project", model: "good-government group", party: "any", wing: "swing", power: 0.3, budget: 150, tactic: "score",
     cares: { stock_ban: 1, ethics: 1, pardon_reform: 1, voting_rights: 1 }, note: "Little money, but its grades make the local paper." },
 ];
+const CORPORATE = new Set(["pharma", "energy", "tech", "defense", "chamber", "alliance"]);
 export const groupById = Object.fromEntries(IGROUPS.map((g) => [g.id, g]));
 
 // How much a member depends on a group, 0 to 1: party fit, which wing they sit in, and a little personal history.
@@ -48,7 +49,10 @@ export function dependence(m, g, noise) {
   if (g.party !== "any" && g.party !== m.p) return 0;
   const wing = g.wing === "all" ? 0.8 : g.wing === "base" ? 0.35 + 0.65 * m.prisk : 0.35 + 0.65 * m.vuln;
   const personal = 0.75 + 0.25 * noise(m.id + g.id);
-  return Math.max(0, Math.min(1, g.power * wing * personal));
+  // Money: members who live on PAC checks listen harder to the industries that write them; small-dollar members listen less.
+  const F = m.fund, corp = CORPORATE.has(g.id);
+  const money = !F ? 1 : corp ? (F.pledge ? 0.45 : (0.6 + 1.2 * F.pac) * (F.sectors.includes(g.id) ? 1.35 : 1)) : g.id === "labor" ? 0.8 + 0.5 * F.small : 1;
+  return Math.max(0, Math.min(1, g.power * wing * personal * money));
 }
 // The G term for one member on one bill: what the groups they rely on want, weighted by how much they rely on them.
 export function groupPull(m, pid, noise) {
