@@ -2571,6 +2571,8 @@ const FAME = { "Ocasio-Cortez NY": 96, "Sanders VT": 95, "Warren MA": 86, "Cruz 
   "Raskin MD": 70, "Murphy CT": 72, "Kennedy LA": 70, "Lee UT": 66, "Murkowski AK": 66, "Tlaib MI": 66, "Khanna CA": 68, "Talarico TX": 72, "Boebert CO": 70, "Luna FL": 62, "Moskowitz FL": 56, "Slotkin MI": 62, "Gallego AZ": 62,
   "Kelly AZ": 70, "Ossoff GA": 68, "Warnock GA": 66, "Crenshaw TX": 60, "Brown OH": 72, "Cotton AR": 64, "Scott SC": 66, "Johnson LA": 80, "Jeffries NY": 88, "Schumer NY": 90, "Thune SD": 72, "Pressley MA": 60, "Frost FL": 56, "Waters CA": 66 };
 const CONTENDER = new Set(["Vance", "Rubio", "Newsom", "Shapiro", "Pritzker", "Whitmer", "DeSantis", "Ocasio-Cortez", "Harris", "Buttigieg", "Booker", "Kelly", "Ossoff", "Cruz", "Hawley", "Youngkin"]);
+// Hand adjustments for standing the numbers miss: movement leaders with outsized followings, and newcomers still building a record.
+const STANDING = { "Ocasio-Cortez": 38, "Cruz": 38, "Mamdani": -22 };
 export const RANK_GROUPS = [["all", "Everyone"], ["H", "House"], ["S", "Senate"], ["X", "White House and Cabinet"], ["J", "Supreme Court"], ["F", "Former officials and governors"]];
 export function allRankings(s) {
   const base = rankings(s), byId = {}; for (const r of base) byId[r.m.id] = r;
@@ -2601,6 +2603,7 @@ export function allRankings(s) {
   // Former officials and governors: they still move money, voters and members.
   for (const [first, last, p, born, g, skin, title, st] of FORMER) { const [sf, sl] = swapPair(first.split(" ")[0], last); const m = { id: "fmr-" + last + first, first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, born, g, look: { skin }, seat: title };
     rows.push({ ...row(m, false, st, title), grp: "F", title }); }
+  for (const r of rows) if (STANDING[r.m.last] && !r.me) r.score += STANDING[r.m.last];
   const keys = ["score", "influence", "legis", "pop", "cash", "integrity", "profile"];
   for (const k of keys) [...rows].sort((a, b) => b[k] - a[k]).forEach((x, i) => (x["a_" + k] = i + 1));
   return rows;
