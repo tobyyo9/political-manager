@@ -253,7 +253,7 @@ export function WhiteHouse({ s, act, real }) {
 
 // ── The Cabinet: the executive branch as characters ──
 const FEMALE = new Set(["Susie", "Brooke", "Linda", "Pam", "Jeanine", "Kari"]);
-const cabFace = (c) => ({ id: "cab" + c.last, g: FEMALE.has(c.first) ? "F" : "M", born: c.born || 1970, p: "R", look: c.tone !== undefined ? { skin: c.tone } : undefined });
+const cabFace = (c) => ({ id: "cab" + c.last, g: FEMALE.has(c.first) ? "F" : "M", born: c.born || 1970, p: S.presParty(), look: c.tone !== undefined ? { skin: c.tone } : undefined });
 export function Cabinet({ s, real, act, role, you }) {
   const [eoQ, setEoQ] = useState("");
   const P = S.PRES_M, rival = role !== "P" && you.p !== S.presParty();
@@ -266,7 +266,7 @@ export function Cabinet({ s, real, act, role, you }) {
         <div>
           <span className="eyebrow">The executive branch</span>
           <h2>{role === "P" ? "Your administration" : `President ${S.nameOf(P, real)}'s administration`}</h2>
-          <p className="muted small">Approval {Math.round(s.presApproval)}% · scandal heat {Math.round((s.presHeat || 0) * 100)}/100{s.presHeat > 0.75 ? " · impeachment talk is growing" : ""}. Cabinet officers rise and fall on scandal heat. Above 70 the press is on them; above 90 House Democrats move to impeach. Replacements need 51 senators.</p>
+          <p className="muted small">Approval {Math.round(s.presApproval)}% · scandal heat {Math.round((s.presHeat || 0) * 100)}/100{s.presHeat > 0.75 ? " · impeachment talk is growing" : ""}. Cabinet officers rise and fall on scandal heat. Above 70 the press is on them; above 90 House {S.presParty() === "D" ? "Republicans" : "Democrats"} move to impeach. Replacements need 51 senators.</p>
         </div>
       </section>
       {(imps.length > 0 || noms.length > 0) && (

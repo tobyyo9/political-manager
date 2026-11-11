@@ -137,6 +137,31 @@ for (const [who, seed, run] of [["Booker NJ", 1, true], ["Booker NJ", 2, true], 
   } catch (e) { fail++; console.log("FAIL ambition", who, seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
 }
 console.log("Ambitions:", ambOut.join(" · "));
+// Your own presidency: win, take the oath, survive the midterms, run again. Plus vacancies and special elections.
+const presArc = []; let oaths = 0, vac = 0;
+for (const seed of [3, 4, 6, 8]) {
+  S.resetWorld(); const y = S.MEMBERS.find((m) => `${m.last} ${m.st}` === (seed % 2 ? "Booker NJ" : "Warnock GA")); const yl = y.last; let s = S.newCareer(y.id, seed), guard = 0; s.profile = 90; const log = [];
+  try {
+    for (let t = 0; t < 8; t++) {
+      while (!s.over && guard++ < 1400) {
+        for (const m of s.inbox.filter((x) => !x.done && x.choices).slice(0, 5)) s = S.answer(s, m.id, m.kind === "presrun" ? 0 : m.kind === "foreign" || m.kind === "orgoffer" ? 1 : seed % 3 === 0 && m.kind === "cabstyle" ? 0 : 0);
+        for (const m of s.inbox.filter((x) => !x.done && x.kind === "scene")) s = S.finishScene(s, m.id, { score: 3, headline: "A scene" });
+        if (S.roleOf(s) === "P" && s.week % 7 === 0) { const b = s.bills.find((x) => x.stage === "desk"); if (b) s = S.decide(s, b.id, true); if (S.can(s, "rally")) s = S.doAction(s, "rally"); }
+        s = S.advance(s);
+        vac += s.news.filter((n) => n.week === s.week && /^Special election in/.test(n.text)).length;
+      }
+      if (!s.over) throw new Error("presidential career never ended");
+      log.push(`${S.electionYear(s)}:${s.result.kind}${s.result.won ? "W" : "L"}`);
+      if (S.canTakeOath(s)) { s = S.takeOath(s); oaths++; if (S.roleOf(s) !== "P" || S.PRES_M.last !== yl) throw new Error("oath did not make you President"); continue; }
+      if (S.canContinue(s)) { s = S.nextCongress(s); continue; } break;
+    }
+    presArc.push(`${yl} ${log.join(" ")}`); n++;
+  } catch (e) { fail++; console.log("FAIL presidency", seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
+}
+S.resetWorld();
+if (!oaths) { fail++; console.log("FAIL presidency: nobody ever took the oath"); }
+if (!vac) { fail++; console.log("FAIL vacancies: no special elections in four long careers"); }
+console.log("Presidency arcs:", presArc.join(" · "), "· special elections", vac);
 console.log("Long careers:", longOut.join(" · "));
 console.log("President:", presOut.map((r) => `${r.kind} ${r.won ? "W" : "L"} ${r.margin ?? ""} appr ${r.approval ?? ""} laws ${r.laws ?? ""} vetoes ${r.vetoes ?? ""}`).join(" · "));
 const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});

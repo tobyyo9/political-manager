@@ -73,14 +73,14 @@ export default function App() {
       <header className="pm-top">
         <div className="pm-id">
           <Face m={you} size={48} ring="#ffcf5a" />
-          <div><strong>{S.titleOf(you)} {S.nameOf(you, real)}</strong><small>{role === "P" ? `Republican · second term · can't run again` : `${you.p === "D" ? "Democrat" : "Republican"} · ${role === "S" ? `Senator from ${you.st}${S.upThisTerm(s, you) ? ` · up in ${S.electionYear(s)}` : ""}` : you.seat} · ${you.faction}`}</small></div>
+          <div><strong>{S.titleOf(you)} {S.nameOf(you, real)}</strong><small>{role === "P" ? (s.presCareer ? `${S.presParty() === "D" ? "Democrat" : "Republican"} · ${s.presCareer.terms >= 2 ? "second term · can't run again" : `first term · ${S.electionYear(s) % 4 === 0 ? `on the ballot in ${S.electionYear(s)}` : `midterms in ${S.electionYear(s)}`}`}` : `Republican · second term · can't run again`) : `${you.p === "D" ? "Democrat" : "Republican"} · ${role === "S" ? `Senator from ${you.st}${S.upThisTerm(s, you) ? ` · up in ${S.electionYear(s)}` : ""}` : you.seat} · ${you.faction}`}</small></div>
         </div>
         <div className="pm-meters">
           <Meter label={s.term > 1 ? `${S.ord(119 + s.term)} Congress` : "Week"} value={`${Math.min(s.week - (s.termStart || 0) + 1, S.WEEKS)} / ${S.WEEKS}`} sub={S.fmtDate(s.week)} />
           <Meter label="Hours left" value={s.hours} sub={`of ${S.HOURS}`} />
           {role === "P" ? <>
             <Meter label="Approval" num={s.presApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.presApproval >= 42 ? "ok" : "no"} />
-            <Meter label="Republicans approve" num={s.baseApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.baseApproval >= 80 ? "ok" : "no"} />
+            <Meter label={`${S.presParty() === "D" ? "Democrats" : "Republicans"} approve`} num={s.baseApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.baseApproval >= 80 ? "ok" : "no"} />
             <Meter label="Political capital" num={s.clout} fmt={(v) => Math.round(v)} />
             <Meter label="Lifetime earnings" num={S.earnTotal(s)} fmt={money} />
             <Meter label="Scandal heat" num={s.presHeat * 100} fmt={(v) => Math.round(v)} invert tone={s.presHeat < 0.6 ? "ok" : "no"} />
@@ -102,10 +102,10 @@ export default function App() {
         <label className="pm-real"><input type="checkbox" checked={real} onChange={(e) => setReal(e.target.checked)} /> Real names</label>
         <button type="button" className="linkbtn" onClick={() => { setSound(!snd); setSnd(!snd); }} title="Chiptune sound effects">{snd ? "Sound on" : "Sound off"}</button>
         <button type="button" className="linkbtn" onClick={async () => { const you2 = S.memberById[s.youId]; const r = await offerFile(`political-manager-${(you2.last || "career").replace(/[^a-z]/gi, "").toLowerCase()}-${S.fmtDate(s.week).replace(/[^0-9a-z]+/gi, "-")}.json`, S.exportSave(s, real)); setToast(r === "saved" ? { title: "Career saved", text: "Load the file from the start screen any time, on any device.", tone: "good" } : r === "declined" ? null : { title: "Couldn't save", text: "This view can't save files.", tone: "bad" }); }}>Save to file</button>
-        <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) setS(null); }}>New career</button>
+        <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) { S.resetWorld(); setS(null); } }}>New career</button>
       </nav>
       <main className={`pm-main page-${tab}`}>
-        {s.over ? (role === "P" || s.result?.kind === "term" || s.result?.kind === "higher" || s.result?.kind === "indicted" || s.result?.kind === "pres" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
+        {s.over ? (role === "P" || s.result?.kind === "term" || s.result?.kind === "higher" || s.result?.kind === "indicted" || s.result?.kind === "pres" || s.result?.kind === "midterm" || s.result?.kind === "farewell" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
         {tab === "inbox" && <Inbox {...ctx} />}
         {tab === "floor" && <Bills {...ctx} />}
         {tab === "chamber" && <ChamberTab {...ctx} />}
@@ -415,7 +415,7 @@ function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene, real, setCa
             ) : <p>{real && m.rbody ? m.rbody : realize(m.body, [], real)}</p>}
             {m.choices && (
               <div className="pm-choices">
-                {m.choices.map((c, i) => <button key={c} type="button" className={`ghost ${m.choice === i ? "on" : ""}`} disabled={m.done} onClick={() => reply(m.id, i)}>{c}</button>)}
+                {m.choices.map((c, i) => <button key={c} type="button" className={`ghost ${m.choice === i ? "on" : ""}`} disabled={m.done} onClick={() => reply(m.id, i)}>{real && m.rchoices ? m.rchoices[i] : c}</button>)}
                 {m.bill && <button type="button" className="linkbtn" onClick={() => setBillOpen(m.bill)}>See the count →</button>}
               </div>
             )}
@@ -848,14 +848,15 @@ function End({ s, you, real, setS }) {
 
 function EndOther({ s, you, real, setS, role }) {
   const r = s.result;
-  const stamp = r.kind === "pres" ? (r.won ? "ELECTED PRESIDENT" : "THE WHITE HOUSE RUN FAILS") : r.kind === "indicted" ? "INDICTED" : r.kind === "higher" ? (r.won ? "ELECTED TO THE SENATE" : "THE SENATE RUN FAILS") : r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
-  const line = r.kind === "pres" ? (r.won ? `You win the presidency, ${r.ev} electoral votes to ${r.evO}, over ${real ? r.oppR : r.opp}. In January you take the oath. This career ends where most only dream of ending.` : `You lose to ${real ? r.oppR : r.opp}, ${r.evO} electoral votes to ${r.ev}. You gave up your seat to run, so this is the end of the line in Congress.`) : r.presLost ? `You lost the presidency to ${real ? r.presLost.oppR : r.presLost.opp}, ${r.presLost.evO} electoral votes to ${r.presLost.ev}, and go back to the Senate with a national name. Your seat isn't up until ${r.next}.` : r.kind === "indicted" ? "Federal prosecutors charged you over foreign money in your campaign. You resign from Congress to fight the case." : r.kind === "higher" ? (r.won ? `You win statewide by ${Math.abs(r.margin)} points. You'll be sworn in as a senator.` : `You lose statewide by ${Math.abs(r.margin)} points, and you gave up your House seat to run.`) : r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
+  const stamp = r.kind === "midterm" ? "THE MIDTERMS" : r.kind === "farewell" ? "TWO TERMS, DONE" : r.kind === "pres" && r.reelect ? (r.won ? "FOUR MORE YEARS" : "ONE TERM") : r.kind === "pres" && !r.approval ? (r.won ? "ELECTED PRESIDENT" : "THE WHITE HOUSE RUN FAILS") : r.kind === "indicted" ? "INDICTED" : r.kind === "higher" ? (r.won ? "ELECTED TO THE SENATE" : "THE SENATE RUN FAILS") : r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
+  const line = r.kind === "midterm" ? `Your party ends up with ${r.houseYours} House seats and ${r.senYours} Senate seats. ${r.keptH && r.keptS ? "You keep both chambers." : !r.keptH && !r.keptS ? "You lose both chambers. Expect subpoenas." : `You ${r.keptH ? "keep the House but lose the Senate" : "keep the Senate but lose the House"}.`}` : r.kind === "farewell" ? `${r.successor ? "Your party holds the White House" : "Your party loses the White House"}, and you hand over the keys in January. You leave at ${r.approval}% approval with ${r.laws} laws and a legacy score of ${r.legacy}.` : r.kind === "pres" && r.reelect ? (r.won ? `You win a second term, ${r.ev} electoral votes to ${r.evO}, over ${real ? r.oppR : r.opp}.` : `You lose to ${real ? r.oppR : r.opp}, ${r.evO} electoral votes to ${r.ev}. One term, and a library to build.`) : r.kind === "pres" && !r.approval ? (r.won ? `You win the presidency, ${r.ev} electoral votes to ${r.evO}, over ${real ? r.oppR : r.opp}. In January you take the oath.` : `You lose to ${real ? r.oppR : r.opp}, ${r.evO} electoral votes to ${r.ev}. You gave up your seat to run, so this is the end of the line in Congress.`) : r.presLost ? `You lost the presidency to ${real ? r.presLost.oppR : r.presLost.opp}, ${r.presLost.evO} electoral votes to ${r.presLost.ev}, and go back to the Senate with a national name. Your seat isn't up until ${r.next}.` : r.kind === "indicted" ? "Federal prosecutors charged you over foreign money in your campaign. You resign from Congress to fight the case." : r.kind === "higher" ? (r.won ? `You win statewide by ${Math.abs(r.margin)} points. You'll be sworn in as a senator.` : `You lose statewide by ${Math.abs(r.margin)} points, and you gave up your House seat to run.`) : r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
   return (
     <section className={`desk pm-end ${r.won ? "won" : "lost"}`}>
-      <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? `January 3, ${S.electionYear(s) + 1}` : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>
+      <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? `January 3, ${S.electionYear(s) + 1}` : r.kind === "removed" ? "The Senate chamber" : `Election night · November ${S.electionYear(s)}`}</span>
       <div className="desk-verdict"><span className="rc-stamp">{stamp}</span><p>{line}</p></div>
       {r.kind === "higher" && <RaceNight s={s} real={real} />}
-      <AfterOffice s={s} setS={setS} />
+      {S.canTakeOath(s) && <div className="rc-actions"><button type="button" className="cold-go" onClick={() => { setS(S.takeOath(s)); window.scrollTo(0, 0); }}>Take the oath of office →</button></div>}
+      {!S.canTakeOath(s) && !S.canContinue(s) && <AfterOffice s={s} setS={setS} />}
       {s.night && <ElectionNight night={s.night} real={real} />}
       <div className="grades">
         {role === "P" ? <>
@@ -880,7 +881,7 @@ function ContinueBar({ s, setS }) {
   return (
     <div className="rc-actions">
       {S.canContinue(s) && <button type="button" className="cold-go" onClick={() => { setS(S.nextCongress(s)); window.scrollTo(0, 0); }}>Serve in the {S.ord(120 + s.term)} Congress →</button>}
-      <button type="button" className={S.canContinue(s) ? "ghost" : "cold-go"} onClick={() => setS(null)}>{S.canContinue(s) ? "Retire and start over" : "Start a new career →"}</button>
+      <button type="button" className={S.canContinue(s) ? "ghost" : "cold-go"} onClick={() => { S.resetWorld(); setS(null); }}>{S.canContinue(s) ? "Retire and start over" : "Start a new career →"}</button>
     </div>
   );
 }
