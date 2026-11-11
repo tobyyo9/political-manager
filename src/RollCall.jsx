@@ -83,7 +83,7 @@ export default function RollCall({ ev, s, onClose, real }) {
         <div className="rc-top">
           <span className="rc-live"><i className="live-dot" /> Roll call vote</span>
           <h2>{S.byId[ev.pid].name}</h2>
-          <span className="pm-yourvote">You voted <b>{ev.yourVote ? "yes" : "no"}</b>{ev.auto ? " (your staff's call)" : ""}. Your seat has the gold ring.</span>
+          {ev.yourVote != null && <span className="pm-yourvote">You voted <b>{ev.yourVote ? "yes" : "no"}</b>{ev.auto ? " (your staff's call)" : ""}. Your seat has the gold ring.</span>}
         </div>
         <div className="rc-chambers">
           {list.map((st, idx) => st.type !== "ch" ? null : idx > i ? <div key={idx} className="rc-chamber pending"><div className="rc-head"><span className="rc-label">{st.label}</span><span className="rc-need">waiting</span></div></div> : <Chamber key={idx} st={st} run={idx === i} youId={s.youId} real={real} />)}

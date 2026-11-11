@@ -194,7 +194,7 @@ for (const q of ["Murphy CT", "Sanders VT", "Waters CA", "Raskin MD", "Schiff CA
       for (const m of s.inbox.filter((x) => !x.done && x.kind === "scene")) s = S.finishScene(s, m.id, { score: 1, headline: "A scene" });
       s = S.advance(s);
       nukeVotes += s.news.filter((n) => n.week === s.week && /filibuster fails|end the legislative filibuster\. Bills/.test(n.text)).length;
-      if (s.over) { if (s.result.kind === "cabinet") confirmed++; if (s.result.kind === "retired") retiredN++; if (S.canContinue(s) && terms < 3) { s = S.nextCongress(s); terms++; } else break; }
+      if (s.over) { if (S.roleOf(s) === "C") confirmed++; if (s.result.kind === "retired") retiredN++; if (S.canContinue(s) && terms < 3) { s = S.nextCongress(s); terms++; } else break; }
     }
     probesDone += (s.probes || []).filter((p) => p.stage === "done").length; n++;
   } catch (e) { fail++; console.log("FAIL rules/oversight/aging", q, seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
@@ -203,7 +203,25 @@ S.resetWorld();
 if (!probesDone) { fail++; console.log("FAIL oversight: no investigation ever finished"); }
 if (!retiredN) { fail++; console.log("FAIL aging: nobody retired on their own terms"); }
 console.log("Rules, oversight, aging:", { offers, confirmed, retired: retiredN, nukeVotes, probesDone });console.log("President:", presOut.map((r) => `${r.kind} ${r.won ? "W" : "L"} ${r.margin ?? ""} appr ${r.approval ?? ""} laws ${r.laws ?? ""} vetoes ${r.vetoes ?? ""}`).join(" · "));
-const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});
+
+// A Cabinet career: confirmed, run the department, keep the President's trust, and leave when the administration does.
+let cabIn = 0; const cabOut = [];
+for (const q of ["Murphy CT", "Raskin MD", "Warren MA", "Kelly AZ"]) for (let seed = 1; seed <= 3; seed++) {
+  S.resetWorld(); const y = S.MEMBERS.find((m) => `${m.last} ${m.st}` === q); let s = S.newCareer(y.id, seed), guard = 0, terms = 0;
+  try {
+    while (guard++ < 1100) {
+      for (const m of s.inbox.filter((x) => !x.done && x.choices).slice(0, 5)) s = S.answer(s, m.id, m.kind === "foreign" ? 1 : m.kind === "presask" ? seed % 3 : m.kind === "presrun" ? 1 : 0);
+      if (S.roleOf(s) === "C") for (const a of ["dpush", "drule", "dtravel", "dmanage", "tv"]) if (S.can(s, a)) s = S.doAction(s, a);
+      s = S.advance(s);
+      if (s.over) { if (S.roleOf(s) === "C") cabOut.push(s.result.kind + (s.result.why ? ":" + s.result.why : "")); if (S.canContinue(s) && terms < 4) { s = S.nextCongress(s); terms++; } else break; }
+    }
+    if (S.roleOf(s) === "C" || s.cabCareer) cabIn++;
+    n++;
+  } catch (e) { fail++; console.log("FAIL cabinet career", q, seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
+}
+S.resetWorld();
+if (!cabIn) { fail++; console.log("FAIL cabinet: nobody ever served"); }
+console.log("Cabinet careers:", cabIn, "served ·", cabOut.join(" "));const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});
 for (const [k, rs] of Object.entries(by((r) => `${r.seat} ${r.p} own ${r.own} · ${r.style}`)))
   console.log(k.padEnd(34), "won", rs.filter((r) => r.won).length + "/" + rs.length, "avg margin", (rs.reduce((a, r) => a + r.margin, 0) / rs.length).toFixed(1), "laws", (rs.reduce((a, r) => a + r.laws, 0) / rs.length).toFixed(1), "ended by", [...new Set(rs.map((r) => r.kind))].join("/"));
 console.log("careers", n, "failures", fail, "House D after election, range", Math.min(...out.map((r) => r.houseD ?? 999)), "to", Math.max(...out.map((r) => r.houseD ?? 0)));

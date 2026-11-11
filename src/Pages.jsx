@@ -180,7 +180,7 @@ export function Office({ s, real, act, setS, setToast }) {
         <section className="panel"><h3>Your numbers over time</h3><Trend s={s} keys={[["a", "Approval at home", "#2fbf71"], ["b", "Your base", "#3d7bd9"], ["p", "The President", "#c8443a"]]} /></section>
       </section>
       <aside className="stack">
-        {S.roleOf(s) !== "P" && (() => { const mm = S.moneyMix(s), ties = Object.entries(s.ties || {}).filter(([, v]) => v >= 20).sort((a, b) => b[1] - a[1]); return (
+        {S.isMem(S.roleOf(s)) && (() => { const mm = S.moneyMix(s), ties = Object.entries(s.ties || {}).filter(([, v]) => v >= 20).sort((a, b) => b[1] - a[1]); return (
           <section className="panel">
             <h3>Where your money comes from</h3>
             <div className="pm-money"><div className="pm-money-bar">{[["Small donors", mm.small, "#2fbf71"], ["Big donors", mm.large, "#7fa6ec"], ["PACs", mm.pac, "#e0a94a"]].map(([l, v, c]) => <i key={l} style={{ width: `${v * 100}%`, background: c }} />)}</div>
@@ -195,7 +195,7 @@ export function Office({ s, real, act, setS, setToast }) {
             <Portrait id={x.id + s.seed + x.name} g={x.first.match(/a$|e$|y$|ine$|Ines|Joy|Grace/) ? "F" : "M"} born={2027 - 26 - x.exp} p="N" size={56} />
             <div><strong>{x.name}</strong><small>{x.title} · {x.exp} years in politics</small><p className="small muted">{x.note}</p>
               <div className="pm-attrs mini"><div className="pm-attr"><span>Skill</span><b className={tint(x.skill)}>{x.skill}</b></div><div className="pm-attr"><span>Loyalty</span><b className={tint(x.loyalty)}>{x.loyalty}</b></div></div>
-              {x.skill < 20 && S.roleOf(s) !== "P" && <button type="button" className="ghost pm-hire" disabled={!S.can(s, "hire") || s.cash < S.hireCost(x)} onClick={() => act("hire", { role: x.role })}>Replace with a better hire (${S.hireCost(x)}K, 4h)</button>}</div>
+              {x.skill < 20 && S.isMem(S.roleOf(s)) && <button type="button" className="ghost pm-hire" disabled={!S.can(s, "hire") || s.cash < S.hireCost(x)} onClick={() => act("hire", { role: x.role })}>Replace with a better hire (${S.hireCost(x)}K, 4h)</button>}</div>
           </article>
         ))}
         {(s.career || []).length > 0 && <section className="panel"><h3>Your career</h3><ul className="pm-cab-pending">{s.career.map((c) => <li key={c.congress}><span className="pill">{S.ord(c.congress)} Congress</span> {c.kind === "higher" ? `Won a Senate seat in ${c.year}` : c.kind === "term" ? "Finished the term" : `Reelected in ${c.year} by ${c.margin} points`} · {c.laws} of your bills became law</li>)}</ul></section>}
@@ -256,7 +256,7 @@ const FEMALE = new Set(["Susie", "Brooke", "Linda", "Pam", "Jeanine", "Kari"]);
 const cabFace = (c) => ({ id: "cab" + c.last, g: FEMALE.has(c.first) ? "F" : "M", born: c.born || 1970, p: S.presParty(), look: c.tone !== undefined ? { skin: c.tone } : undefined });
 export function Cabinet({ s, real, act, role, you }) {
   const [eoQ, setEoQ] = useState("");
-  const P = S.PRES_M, rival = role !== "P" && you.p !== S.presParty();
+  const P = S.PRES_M, rival = (role === "H" || role === "S") && you.p !== S.presParty();
   const imps = (s.imp || []).filter((i) => !i.done), noms = (s.noms || []).filter((n) => !n.done);
   const orders = role === "P" ? S.POLICIES.filter((p) => (S.PRESIDENT_STANCE[p.id] || 0) > 0.3 && !s.laws.includes(p.id) && !(s.eos || []).some((e) => e.pid === p.id) && p.name.toLowerCase().includes(eoQ.toLowerCase())).slice(0, 10) : [];
   return (
@@ -278,18 +278,24 @@ export function Cabinet({ s, real, act, role, you }) {
           </ul>
         </section>
       )}
+      {role === "C" && (() => { const c = S.cabPost(s), C = s.cabCareer; return c && (
+        <section className="panel pm-dept"><h3>Your department: {c.post}</h3>
+          <p className="small">In your lane: {(c.area || []).map((id) => S.byId[id]?.name).filter(Boolean).join(", ") || "the whole of government, as the President sees fit"}.</p>
+          {C.rules.length ? <ul className="small">{C.rules.map((x) => <li key={x.pid}>{S.byId[x.pid]?.name}: {x.alive ? (x.court ? `in effect, court date ${S.fmtDate(x.court)}` : "in effect") : "blocked in court"}</li>)}</ul> : <p className="small muted">No rules yet. Issue one from your inbox's action list.</p>}
+          <p className="small muted">The President's trust: {Math.round((C.trust + 1) * 50)}/100. Below 25 you're fired. Department heat above 90 can force you out.</p>
+        </section>); })()}
       <div className="pm-cab-grid">
         {s.cab.map((c) => (
           <article key={c.id} className={`pm-cab ${c.vacant ? "vacant" : ""} ${c.heat >= 0.7 ? "hot" : ""}`}>
-            <header>{c.vacant ? <span className="pm-cab-empty">?</span> : <Face m={cabFace(c)} size={52} />}<div><small>{c.post}</small><strong>{c.vacant ? "Vacant (acting)" : S.cabName(c, real)}</strong></div></header>
+            <header>{c.vacant ? <span className="pm-cab-empty">?</span> : <Face m={cabFace(c)} size={52} />}<div><small>{c.post}</small><strong>{c.vacant ? "Vacant (acting)" : S.cabName(c, real)}{c.you ? " (you)" : ""}</strong></div></header>
             {!c.vacant && <div className="pm-heat" title="Scandal heat"><span>Heat</span><i><b style={{ width: `${c.heat * 100}%`, background: c.heat >= 0.7 ? "#c8443a" : c.heat >= 0.45 ? "#e0a94a" : "#2fbf71" }} /></i><em>{Math.round(c.heat * 100)}</em></div>}
             {(() => { const pr = (s.probes || []).find((x) => x.cab === c.id && x.stage !== "done"); return pr ? <p className="pm-probe small"><b>Under investigation</b> · {S.probeStage(pr)}{pr.by === s.youId ? " · yours" : ""}{!pr.power ? " · minority, no subpoenas" : ""}</p> : null; })()}
             {!c.vacant && <p className="small muted">{c.note}{c.area?.length ? ` Fights over: ${c.area.slice(0, 3).map((id) => S.byId[id]?.name).filter(Boolean).join(", ")}.` : ""}</p>}
             <div className="bill-actions">
               {!c.vacant && role === "P" && c.id !== "vp" && <button type="button" className="ghost danger" disabled={!S.can(s, "fire")} onClick={() => act("fire", { id: c.id })}>Fire (4h)</button>}
-              {!c.vacant && role !== "P" && rival && c.id !== "vp" && <button type="button" className="ghost" disabled={!S.can(s, "hearing")} onClick={() => act("hearing", { id: c.id })}>Oversight hearing (8h)</button>}
-              {!c.vacant && role !== "P" && rival && c.id !== "vp" && !(s.probes || []).some((x) => x.cab === c.id && x.stage !== "done") && <button type="button" className="ghost" disabled={!S.can(s, "probe")} onClick={() => act("probe", { id: c.id })}>Open an investigation (10h)</button>}
-              {!c.vacant && role !== "P" && !rival && <button type="button" className="ghost" disabled={!S.can(s, "defend")} onClick={() => act("defend", { id: c.id })}>Defend on TV (4h)</button>}
+              {!c.vacant && (role === "H" || role === "S") && rival && c.id !== "vp" && <button type="button" className="ghost" disabled={!S.can(s, "hearing")} onClick={() => act("hearing", { id: c.id })}>Oversight hearing (8h)</button>}
+              {!c.vacant && (role === "H" || role === "S") && rival && c.id !== "vp" && !(s.probes || []).some((x) => x.cab === c.id && x.stage !== "done") && <button type="button" className="ghost" disabled={!S.can(s, "probe")} onClick={() => act("probe", { id: c.id })}>Open an investigation (10h)</button>}
+              {!c.vacant && (role === "H" || role === "S") && !rival && <button type="button" className="ghost" disabled={!S.can(s, "defend")} onClick={() => act("defend", { id: c.id })}>Defend on TV (4h)</button>}
             </div>
           </article>
         ))}
@@ -586,7 +592,7 @@ export function Earnings({ s, setS, setToast }) {
       <p className="pm-earn-total">{fmtK(total)} <small>earned so far</small></p>
       <div className="pm-earn-rows">{rows.map(([l, v]) => <span key={l}>{l} <b className={v < 0 ? "no" : ""}>{fmtK(v)}</b></span>)}</div>
       <p className="small muted">{role === "P" ? "The President earns $400,000 a year." : `Your salary is ${fmtK(S.salaryOf(s))} a year. Campaign money is not yours: spending it on yourself is a crime. Members can't take speaking fees, and other outside earned income is capped at $33,855 a year. Book royalties are the big exception.`}</p>
-      {role !== "P" && <>
+      {(role === "H" || role === "S") && <>
         <h4>Your portfolio: {fmtK(s.port || 0)}</h4>
         <div className="pm-trade">{Object.entries(S.TRADE).map(([k, t]) => { const off = ban && (k === "active" || k === "informed"); return <button key={k} type="button" className={`ghost sm ${s.trade === k ? "on" : ""} ${k === "informed" ? "danger" : ""}`} disabled={off} onClick={() => run(S.setMoney(s, "trade", k))}>{t.label}</button>; })}</div>
         <p className="small muted">{ban ? "The stock trading ban is law: no individual stocks." : s.trade === "informed" ? "Members can legally own and trade stocks, but not on nonpublic information. Trackers watch every disclosure. The returns are real; so is the risk of a story, or worse." : "Members can trade stocks if they disclose within 45 days. Most trade a little; a few trade a lot."}</p>
