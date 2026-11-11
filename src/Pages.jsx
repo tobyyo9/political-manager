@@ -359,7 +359,7 @@ export function Elections({ s, real }) {
         <div className="pm-legend">{[["Safe D", 0.97], ["Likely D", 0.85], ["Lean D", 0.65], ["Toss-up", 0.5], ["Lean R", 0.35], ["Likely R", 0.15], ["Safe R", 0.02]].map(([l, p]) => <span key={l}><i style={{ background: shade(p) }} />{l}</span>)}</div>
       </section>
       </>}
-      <p className="muted small">The forecast moves with the generic ballot, which follows the President's approval and the economy. Each state starts from its 2024 presidential result. Maine and Nebraska's district electoral votes are counted with the statewide winner. {view === "senate" ? "Senate forecasts include incumbency." : ""}</p>
+      <p className="muted small">The forecast moves with the generic ballot, which follows the President's approval and the economy. Each state starts from how it voted in the 2026 midterms, blended with its 2024 presidential vote, so states that swung hardest in 2026 (Texas, North Carolina, Georgia) start further left than they used to. House districts move half as far as their state. Maine and Nebraska's district electoral votes are counted with the statewide winner. {view === "senate" ? "Senate forecasts include incumbency." : ""}</p>
     </div>
   );
 }

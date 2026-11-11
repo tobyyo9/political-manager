@@ -18,7 +18,8 @@ import { VOICES, voiceOf as voiceOf0, line as vline, presRiff, memberStory, OUTL
 let PP = "R", YEAR = 2027;
 const PSIGN = () => (PP === "R" ? 1 : -1);
 // Where the generic ballot settles given the President's approval: a 40% President costs his party about 3 points, plus about 2 for being the party in power.
-export const moodTarget = (s) => PSIGN() * ((45 - s.presApproval) * 0.45 + 2);
+// Recalibrated after 2026: with the President near 39% approval, Democrats won the House vote by about 13 points.
+export const moodTarget = (s) => PSIGN() * ((45 - s.presApproval) * 0.8 + 3);
 export const presParty = () => PP;
 export const yearOf = () => YEAR;
 export { IGROUPS, groupById };
@@ -297,7 +298,7 @@ export function newCareer(youId, seed = Math.floor(Math.random() * 1e9), custom 
     seed, week: 0, youId, hours: HOURS, cash: custom?.cash ?? Math.round(you.base.cash * 0.4), approval: 50 + Math.round((you.own - 50) * 0.5), baseApproval: 62,
     profile: you.lead?.length ? 60 : Math.round(8 + you.seniority * 1.5), clout: Math.round(you.base.influence), integrity: 70, legis: 0, loyalty: 0,
     know, rel: {}, owedToYou: {}, youOwe: [], promises: [], bills: [], laws: [], news: [], inbox: [], pending: null, log: [], n: 0,
-    econ: { growth: 1.6, inflation: 3.4, jobs: 4.6 }, presApproval: 39, mood: 5.3, reconUsed: {}, over: false, result: null, votesCast: [], tookMoney: 0,
+    econ: { growth: 1.6, inflation: 3.4, jobs: 4.6 }, presApproval: 39, mood: 10, reconUsed: {}, over: false, result: null, votesCast: [], tookMoney: 0,
     rapport: 0, pres: [], staff: makeStaff(seed), diff: diff || { info: "normal", world: "normal" }, boost: {}, groups: {}, flags: {}, usedEvents: [], moments: [],
     role: you.ch === "S" ? "S" : "H", cab: freshCabinet(), noms: [], presHeat: 0.35, imp: [], term: 1, termStart: 0, edits: {}, pp: "R", career: [],
   };
@@ -1231,7 +1232,7 @@ function newPresidency(seed, diff) {
   const s = {
     seed, week: 0, youId: "POTUS", role: "P", hours: HOURS, cash: 0, approval: 39, baseApproval: 84, profile: 100, clout: 60, integrity: 50, legis: 0, loyalty: 0,
     know, rel: {}, owedToYou: {}, youOwe: [], promises: [], bills: [], laws: [], news: [], inbox: [], pending: null, log: [], n: 0,
-    econ: { growth: 1.6, inflation: 3.4, jobs: 4.6 }, presApproval: 39, mood: 5.3, reconUsed: {}, over: false, result: null, votesCast: [], tookMoney: 0,
+    econ: { growth: 1.6, inflation: 3.4, jobs: 4.6 }, presApproval: 39, mood: 10, reconUsed: {}, over: false, result: null, votesCast: [], tookMoney: 0,
     rapport: 0, pres: [], staff: makeStaff(seed), diff: diff || { info: "normal", world: "normal" }, boost: {}, groups: {}, flags: {}, usedEvents: [], moments: [],
     cab: freshCabinet(), noms: [], presHeat: 0.35, imp: [], eos: [], legacy: 0, vetoes: 0, signed: 0, term: 1, termStart: 0, edits: {}, pp: "R", career: [],
   };
@@ -1640,7 +1641,7 @@ function presGeneral(s, r) {
 function runHigher(s, r) {
   electionNight(s);
   const you = memberById[s.youId], seat = memberById[s.runFor];
-  const env = you.p === "D" ? s.mood : -s.mood, lean = (you.p === "D" ? seat.dem : 100 - seat.dem) - 50;
+  const env = you.p === "D" ? s.mood : -s.mood, lean = (you.p === "D" ? 1 : -1) * (LEAN[seat.st] ?? (seat.dem - 50) * 2) / 2;
   const inc = seat.p === you.p ? 0 : 4;
   const margin = lean * 2 + env * 0.9 + (s.approval - 50) * 0.25 + (s.profile - 30) * 0.08 + Math.min(5, s.cash / 1000) - inc + (r() - 0.5) * 7;
   s.over = true;
@@ -1662,6 +1663,27 @@ export const EV = { AL: 9, AK: 3, AZ: 11, AR: 6, CA: 54, CO: 10, CT: 7, DE: 3, D
 // Each state's 2024 Democratic share of the two-party presidential vote (from the senators' records; DC added).
 export const STATE_DEM = (() => { const o = { DC: 92 }; for (const m of ORIG) if (m.ch === "S") o[m.st] = m.dem; return o; })();
 const NAT_2024 = -1.5;                                   // Trump won the national vote by about 1.5 points
+// The 2026 midterms rewrote the map. Statewide results, Democrat minus Republican in points (an independent running as the
+// Republican's main opponent counts on the Democratic side), from AP counts as of November 8-10, 2026. Democrats won the
+// national House vote by about 13 points.
+const SEN26 = { AL: -9.4, AK: 0.7, AR: -11.9, CO: 25.4, DE: 27.2, FL: -2.9, GA: 18.0, ID: -23.0, IL: 24.3, IA: 4.1, KS: 5.0, KY: -12.1, LA: -1.8, ME: 6.3, MA: 31.3, MI: 7.0, MN: 10.1, MS: 0.3,
+  MT: -10.6, NE: -6.2, NH: 13.7, NJ: 27.2, NM: 26.6, NC: 19.6, OH: 4.8, OK: -17.9, OR: 19.4, RI: 37.5, SC: 4.5, SD: -21.0, TN: -12.2, TX: 12.1, VA: 22.7, WV: -20.4, WY: -30.4 };
+const GOV26 = { AL: -4.0, AZ: 13.1, AR: -15.3, CA: 31.2, CO: 27.8, CT: 19.2, FL: -1.3, GA: 8.6, HI: 45.2, ID: -24.8, IL: 23.5, IA: 11.0, KS: 0.7, ME: 17.1, MD: 32.2, MA: 27.3, MI: 10.9, MN: 12.9,
+  NE: -8.0, NV: 7.6, NH: -4.3, NM: 14.8, NY: 19.6, OH: 7.9, OK: -6.0, OR: 9.6, PA: 22.1, SC: -4.5, SD: -27.0, TN: -2.5, TX: 7.1, VT: -6.6, WI: 8.0 };
+// Each state's lean against the nation: mostly what it did in 2026, partly what it did for President in 2024. Governor's races
+// carry big candidate effects (a popular incumbent can win anywhere), so a state with only a governor's race leans on 2024 more.
+// States with no statewide race in 2026 move by the typical shift. LEAN is relative: add the national environment to get a margin.
+export const REL24 = {}, LEAN = {};
+// The 2026 national environment is set so a typical state kept its lean: the median state moved by the national swing,
+// and the states that moved more than that (Texas, North Carolina, Georgia) now lean further toward Democrats than before.
+// (The national House vote, about D+13, runs ahead of statewide races because of uncontested seats.)
+export let NAT_2026 = 0;
+{ const raw = {}; for (const st of Object.keys(STATE_DEM)) { REL24[st] = (STATE_DEM[st] - 50) * 2 - NAT_2024; const sn = SEN26[st], gv = GOV26[st];
+    if (sn != null || gv != null) raw[st] = { m: sn != null && gv != null ? sn * 0.6 + gv * 0.4 : sn ?? gv, w: sn != null ? 0.8 : 0.45 }; }
+  const sw = Object.entries(raw).filter(([, x]) => x.w === 0.8).map(([st, x]) => x.m - REL24[st]).sort((a, b) => a - b); NAT_2026 = sw[Math.floor(sw.length / 2)];
+  const rel26 = {}; for (const [st, x] of Object.entries(raw)) rel26[st] = { m: x.m - NAT_2026, w: x.w };
+  const typical = 0;
+  for (const st of Object.keys(STATE_DEM)) { const x = rel26[st]; LEAN[st] = Math.round((x ? x.w * x.m + (1 - x.w) * REL24[st] : REL24[st] + 0.6 * typical) * 10) / 10; } }
 const phi = (z) => 1 / (1 + Math.exp(-1.7 * z));
 // The national presidential margin for Democrats: the generic ballot plus the economy, which helps or hurts the party in power.
 export function nationalPres(s) { return s.mood * 0.85 - PSIGN() * ((s.econ.growth - 1.6) * 1.2 - (s.econ.inflation - 3) * 1.0); }
@@ -1669,7 +1691,7 @@ export function nationalPres(s) { return s.mood * 0.85 - PSIGN() * ((s.econ.grow
 export function presMap(s, final = false, year = electionYear(s)) {
   const nat = nationalPres(s) + nomEdge(s), states = {}; const ev = { D: 0, R: 0 };
   for (const st of Object.keys(EV)) {
-    const base = (STATE_DEM[st] - 50) * 2 + (nat - NAT_2024) + homeBump(s, st);
+    const base = LEAN[st] + nat + homeBump(s, st);
     const m = final ? base + noise(`${s.seed}:pres:${year}:${st}`) * 4 + noise(`${s.seed}:presnat:${year}`) * 2 : base;
     const pD = final ? (m > 0 ? 1 : 0) : phi(m / 5);
     states[st] = { m: Math.round(m * 10) / 10, pD, w: m > 0 ? "D" : "R", ev: EV[st] };
@@ -1906,7 +1928,8 @@ const addAid = (s, id, p, amt) => { s.aid = s.aid || {}; const a = (s.aid[id] = 
 export function projMargin(s) {
   const you = memberById[s.youId], env = you.p === "D" ? s.mood : -s.mood, gg = groupElection(s, "general");
   // Personal popularity matters, but only so much: even a well-liked member in a district that leans the other way rarely wins by double digits.
-  return (you.own - 50) * 2 + env * 0.9 + 3 + clamp((s.approval - 50) * 0.3, -8, 5) + Math.min(2, s.cash / 1200) + gg.net * 0.5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2
+  const shift = (you.p === "D" ? 1 : -1) * (you.ch === "S" ? (LEAN[you.st] ?? (you.dem - 50) * 2) - (you.dem - 50) * 2 : 0.5 * ((LEAN[you.st] ?? 0) - (REL24[you.st] ?? 0)));   // the 2026 shift in your state
+  return (you.own - 50) * 2 + shift + env * 0.9 + 3 + clamp((s.approval - 50) * 0.3, -8, 5) + Math.min(2, s.cash / 1200) + gg.net * 0.5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2
     + campPts(s) - oppPts(s) + (you.p === "D" ? 1 : -1) * aidPts(s, you);
 }
 const OPP_BIO = { strong: ["a state senator with a big donor list", "a former federal prosecutor", "a self-funding businessman", "a decorated combat veteran", "the mayor of the district's biggest city", "a popular local TV anchor"],
@@ -3144,12 +3167,12 @@ const TWO_YEAR = new Set(["VT", "NH"]);
 const SAME_PARTY_APPT = new Set(["AZ", "HI", "KY", "MD", "NC", "UT", "WV", "WY"]);
 function govSeed(s) { if (s.govs) return; s.govs = {}; for (const [st, [first, last, p, g, next, flag]] of Object.entries(GOVS0)) { const [sf, sl] = swapPair(first.split(" ")[0], last); s.govs[st] = { first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, g, next, tl: flag === "tl", lead: flag === "lead", real: true }; } }
 export const govOf = (s, st) => s.govs?.[st] || null;
-export const govParty = (s, st) => s.govs?.[st]?.p || (STATE_DEM[st] >= 50 ? "D" : "R");
+export const govParty = (s, st) => s.govs?.[st]?.p || ((LEAN[st] ?? 0) >= 0 ? "D" : "R");
 // One governor's race. The party out of the White House usually gains; incumbents run a few points ahead.
 function govRace(s, st, year, youRun = null) {
   const g = s.govs[st], inc = !g.tl && !youRun && noise(`${s.seed}:govret:${st}:${year}`) > -0.8 ? g : null, r = rng(hash(`${s.seed}:gov:${st}:${year}`));
   const midterm = year % 4 === 2 || year % 2 === 1, outP = PP === "D" ? "R" : "D";
-  let m = (STATE_DEM[st] - 50) * 1.6 + s.mood * 0.6 + (midterm ? (outP === "D" ? 2 : -2) : 0) + (inc ? (inc.p === "D" ? 5 : -5) : 0) + noise(`${s.seed}:govm:${st}:${year}`) * 8;
+  let m = (LEAN[st] ?? 0) * 0.85 + s.mood * 0.6 + (midterm ? (outP === "D" ? 2 : -2) : 0) + (inc ? (inc.p === "D" ? 5 : -5) : 0) + noise(`${s.seed}:govm:${st}:${year}`) * 8;
   if (youRun) m += (youRun.p === "D" ? 1 : -1) * youRun.edge;
   const w = m > 0 ? "D" : "R", next = year + (TWO_YEAR.has(st) ? 2 : 4);
   const was = { ...g };
@@ -3206,7 +3229,7 @@ function govOffer(s, you) {
 }
 function govGeneral(s, r) {
   electionNight(s);
-  const you = memberById[s.youId], st = you.st, lean = (you.p === "D" ? STATE_DEM[st] : 100 - STATE_DEM[st]) - 50, env = you.p === "D" ? s.mood : -s.mood;
+  const you = memberById[s.youId], st = you.st, lean = (you.p === "D" ? 1 : -1) * (LEAN[st] ?? 0) / 2, env = you.p === "D" ? s.mood : -s.mood;
   const edge = (s.approval - 50) * 0.25 + (s.profile - 30) * 0.08 + Math.min(5, s.cash / 1000) + (s.debateBonus || 0) + (r() - 0.5) * 4;
   const res = govElections(s, electionYear(s), { ...you, edge }).find((x) => x.st === st);
   const won = res && res.now.you;
@@ -3306,7 +3329,9 @@ function seatQ(s, m) { const k = s.amb?.year === electionYear(s) ? s.amb.sen?.[m
 const isOpen = (s, m) => !!m.vacant || !!(s.amb?.year === electionYear(s) && s.amb.out?.[m.id]);
 function seatMargin(s, m) {
   const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`), H = m.ch === "H";
-  return (m.dem - 50) * 2 + s.mood * (H ? 0.9 : 0.8) + (isOpen(s, m) ? 0 : inc * 4) + n * (H ? 5 : 6) + aidPts(s, m) + seatQ(s, m);
+  // Senate races start from the state's new lean; House districts from their 2024 vote, moved half as far as their state moved in 2026.
+  const lean = H ? (m.dem - 50) * 2 + 0.5 * ((LEAN[m.st] ?? 0) - (REL24[m.st] ?? 0)) : (LEAN[m.st] ?? (m.dem - 50) * 2);
+  return lean + s.mood * (H ? 0.9 : 0.8) + (isOpen(s, m) ? 0 : inc * 4) + n * (H ? 5 : 6) + aidPts(s, m) + seatQ(s, m);
 }
 // Put a real person into a seat (keeping the seat's id, state and lean). Used when a named candidate wins.
 function install(s, seat, P, year) {
