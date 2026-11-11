@@ -310,7 +310,7 @@ const STATE_NAME = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas",
 // Probability (or seat share) of Democrats -> a color from deep red to deep blue.
 const shade = (p) => (p >= 0.95 ? "#1b3f8f" : p >= 0.8 ? "#3d7bd9" : p >= 0.6 ? "#9db8f0" : p > 0.4 ? "#d9d4e6" : p > 0.2 ? "#f0a9a0" : p > 0.05 ? "#d4594d" : "#8f231b");
 const SMALL = new Set(["VT", "NH", "MA", "RI", "CT", "NJ", "DE", "MD", "DC", "HI"]);
-export function Elections({ s }) {
+export function Elections({ s, real }) {
   const [view, setView] = useState("pres");
   const [when, setWhen] = useState("now");
   const [hover, setHover] = useState(null);
@@ -326,7 +326,7 @@ export function Elections({ s }) {
   };
   const tip = (st) => {
     if (view === "pres") { const x = pres.states[st]; return x && `${STATE_NAME[st]} · ${x.ev} electoral votes · ${x.m > 0 ? "D" : "R"}+${Math.abs(x.m).toFixed(1)}${pres.final ? "" : ` · Democrats ${Math.round(x.pD * 100)}% to win`}`; }
-    if (view === "senate") { const x = sen.states[st]; if (!x) return `${STATE_NAME[st]} · no Senate race this cycle`; const m = S.memberById[x.who]; return `${STATE_NAME[st]} · ${past ? "won by" : "held by"} ${past ? (x.w === "D" ? "Democrats" : "Republicans") : `${S.nameOf(m)} (${m.p})`} · ${x.m > 0 ? "D" : "R"}+${Math.abs(x.m).toFixed(1)}${past ? "" : ` · Democrats ${Math.round(x.pD * 100)}% to win`}`; }
+    if (view === "senate") { const x = sen.states[st]; if (!x) return `${STATE_NAME[st]} · no Senate race this cycle`; const m = S.memberById[x.who], nn = (n) => (real ? `${n.first} ${n.last}` : `${n.sf} ${n.sl}`), noms = !past && x.noms ? ["D", "R"].filter((p) => x.noms[p]).map((p) => `${nn(x.noms[p])} (${p})`).join(" vs. ") : ""; return `${STATE_NAME[st]} · ${past ? "won by" : x.open ? "open seat, held by" : "held by"} ${past ? (x.w === "D" ? "Democrats" : "Republicans") : `${S.nameOf(m, real)} (${m.p})`}${noms ? ` · running: ${noms}` : ""} · ${x.m > 0 ? "D" : "R"}+${Math.abs(x.m).toFixed(1)}${past ? "" : ` · Democrats ${Math.round(x.pD * 100)}% to win`}`; }
     const x = house.states[st]; return x && `${STATE_NAME[st]} · ${x.D} Democrats, ${x.R} Republicans in the House`;
   };
   const evD = pres.ev.D, evR = pres.ev.R;
@@ -335,7 +335,7 @@ export function Elections({ s }) {
     <div className="stack">
       <div className="pm-headrow">
         <h2 className="pm-h">Elections {past ? (s.lastPres || s.lastSenate ? `· ${year - 2}` : "") : `· ${year} forecast`}</h2>
-        <div className="hemi-by">{[["pres", "President"], ["senate", "Senate"], ["house", "House delegations"]].map(([v, l]) => <button key={v} type="button" className={view === v ? "on" : ""} onClick={() => setView(v)}>{l}</button>)}</div>
+        <div className="hemi-by">{[["pres", "President"], ["senate", "Senate"], ["house", "House delegations"], ...(s.amb?.pr && !past ? [["race", `${s.amb.year} primaries`]] : [])].map(([v, l]) => <button key={v} type="button" className={view === v ? "on" : ""} onClick={() => setView(v)}>{l}</button>)}</div>
         {(s.lastPres || s.lastSenate) && <div className="hemi-by">{[["now", "Forecast"], ["last", "Last election"]].map(([v, l]) => <button key={v} type="button" className={when === v ? "on" : ""} onClick={() => setWhen(v)}>{l}</button>)}</div>}
       </div>
       {view === "pres" && (
@@ -346,6 +346,7 @@ export function Elections({ s }) {
       )}
       {view === "senate" && <section className="panel small">{senUp.length} seats {past ? "were" : "are"} on the {past ? "last" : year} ballot (class {sen.cls}). Democrats hold {S.SENATE.filter((m) => m.p === "D").length} seats now{!past ? `; on this forecast they would hold about ${senD}` : ""}.</section>}
       {view === "house" && <section className="panel small">Democrats hold {S.HOUSE.filter((m) => m.p === "D").length} of 435 seats. The generic ballot is {s.mood >= 0 ? "D" : "R"}+{Math.abs(s.mood).toFixed(1)}.</section>}
+      {view === "race" && s.amb?.pr ? <PrimaryRace s={s} real={real} /> : <>
       <section className="pm-map-wrap">
         <svg viewBox="0 0 975 610" className="pm-map" role="img" aria-label="Map of the United States">
           {Object.entries(USMAP).map(([st, g]) => <path key={st} d={g.d} fill={fill(st)} stroke="#fff" strokeWidth={hover === st ? 2.5 : 0.8} onMouseEnter={() => setHover(st)} onMouseLeave={() => setHover(null)} onClick={() => setHover(st)} />)}
@@ -354,7 +355,41 @@ export function Elections({ s }) {
         <div className="pm-map-tip">{hover ? tip(hover) : "Hover or tap a state."}</div>
         <div className="pm-legend">{[["Safe D", 0.97], ["Likely D", 0.85], ["Lean D", 0.65], ["Toss-up", 0.5], ["Lean R", 0.35], ["Likely R", 0.15], ["Safe R", 0.02]].map(([l, p]) => <span key={l}><i style={{ background: shade(p) }} />{l}</span>)}</div>
       </section>
+      </>}
       <p className="muted small">The forecast moves with the generic ballot, which follows the President's approval and the economy. Each state starts from its 2024 presidential result. Maine and Nebraska's district electoral votes are counted with the statewide winner. {view === "senate" ? "Senate forecasts include incumbency." : ""}</p>
+    </div>
+  );
+}
+// The race for each party's nomination: the field, support, delegates and the calendar.
+export function PrimaryRace({ s, real }) {
+  const P = s.amb?.pr; if (!P) return null;
+  const you = S.memberById[s.youId], t0 = s.termStart || 0;
+  const nm = (c) => (c.you ? S.nameOf(you, real) : real ? `${c.first} ${c.last}` : `${c.sf} ${c.sl}`);
+  const col = (p) => {
+    const X = P[p], need = Math.floor(S.DELS[p] / 2) + 1, rows = [...X.c].sort((a, b) => (a.out ? 1 : 0) - (b.out ? 1 : 0) || (b.out || 0) - (a.out || 0) || b.del - a.del || b.sup - a.sup);
+    return (
+      <section className={`panel pm-prim ${p}`}>
+        <h3>{p === "D" ? "Democrats" : "Republicans"}{X.solo ? " · the President runs again" : X.nom ? ` · nominee: ${nm(X.nom)}` : ""}</h3>
+        {!X.c.length ? <p className="muted small">Nobody has declared yet. Candidates usually announce in the year before the election.</p> : (
+          <ul className="pm-prim-list">{rows.map((c) => (
+            <li key={c.last + c.first} className={c.out ? "out" : c === X.nom ? "nom" : ""}>
+              <Face m={{ id: c.id || "pr" + c.last, g: c.g, born: c.born, p: c.p, look: c.look }} size={34} />
+              <span className="nm">{nm(c)}{c.you ? " (you)" : ""}<small>{c.out ? `Dropped out${c.endorse ? `, endorsed ${nm(c.endorse)}` : ""}` : c.title === "Sen." ? `Senator, ${c.st}` : c.title === "Rep." ? `Representative, ${c.st}` : c.title || ""}</small></span>
+              <span className="pm-prim-bar"><i style={{ width: `${c.out ? 0 : Math.round(c.sup * 100)}%` }} /></span>
+              <b>{c.out ? "–" : `${Math.round(c.sup * 100)}%`}</b>
+              <span className="del">{c.del ? `${c.del.toLocaleString()}` : ""}</span>
+            </li>))}
+          </ul>)}
+        {!X.solo && <p className="muted small">{need.toLocaleString()} delegates to clinch. Support is a polling average; delegates are won in the contests below.</p>}
+      </section>
+    );
+  };
+  return (
+    <div className="stack">
+      <div className="pm-prim-cols">{col("D")}{col("R")}</div>
+      <section className="panel"><h3>The calendar</h3>
+        <ol className="pm-cal">{P.cal.map((ev) => <li key={ev.w} className={ev.res ? "done" : ""}><b>{S.fmtDate(t0 + ev.w)}</b> {ev.name}{ev.res && ["D", "R"].filter((p) => ev.res[p]).map((p) => <span key={p} className={`pm-cal-w ${p}`}>{p}: {ev.res[p][0].you ? "you" : nm(ev.res[p][0])} {ev.res[p][0].v}%</span>)}</li>)}</ol>
+      </section>
     </div>
   );
 }
@@ -433,7 +468,7 @@ export function Campaign({ s, setS, real, setCard, setToast }) {
           : <section className="panel pm-opp">
             <div className="pm-opp-head">
               <Portrait id={`opp${s.seed}${o.first}${o.last}`} g={o.g} born={1972} p={o.p} size={64} />
-              <div><span className="eyebrow">Your opponent · {o.p === "D" ? "Democrat" : "Republican"}</span><h3>{o.first} {o.last}</h3><p className="small muted">{o.bio[0].toUpperCase() + o.bio.slice(1)}. {o.q > 0.6 ? "A top recruit." : o.q > 0.3 ? "A credible challenger." : "A long shot."}</p></div>
+              <div><span className="eyebrow">Your opponent · {o.p === "D" ? "Democrat" : "Republican"}</span><h3>{real && o.rname ? o.rname : `${o.first} ${o.last}`}</h3><p className="small muted">{o.bio[0].toUpperCase() + o.bio.slice(1)}. {o.q > 0.6 ? "A top recruit." : o.q > 0.3 ? "A credible challenger." : "A long shot."}</p></div>
             </div>
             <div className="pm-vs">
               <div><span className="stat-label">Your war chest</span><b>{fmtK(s.cash)}</b><small>spent {fmtK(s.camp?.spent || 0)}{s.camp?.auto ? `, ${fmtK(s.camp.auto)} by your campaign manager` : ""}</small></div>
@@ -579,18 +614,18 @@ export function RaceNight({ s, real }) {
   const calm = (() => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } })();
   const [pct, setPct] = useState(calm ? 100 : 0), [run, setRun] = useState(0);
   React.useEffect(() => { if (calm) return; setPct(0); let p = 0; const t = setInterval(() => { p = Math.min(100, p + 1 + Math.random() * 3); setPct(p); if (p >= 100) clearInterval(t); }, 90); return () => clearInterval(t); }, [run]);
-  if (!r || (r.kind !== "general" && r.kind !== "higher") || r.margin == null) return null;
+  if (!r || (r.kind !== "general" && r.kind !== "higher" && r.kind !== "primary") || r.margin == null) return null;
   // Early returns wander (mail ballots, then election-day votes, then the late count) and settle on the real margin.
   const h = (k) => { let x = 0; for (const c of `${s.seed}${k}`) x = (x * 31 + c.charCodeAt(0)) % 9973; return x / 9973 - 0.5; };
   const wander = (1 - pct / 100) ** 1.4 * (14 * h("a") + 8 * Math.sin(pct / 9 + h("b") * 6));
   const m = r.margin + wander, mine = Math.max(1, Math.min(99, 50 + m / 2));
-  const oppName = r.opp?.name || (s.opp ? `${s.opp.first} ${s.opp.last}` : "Your opponent"), called = pct >= 100 || (pct > 70 && Math.abs(r.margin) > 12) || (pct > 88 && Math.abs(r.margin) > 4);
-  const votes = Math.round((you.ch === "S" || r.kind === "higher" ? 3200000 : 330000) * pct / 100);
+  const prim = r.kind === "primary", oppName = prim ? (real ? r.oppR : r.opp) || "The challenger" : real && s.opp?.rname ? s.opp.rname : r.opp?.name || (s.opp ? `${s.opp.first} ${s.opp.last}` : "Your opponent"), called = pct >= 100 || (pct > 70 && Math.abs(r.margin) > 12) || (pct > 88 && Math.abs(r.margin) > 4);
+  const votes = Math.round((you.ch === "S" || r.kind === "higher" ? 3200000 : 330000) * (prim ? 0.22 : 1) * pct / 100);
   return (
     <section className="pm-race">
-      <div className="pm-race-head"><span className="rc-live"><i className="live-dot" /> {r.kind === "higher" ? `U.S. Senate · ${you.st}` : you.seat}</span><span className="muted small">{Math.floor(pct)}% reporting · {votes.toLocaleString()} votes counted</span><button type="button" className="linkbtn" onClick={() => setRun((x) => x + 1)}>Replay</button></div>
+      <div className="pm-race-head"><span className="rc-live"><i className="live-dot" /> {prim ? `${you.p === "D" ? "Democratic" : "Republican"} primary · ${you.ch === "S" ? you.st : you.seat}` : r.kind === "higher" ? `U.S. Senate · ${you.st}` : you.seat}</span><span className="muted small">{Math.floor(pct)}% reporting · {votes.toLocaleString()} votes counted</span><button type="button" className="linkbtn" onClick={() => setRun((x) => x + 1)}>Replay</button></div>
       <div className="pm-race-row you"><span>{S.nameOf(you, real)} ({you.p})</span><div className="pm-race-bar"><i style={{ width: `${mine}%` }} /></div><b>{mine.toFixed(1)}%</b></div>
-      <div className="pm-race-row opp"><span>{oppName} ({you.p === "D" ? "R" : "D"})</span><div className="pm-race-bar"><i style={{ width: `${100 - mine}%` }} /></div><b>{(100 - mine).toFixed(1)}%</b></div>
+      <div className="pm-race-row opp"><span>{oppName} ({prim ? you.p : you.p === "D" ? "R" : "D"})</span><div className="pm-race-bar"><i style={{ width: `${100 - mine}%` }} /></div><b>{(100 - mine).toFixed(1)}%</b></div>
       <p className={`pm-race-call ${called ? (r.won ? "ok" : "no") : ""}`}>{called ? `PROJECTED WINNER: ${r.won ? S.nameOf(you, real) : oppName}` : pct < 30 ? "Too early to call" : "Too close to call"}</p>
     </section>
   );

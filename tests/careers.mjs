@@ -111,6 +111,32 @@ for (const [id, seed] of [[S.HOUSE.filter((m) => m.p === "D").sort((a, b) => b.o
     longOut.push(`${S.memberById[s.youId].seat} terms ${terms} ${s.result.kind} ${s.result.won ? "W" : "L"} pp ${S.presParty()} H-D ${S.HOUSE.filter((m) => m.p === "D").length} S-D ${S.SENATE.filter((m) => m.p === "D").length} lead ${S.memberById[s.youId].lead?.[0] || "-"}`); n++;
   } catch (e) { fail++; console.log("FAIL long", id, seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
 }
+// Ambitions and elections: real people run, primaries happen, a real nominee takes the White House.
+const ambOut = [];
+for (const [who, seed, run] of [["Booker NJ", 1, true], ["Booker NJ", 2, true], ["Schumer NY", 3, false], ["Warnock GA", 4, false], ["Rabb PA", 5, false], ["Cruz TX", 6, true]]) {
+  const y = S.MEMBERS.find((m) => `${m.last} ${m.st}` === who) || S.HOUSE[0]; let s = S.newCareer(y.id, seed), guard = 0;
+  try {
+    if (run) s.profile = 85;
+    while (!s.over && guard++ < 200) {
+      for (const m of s.inbox.filter((x) => !x.done && x.choices).slice(0, 4)) s = S.answer(s, m.id, m.kind === "presrun" ? (run ? 0 : 1) : m.kind === "foreign" ? 1 : seed % 3);
+      for (const m of s.inbox.filter((x) => !x.done && x.kind === "scene")) s = S.finishScene(s, m.id, { score: seed % 2 ? 2 : -2, headline: "A scene" });
+      s = S.advance(s);
+    }
+    const A = s.amb; if (!A?.pr) throw new Error("no presidential race");
+    for (const p of ["D", "R"]) if (!A.pr[p].nom) throw new Error(`no ${p} nominee`);
+    if (A.pr.D.c.length < 3 || A.pr.R.c.length < 2) throw new Error("thin field");
+    if (!A.log.length) throw new Error("nobody announced anything");
+    const you = A.pr[y.p].c.find((c) => c.you);
+    if (run && !you) throw new Error("player never joined the race");
+    let pres = "";
+    if (S.canContinue(s)) { s = S.nextCongress(s); pres = `${S.PRES_M.first} ${S.PRES_M.last}${S.PRES_M.fictional ? " (fictional)" : ""}`;
+      if (!s.presRec) throw new Error("no new President"); if (A.pr[S.presParty()].nom.you) throw new Error("player became President but career continued");
+      if (!A.pr[S.presParty()].nom.you && S.PRES_M.fictional) throw new Error("a real nominee won but the President is fictional"); }
+    ambOut.push(`${y.last} ${s.result?.kind || "next"}${you ? ` ran(${A.pr[y.p].nom === you ? "nom" : you.out ? "out" : "in"})` : ""} D:${A.pr.D.nom.last} R:${A.pr.R.nom.last} lost-prim ${A.prim ?? "-"} out ${Object.keys(A.out).length}${pres ? ` → ${pres}` : ""}`);
+    n++;
+  } catch (e) { fail++; console.log("FAIL ambition", who, seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
+}
+console.log("Ambitions:", ambOut.join(" · "));
 console.log("Long careers:", longOut.join(" · "));
 console.log("President:", presOut.map((r) => `${r.kind} ${r.won ? "W" : "L"} ${r.margin ?? ""} appr ${r.approval ?? ""} laws ${r.laws ?? ""} vetoes ${r.vetoes ?? ""}`).join(" · "));
 const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});

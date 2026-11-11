@@ -13,7 +13,7 @@ const other = (p) => (p === "D" ? "R" : "D");
 
 // choice: { label, stat, risk, mod, aud: {base, swing, profile}, good, bad, tag }
 function build(s, msg, real) {
-  const sc = msg.scene, you = S.memberById[s.youId], role = S.roleOf(s), yourName = `${S.titleOf(you)} ${S.nameOf(you, real)}`;
+  const sc = real && msg.scene.oppR ? { ...msg.scene, opp: msg.scene.oppR } : msg.scene, you = S.memberById[s.youId], role = S.roleOf(s), yourName = `${S.titleOf(you)} ${S.nameOf(you, real)}`;
   const P = S.presParty();
   if (sc.type === "tv") {
     const host = anchor(HOSTS, msg.id), bill = S.byId[sc.pid]?.name || "the bill", info = S.billInfo(sc.pid, you.p);
@@ -105,7 +105,7 @@ function build(s, msg, real) {
   if (sc.type === "debate") {
     const mod = anchor(MODS, msg.id), oppFace = { id: sc.oppId || "opp" + sc.opp, g: sc.oppG || (/a$|e$/.test(sc.opp.split(" ")[0]) ? "F" : "M"), born: 1972, p: other(you.p) };
     const boss = MEMBERS_TOP(you);
-    return { setting: "debate", network: `Debate · ${sc.ch === "S" ? `U.S. Senate, ${you.st}` : you.seat}`, lower: [mod.name, "Moderator"], cast: [{ name: sc.opp, title: `${other(you.p)} challenger`, face: oppFace, stat: 12 }, { name: yourName, title: `${you.p}-${you.seat}`, face: you, you: true }, { name: mod.name, title: "Moderator", face: mod.face, mod: true }],
+    return { setting: "debate", network: sc.ch === "P" ? "Presidential debate" : `Debate · ${sc.ch === "S" ? `U.S. Senate, ${you.st}` : you.seat}`, lower: [mod.name, "Moderator"], cast: [{ name: sc.opp, title: `${other(you.p)} challenger`, face: oppFace, stat: 12 }, { name: yourName, title: `${you.p}-${you.seat}`, face: you, you: true }, { name: mod.name, title: "Moderator", face: mod.face, mod: true }],
       intro: `Two podiums, one camera each, ninety minutes. ${sc.opp} has been waiting for this.`,
       beats: [
         { who: 2, line: `"First question. Prices are still high and people are worried. What have you done about it?"`,
@@ -128,6 +128,39 @@ function build(s, msg, real) {
           ] },
       ],
       headline: (score) => score >= 3 ? `${S.nameOf(you, real)} dominates debate against ${sc.opp}` : score <= -3 ? `${sc.opp} lands blows on ${S.nameOf(you, real)} in debate` : `${S.nameOf(you, real)} and ${sc.opp} trade jabs in debate` };
+  }
+  if (sc.type === "pdebate") {
+    const mod = anchor(MODS, msg.id), opp = real && sc.oppR ? sc.oppR : sc.opp, party = you.p === "D" ? "Democratic" : "Republican";
+    const oppFace = { id: sc.oppId || "opp" + sc.opp, g: sc.oppG || "M", born: 1978, p: you.p };
+    const ATT = { left: `"You've been in Washington long enough to forget who sent you. When it counted, you folded. We need a fighter."`,
+      center: `"You're too far out to win in November, and everyone on this stage knows it."`,
+      right: `"You voted with the Democrats when it mattered. That's not what our voters sent you there to do."`,
+      estab: `"Lots of TV, not a lot of results. Name one thing you've actually gotten done."` };
+    const att = ATT[sc.side] || ATT.left;
+    return { setting: "debate", network: sc.pres ? `${party} presidential debate` : `${party} primary · ${sc.ch === "S" ? `U.S. Senate, ${you.st}` : you.seat}`, lower: [mod.name, "Moderator"],
+      cast: [{ name: opp, title: sc.pres ? "Rival for the nomination" : `${party} challenger`, face: oppFace, stat: sc.pres ? 14 : 12 }, { name: yourName, title: `${you.p}-${you.seat}`, face: you, you: true }, { name: mod.name, title: "Moderator", face: mod.face, mod: true }],
+      intro: sc.pres ? `A stage in an early state, a national audience, and ${opp} at the next podium. Every answer is a clip.` : `Same party, same voters, one nomination. ${opp} has been waiting months for this.`,
+      beats: [
+        { who: 2, line: sc.pres ? `"Why you, and why now?"` : `"Your opponent says you've lost touch with this party's voters. Respond."`,
+          choices: [
+            { label: "Run on your record", stat: "Policy", aud: { base: 1 }, good: "Bills, votes, wins. You name them without notes.", bad: "The list is long and nobody remembers any of it." },
+            { label: "Out-fight them", stat: "Media", risk: true, aud: { base: 1.6, profile: 1.5, swing: -0.4 }, good: "You land the line the base came for. The room erupts.", bad: "It sounds like you're trying too hard, because you are." },
+            { label: "Talk about home", stat: "Integrity", aud: { base: 0.8, swing: 0.6 }, good: "A real story and a real place. It sounds like you.", bad: "The story wanders. The moderator moves on." },
+          ] },
+        { who: 0, line: `${opp}: ${att}`,
+          choices: [
+            { label: "Own it", stat: "Integrity", aud: { swing: 1, base: 0.3 }, good: "You explain the vote and don't apologize. It reads as strength.", bad: "It reads as stubborn." },
+            { label: "Flip it on them", stat: "Media", risk: true, aud: { base: 1.5, profile: 1 }, good: "You turn their own record on them. They have no answer.", bad: "They had an answer. A good one." },
+            { label: "Electability", stat: "Policy", aud: { base: 0.6, swing: 0.8 }, good: "You can win in November. They can't. The pragmatists nod.", bad: "Primary voters don't want a lecture on November." },
+          ] },
+        { who: 2, line: `"Closing statements. One minute."`,
+          choices: [
+            { label: "Unite the party", stat: "Loyalty", aud: { base: 1 }, good: "Gracious and big. You sound like the nominee.", bad: "Gracious and forgettable." },
+            { label: "Draw the line", stat: "Policy", aud: { base: 1.2 }, good: "A clean contrast, clearly made.", bad: "It sounds like a fundraising email." },
+            { label: "Speak to the people at home", stat: "Integrity", aud: { swing: 1, base: 0.4 }, good: "Plain words. It lands.", bad: "It runs long. The buzzer cuts you off." },
+          ] },
+      ],
+      headline: (score) => score >= 3 ? `${S.nameOf(you, real)} wins the ${sc.pres ? "debate" : "primary debate"} against ${opp}` : score <= -3 ? `${opp} gets the better of ${S.nameOf(you, real)} in the ${sc.pres ? "debate" : "primary debate"}` : `${S.nameOf(you, real)} and ${opp} spar in ${sc.pres ? "a debate" : "the primary debate"}` };
   }
   if (sc.type === "briefing") {
     const rep1 = anchor(HOSTS, msg.id + "a"), b = s.bills.filter((x) => !x.dead && x.stage === "committee").sort((a, z) => a.floorWeek - z.floorWeek)[0], bill = b ? S.byId[b.pid].name : "the next bill";

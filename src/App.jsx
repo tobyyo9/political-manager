@@ -53,7 +53,7 @@ export default function App() {
     const calm = (() => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } })();
     const crisis = (n.news || []).find((x) => x.week === n.week && /^BREAKING:/.test(x.text));
     if (crisis) sfx("alarm"); else sfx("page");
-    if (!calm && !n.over) setTurn({ k: n.week, from: S.fmtDate(s.week), to: S.fmtDate(n.week), alert: crisis ? crisis.text.replace(/^BREAKING: /, "").split(". ")[0] : null, heads: (n.news || []).filter((x) => x.week === n.week && !/^BREAKING:/.test(x.text)).slice(0, 3).map((x) => realize(x.text, x.ids || [], real)) });
+    if (!calm && !n.over) setTurn({ k: n.week, from: S.fmtDate(s.week), to: S.fmtDate(n.week), alert: crisis ? crisis.text.replace(/^BREAKING: /, "").split(". ")[0] : null, heads: (n.news || []).filter((x) => x.week === n.week && !/^BREAKING:/.test(x.text)).slice(0, 3).map((x) => newsText(x, real)) });
     const top = (n.wire || []).find((a) => a.week >= s.week); if (top) { setBanner({ ...top, k: n.week }); } };
   const open = s.inbox.filter((m) => !m.done).length;
   const reply = (id, i) => { const n = S.answer(s, id, i); if (n.toast) setToast(n.toast); n.toast = null; setS(n); };
@@ -105,7 +105,7 @@ export default function App() {
         <button type="button" className="linkbtn" onClick={() => { if (window.confirm("Start a new career? This one will be erased.")) setS(null); }}>New career</button>
       </nav>
       <main className={`pm-main page-${tab}`}>
-        {s.over ? (role === "P" || s.result?.kind === "term" || s.result?.kind === "higher" || s.result?.kind === "indicted" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
+        {s.over ? (role === "P" || s.result?.kind === "term" || s.result?.kind === "higher" || s.result?.kind === "indicted" || s.result?.kind === "pres" ? <EndOther {...ctx} /> : <End {...ctx} />) : null}
         {tab === "inbox" && <Inbox {...ctx} />}
         {tab === "floor" && <Bills {...ctx} />}
         {tab === "chamber" && <ChamberTab {...ctx} />}
@@ -406,13 +406,13 @@ function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene, real, setCa
         {list.map((m) => (
           <article key={m.id} className={`pm-msg ${m.kind} ${m.done ? "done" : ""}`}>
             <header><strong>{realize(m.from, [], real)}</strong><small>{S.fmtDate(m.week)}</small></header>
-            <h3>{realize(m.title, [], real)}</h3>
+            <h3>{real && m.rtitle ? m.rtitle : realize(m.title, [], real)}</h3>
             {m.kind === "scene" ? (
               <div className="pm-scene-row">
                 {m.done ? <p className="small">{m.skipped ? "Your staff handled it. Nothing memorable either way." : <>Coverage: <em>{m.result?.headline}</em></>}</p>
                   : <><button type="button" className="primary" onClick={() => setScene(m.id)}>Play the scene →</button><span className="muted small">If you don't, your staff handles it {S.fmtDate(m.due)}.</span></>}
               </div>
-            ) : <p>{realize(m.body, [], real)}</p>}
+            ) : <p>{real && m.rbody ? m.rbody : realize(m.body, [], real)}</p>}
             {m.choices && (
               <div className="pm-choices">
                 {m.choices.map((c, i) => <button key={c} type="button" className={`ghost ${m.choice === i ? "on" : ""}`} disabled={m.done} onClick={() => reply(m.id, i)}>{c}</button>)}
@@ -773,7 +773,19 @@ function Rankings({ s, real, setCard }) {
   );
 }
 // Articles are written with the altered names; with real names on, swap them back for the people involved.
-const realize = (text, ids, real) => { if (!real || !text) return text; let t = text; for (const o of S.ORGS) if (t.includes(o.name)) t = t.split(o.name).join(o.real); for (const id of ids) { const m = id === "POTUS" ? S.PRES_M : S.memberById[id]; if (!m || !m.sf) continue; t = t.split(`${m.sf} ${m.sl}`).join(`${m.first} ${m.last}`).split(m.sl).join(m.last); } return t; };
+const newsText = (n, real) => (real && n.rt ? n.rt : realize(n.text, n.ids || [], real));
+// Every invented member name maps back to the real one: one pass with a cached pattern (rebuilt when the roster changes).
+let RX = null, RX_KEY = "";
+const realAll = (t) => {
+  const key = S.MEMBERS.map((m) => m.sl).join("|") + S.PRES_M.sl;
+  if (key !== RX_KEY) { const map = new Map(); const add = (f, l, F, L, title) => { if (!f || (f === F && l === L)) return; map.set(`${f} ${l}`, `${F} ${L}`); if (title) map.set(`${title} ${l}`, `${title} ${L}`); };
+    for (const m of S.MEMBERS) if (!m.fictional) add(m.sf, m.sl, m.first, m.last, m.ch === "H" ? "Rep." : "Sen.");
+    for (const c of S.CABINET) add(c.sf, c.sl, c.first, c.last); add(S.PRES_M.sf, S.PRES_M.sl, S.PRES_M.first, S.PRES_M.last);
+    const keys = [...map.keys()].sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    RX = keys.length ? { re: new RegExp(`\\b(?:${keys.join("|")})\\b`, "g"), map } : null; RX_KEY = key; }
+  return RX ? t.replace(RX.re, (x) => RX.map.get(x) || x) : t;
+};
+const realize = (text, ids, real) => { if (!real || !text) return text; let t = realAll(text); for (const o of S.ORGS) if (t.includes(o.name)) t = t.split(o.name).join(o.real); for (const id of ids) { const m = id === "POTUS" ? S.PRES_M : S.memberById[id]; if (!m || !m.sf) continue; t = t.split(`${m.sf} ${m.sl}`).join(`${m.first} ${m.last}`).split(m.sl).join(m.last); } return t; };
 function Article({ a, s, real, setCard, big }) {
   const m = a.who === "POTUS" ? S.PRES_M : S.memberById[a.who];
   const ids = [a.who, a.target].filter(Boolean); a = { ...a, headline: realize(a.headline, ids, real), quote: realize(a.quote, ids, real), dek: realize(a.dek, ids, real) };
@@ -794,7 +806,7 @@ function News({ s, real, setCard }) {
         <div className="pm-masthead"><span>Washington's paper of record · {S.fmtDate(s.week)}</span><strong>The Capitol Ledger</strong><span>All the politics that's fit to print</span></div>
         {wire.length ? <div className="pm-papers">{wire.slice(0, 24).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={setCard} big={i === 0} />)}</div> : <p className="muted">Nothing yet. Give it a week.</p>}
       </section>
-      <aside className="stack"><h2 className="pm-h">The wire</h2><ul className="pm-news">{s.news.slice(0, 60).map((n, i) => <li key={i} className={n.tone}><small>{S.fmtDate(n.week)}</small>{realize(n.text, n.ids || [], real)}</li>)}</ul></aside>
+      <aside className="stack"><h2 className="pm-h">The wire</h2><ul className="pm-news">{s.news.slice(0, 60).map((n, i) => <li key={i} className={n.tone}><small>{S.fmtDate(n.week)}</small>{newsText(n, real)}</li>)}</ul></aside>
     </div>
   );
 }
@@ -811,7 +823,7 @@ function End({ s, you, real, setS }) {
       <span className="rc-live"><i className="live-dot" /> {r.kind === "primary" ? "Primary night" : `Election night · November ${S.electionYear(s)}`}</span>
       <div className="desk-verdict">
         <span className="rc-stamp">{r.kind === "primary" ? "DEFEATED IN THE PRIMARY" : won ? "REELECTED" : "DEFEATED"}</span>
-        <p>{r.kind === "primary" ? `Your own party's voters chose someone else. You took ${r.share}%.` : `${S.nameOf(you, real)} ${won ? "wins" : "loses"} ${you.seat} by ${Math.abs(r.margin)} points. The national mood ran ${r.env >= 0 ? "with" : "against"} your party by ${Math.abs(r.env)}. Democrats will hold ${r.houseD} House seats.`}</p>
+        <p>{r.kind === "primary" ? `Your own party's voters chose ${r.opp ? (real ? r.oppR : r.opp) : "someone else"}. You took ${r.share}%.` : `${S.nameOf(you, real)} ${won ? "wins" : "loses"} ${you.seat} by ${Math.abs(r.margin)} points. The national mood ran ${r.env >= 0 ? "with" : "against"} your party by ${Math.abs(r.env)}. Democrats will hold ${r.houseD} House seats.`}</p>
         <RaceNight s={s} real={real} />
         <AfterOffice s={s} setS={setS} />
         {r.opp && <p className="small muted">Your opponent, {r.opp.name}, raised {money(r.opp.raised)}. Your campaign spent {money(r.spent)}.</p>}
@@ -836,8 +848,8 @@ function End({ s, you, real, setS }) {
 
 function EndOther({ s, you, real, setS, role }) {
   const r = s.result;
-  const stamp = r.kind === "indicted" ? "INDICTED" : r.kind === "higher" ? (r.won ? "ELECTED TO THE SENATE" : "THE SENATE RUN FAILS") : r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
-  const line = r.kind === "indicted" ? "Federal prosecutors charged you over foreign money in your campaign. You resign from Congress to fight the case." : r.kind === "higher" ? (r.won ? `You win statewide by ${Math.abs(r.margin)} points. You'll be sworn in as a senator.` : `You lose statewide by ${Math.abs(r.margin)} points, and you gave up your House seat to run.`) : r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
+  const stamp = r.kind === "pres" ? (r.won ? "ELECTED PRESIDENT" : "THE WHITE HOUSE RUN FAILS") : r.kind === "indicted" ? "INDICTED" : r.kind === "higher" ? (r.won ? "ELECTED TO THE SENATE" : "THE SENATE RUN FAILS") : r.kind === "removed" ? "REMOVED FROM OFFICE" : r.kind === "term" ? "TERM COMPLETE" : r.won ? "YOUR PARTY HOLDS THE WHITE HOUSE" : "YOUR PARTY LOSES THE WHITE HOUSE";
+  const line = r.kind === "pres" ? (r.won ? `You win the presidency, ${r.ev} electoral votes to ${r.evO}, over ${real ? r.oppR : r.opp}. In January you take the oath. This career ends where most only dream of ending.` : `You lose to ${real ? r.oppR : r.opp}, ${r.evO} electoral votes to ${r.ev}. You gave up your seat to run, so this is the end of the line in Congress.`) : r.presLost ? `You lost the presidency to ${real ? r.presLost.oppR : r.presLost.opp}, ${r.presLost.evO} electoral votes to ${r.presLost.ev}, and go back to the Senate with a national name. Your seat isn't up until ${r.next}.` : r.kind === "indicted" ? "Federal prosecutors charged you over foreign money in your campaign. You resign from Congress to fight the case." : r.kind === "higher" ? (r.won ? `You win statewide by ${Math.abs(r.margin)} points. You'll be sworn in as a senator.` : `You lose statewide by ${Math.abs(r.margin)} points, and you gave up your House seat to run.`) : r.kind === "removed" ? `The Senate convicted you with ${r.votes} votes. Enough Republicans broke.` : r.kind === "term" ? `You're not on the ballot until ${r.next}. Your record over the 120th Congress scores ${r.score}: ${r.score > 70 ? "a power in the chamber" : r.score > 45 ? "a solid, unremarkable term" : "a quiet term that leaves you exposed"}.` : `The Republican nominee ${r.won ? "wins" : "loses"} by ${Math.abs(r.margin)} points. You leave office at ${r.approval}% approval.`;
   return (
     <section className={`desk pm-end ${r.won ? "won" : "lost"}`}>
       <span className="rc-live"><i className="live-dot" /> {r.kind === "term" ? `January 3, ${S.electionYear(s) + 1}` : r.kind === "removed" ? "The Senate chamber" : "Election night · November 7, 2028"}</span>

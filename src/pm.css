@@ -600,3 +600,24 @@ body.pm-desk .pm-start{background:transparent}
 .pm-cares{display:flex;flex-wrap:wrap;gap:4px}.pm-cares span{font-size:11px;padding:2px 6px;border-radius:3px;background:#e9f4ec;color:#1f5d34}.pm-cares span.against{background:#fbe7e4;color:#8f2a20}
 .pm-m2{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
 .pm-m2 i{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,#f0c2bb,#e9e2d0,#bfe3c8)}.pm-m2 b{position:absolute;top:-3px;width:6px;height:12px;margin-left:-3px;border-radius:2px}
+/* The race for the nomination */
+.pm-prim-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:760px){.pm-prim-cols{grid-template-columns:1fr}}
+@media(max-width:420px){.pm-prim-list li{grid-template-columns:30px minmax(0,1fr) 40px 44px}.pm-prim-bar{display:none}}
+.pm-prim h3{margin:0 0 8px;font-size:1.02em}
+.pm-prim.D h3{color:#1f4e9c}.pm-prim.R h3{color:#a3281f}
+.pm-prim-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.pm-prim-list li{display:grid;grid-template-columns:34px minmax(0,1.4fr) minmax(40px,1fr) 42px 48px;gap:8px;align-items:center;font-size:.92em}
+.pm-prim-list .nm{display:flex;flex-direction:column;min-width:0;font-weight:600}
+.pm-prim-list .nm small{font-weight:400;color:var(--muted);font-size:.8em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pm-prim-bar{height:8px;background:rgba(0,0,0,.08);border-radius:4px;overflow:hidden}
+.pm-prim-bar i{display:block;height:100%;border-radius:4px;transition:width .5s}
+.pm-prim.D .pm-prim-bar i{background:#2f62b8}.pm-prim.R .pm-prim-bar i{background:#c8443a}
+.pm-prim-list b{text-align:right}.pm-prim-list .del{text-align:right;font-size:.82em;color:var(--muted);font-variant-numeric:tabular-nums}
+.pm-prim-list li.out{opacity:.5}.pm-prim-list li.nom .nm{color:#1c7a45}
+.pm-prim-list li.nom .nm::after{content:"Nominee";font-size:.7em;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1c7a45}
+.pm-cal{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:.92em}
+.pm-cal li.done{color:var(--muted)}.pm-cal b{font-variant-numeric:tabular-nums;margin-right:6px}
+.pm-cal-w{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:9px;font-size:.82em;font-weight:600;color:#fff}
+.pm-cal-w.D{background:#2f62b8}.pm-cal-w.R{background:#c8443a}
+.pm-prim{align-self:start}

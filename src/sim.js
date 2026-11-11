@@ -185,7 +185,7 @@ const CH = (s) => (roleOf(s) === "S" ? SENATE : HOUSE);
 export const upIn2028 = (m) => m.ch === "H" || m.cls === 3;
 // Which Senate class is on the ballot at the end of a given term: 2028 class 3, 2030 class 1, 2032 class 2.
 export const cycleClass = (term) => [3, 1, 2][((term || 1) - 1) % 3];
-export const upThisTerm = (s, m) => m.ch === "H" || m.cls === cycleClass(s.term);
+export const upThisTerm = (s, m) => m.ch === "H" || m.cls === cycleClass(s.term) || (!!m.appointee && electionYear(s) === 2028);
 export const electionYear = (s) => 2028 + 2 * ((s.term || 1) - 1);
 export const nameOf = (m, real) => (real ? `${m.first} ${m.last}` : `${m.sf} ${m.sl}`);
 export const titleOf = (m) => (m.ch === "H" ? "Rep." : m.ch === "S" ? "Sen." : "President");
@@ -519,6 +519,8 @@ export function answer(s0, msgId, choice) {
   m.done = true; m.choice = choice;
   const you = memberById[s.youId];
   if (m.kind === "lead") leaderRace(s, choice, m.comm);
+  if (m.kind === "pchal") answerChal(s, m, choice);
+  if (m.kind === "presrun" && choice === 0 && s.amb?.pr && !s.runFor) { const A = s.amb, c = cand(youCand(s), 0, 0, you.x); c.you = true; A.pr[you.p].c.push(c); s.youPres = "in"; s.profile = clamp(s.profile + 4, 0, 100); newsBoth(s, (real) => `${titleOf(you)} ${nameOf(you, real)} announces a run for president in ${A.year}.`, "event"); s.toast = { title: "You're running for president", text: "Debates, early states and a delegate count. Your weeks get shorter while you're on the trail.", tone: "good" }; }
   if (m.kind === "donor") donorAnswer(s, m, choice);
   if (m.kind === ATTACK_KEY) answerAttack(s, m, choice);
   if (["crisis", "crisisreact", "pardon", "pardonreact", "scotusnom", "scotusvote", "blueslip", "ruling"].includes(m.kind)) answerWorld(s, m, choice);
@@ -623,6 +625,7 @@ export function advance(s0) {
   sotuWeek(s, R(s, "sotu"));
   earnWeek(s, R(s, "earn"));
   orgWeek(s, R(s, "org"));
+  ambitionWeek(s, R(s, "amb"));
   foreignWeek(s, R(s, "foreign"));
   wireWeek(s, R(s, "wire"));
   { const rr = R(s, "react"); for (const ev of events.slice(0, 2)) voteReactions(s, ev, rr); }
@@ -630,7 +633,7 @@ export function advance(s0) {
   const rw = s.week - (s.termStart || 0);
   if (roleOf(s) === "P") { if (rw >= ELECTION_WEEK && !s.over) presVerdict(s, r); }
   else if (!upThisTerm(s, you) && !s.runFor) { if (rw >= ELECTION_WEEK && !s.over) termReview(s, r); }
-  else { if (rw === PRIMARY_WEEK) primary(s, r); if (rw >= ELECTION_WEEK && !s.over) { if (s.runFor) runHigher(s, r); else general(s, r); } }
+  else { if (rw === PRIMARY_WEEK && s.runFor !== "pres") primary(s, r); if (rw >= ELECTION_WEEK && !s.over) { if (s.runFor === "pres") presGeneral(s, r); else if (s.runFor) runHigher(s, r); else general(s, r); } }
   s.events = events;
   return s;
 }
@@ -743,13 +746,15 @@ function primary(s, r) {
   const gp = groupElection(s, "primary");
   const strength = s.baseApproval + fit * 8 + Math.min(10, s.cash / 400) - (you.prisk > 0.5 ? 6 : 0) + gp.net - (s.rivals || 0) * 3 - (memberById[s.youId].p === "D" && memberById[s.youId].prisk > 0.4 ? Math.max(0, moneyMix(s).pac - 0.45) * 20 : 0) + (s.pledge ? 3 : 0);
   s.primaryGroups = gp;
-  const challenged = strength < 60 || r() < 0.2;
-  // Incumbents almost always win primaries; you only lose if your own party's voters have really turned on you.
-  const share = clamp(60 + (strength - 55) * 0.75 + (r() - 0.5) * 8, 20, 92);
-  s.primary = { challenged, share: challenged ? Math.round(share * 10) / 10 : 100, won: !challenged || share > 50 };
-  if (challenged) pushNews(s, `${nameOf(you)} ${s.primary.won ? "survives" : "loses"} a primary challenge with ${s.primary.share}% of the vote.`, s.primary.won ? "good" : "bad");
-  if (!s.primary.won) { s.over = true; s.result = { kind: "primary", ...s.primary }; }
-  else pushInbox(s, { kind: "staff", from: "Your campaign manager", title: challenged ? `You won the primary with ${s.primary.share}%` : "No primary challenger filed", body: "Now the general election. Approval at home, the national mood and your war chest decide it.", done: true });
+  const c = s.pchal, challenged = !!c || strength < 60 || r() < 0.2;
+  // Incumbents almost always win primaries; you only lose if your own party's voters have really turned on you, or a real threat shows up.
+  // A famous challenger turns it into a real race: your standing at home matters less than who they are.
+  const share = clamp((c?.real ? 52 + (strength - 80) * 0.35 - (c.q - 0.5) * 20 : 60 + (strength - 55) * 0.75 - (c ? c.q * 14 - 3 : 0)) + (s.pchalLock || 0) + (s.pdebate || 0) + (r() - 0.5) * 8, 20, 92);
+  const opp = c ? pname(c, false) : `${PF[Math.floor(r() * PF.length)]} ${PL[Math.floor(r() * PL.length)]}`, oppR = c ? pname(c, true) : opp;
+  s.primary = { challenged, share: challenged ? Math.round(share * 10) / 10 : 100, won: !challenged || share > 50, opp, oppR };
+  if (challenged) { const sh = s.primary.share; newsBoth(s, (real) => `${nameOf(you, real)} ${s.primary.won ? "survives" : "loses"} a primary challenge from ${real ? oppR : opp}, ${sh}% to ${Math.round((100 - sh) * 10) / 10}%.`, s.primary.won ? "good" : "bad"); }
+  if (!s.primary.won) { s.over = true; s.result = { kind: "primary", ...s.primary, margin: Math.round((share - 50) * 20) / 10 }; }
+  else pushInbox(s, { kind: "staff", from: "Your campaign manager", title: challenged ? `You won the primary with ${s.primary.share}%` : "No primary challenger filed", body: `${challenged ? `${opp} conceded before midnight. ` : ""}Now the general election. Approval at home, the national mood and your war chest decide it.`, ...(challenged && c?.real ? { rbody: `${oppR} conceded before midnight. Now the general election. Approval at home, the national mood and your war chest decide it.` } : {}), done: true });
 }
 function general(s, r) {
   electionNight(s);
@@ -986,7 +991,7 @@ function whiteHouse(s, r) {
     if (b.dead || b.stage !== "committee" || b.presSaid) continue;
     b.presSaid = true;
     const v = presView(s, b), pick = (a) => a[Math.floor(r() * a.length)];
-    const plain = PRES_M.fictional, line = v.score > 0.3 ? pick(plain ? ["says it's a good bill and urges Congress to pass it", "endorses it in a written statement"] : P_LOVE) : v.score < -0.2 ? pick(plain ? ["says it goes too far and signals a veto", "calls it the wrong approach"] : P_HATE) : pick(plain ? ["says the White House is still reviewing it", "won't commit either way"] : P_MEH);
+    const plain = PRES_M.fictional || PRES_M.realNew, line = v.score > 0.3 ? pick(plain ? ["says it's a good bill and urges Congress to pass it", "endorses it in a written statement"] : P_LOVE) : v.score < -0.2 ? pick(plain ? ["says it goes too far and signals a veto", "calls it the wrong approach"] : P_HATE) : pick(plain ? ["says the White House is still reviewing it", "won't commit either way"] : P_MEH);
     presPost(s, `On ${byId[b.pid].name}, the President ${line}.${r() < 0.35 && voiceOf(PRES_M) === "bombast" ? ` Then, unprompted: "${presRiff(r).quote}"` : ""}`, b.pid);
   }
   // Executive orders: he acts without Congress, and members feel it.
@@ -1141,6 +1146,7 @@ function execTick(s, r) {
     const before = c.heat;
     c.heat = clamp(c.heat + (r() - 0.5) * 0.035 + (r() < 0.025 ? 0.12 : 0), 0, 1);
     if (before < 0.7 && c.heat >= 0.7) pushNews(s, `${c.post} ${cabName(c)} is under fire over ${HEAT_WHY[Math.floor(r() * HEAT_WHY.length)]}.`, "event");
+    if (c.id === "vp") continue;     // a Vice President can't be fired, and doesn't quit over a news cycle
     if (c.heat > 0.88 && r() < 0.1) vacate(s, c, "resigns");
     else if (r() < 0.004) vacate(s, c, "resigns");
     else if (role !== "P" && c.heat > 0.8 && c.loyal < 0.8 && r() < 0.06) vacate(s, c, "fired");
@@ -1454,8 +1460,9 @@ export function resetWorld() {
 }
 // Re-apply a saved career's changes to the world (after a reload).
 function applyPres(s) {
-  const P = s?.presRec; if (!P) { Object.assign(PRES_M, { first: PRESIDENT.first, last: PRESIDENT.last, sf: PRESIDENT.sf, sl: PRESIDENT.sl, p: "R", born: PRESIDENT.born, look: PRESIDENT.look, g: "M", fictional: false }); return; }
-  Object.assign(PRES_M, { first: P.first, last: P.last, sf: P.first, sl: P.last, p: P.p, born: P.born, g: P.g, look: { skin: (P.first.length * 7 + P.last.length * 3) % 6 }, fictional: true });
+  const P = s?.presRec; if (!P) { Object.assign(PRES_M, { first: PRESIDENT.first, last: PRESIDENT.last, sf: PRESIDENT.sf, sl: PRESIDENT.sl, p: "R", born: PRESIDENT.born, look: PRESIDENT.look, g: "M", fictional: false, realNew: false }); return; }
+  if (P.real) { Object.assign(PRES_M, { first: P.first, last: P.last, sf: P.sf || P.first, sl: P.sl || P.last, p: P.p, born: P.born, g: P.g, look: P.look || { skin: 0 }, fictional: false, realNew: true }); return; }
+  Object.assign(PRES_M, { first: P.first, last: P.last, sf: P.first, sl: P.last, p: P.p, born: P.born, g: P.g, look: { skin: (P.first.length * 7 + P.last.length * 3) % 6 }, fictional: true, realNew: false });
 }
 export function restore(s) {
   applyPres(s);
@@ -1467,15 +1474,16 @@ export function restore(s) {
 const keep = (s, m) => { s.edits[m.id] = JSON.parse(JSON.stringify(m)); };
 const TRAITS_JS = ["dealmaker", "believer", "grudge", "vain", "loyalist", "follower", "wonk", "showhorse"];
 // A fictional newcomer who wins a seat in a future election.
-function newcomer(s, m, party, year) {
+function newcomer(s, m, party, year, preset = null) {
   const r = rng(hash(`${s.seed}:new:${m.id}:${year}`)), used = new Set(MEMBERS.map((x) => x.last));
-  const first = PF[Math.floor(r() * PF.length)]; let last = PL[Math.floor(r() * PL.length)]; for (let i = 0; used.has(last) && i < 20; i++) last = PL[Math.floor(r() * PL.length)];
-  const lean = party === "D" ? m.dem : 100 - m.dem, x = party === "D" ? -(0.18 + clamp((lean - 50) / 60, 0, 0.4) + r() * 0.12) : 0.3 + clamp((lean - 50) / 60, 0, 0.35) + r() * 0.12;
+  let first = PF[Math.floor(r() * PF.length)]; let last = PL[Math.floor(r() * PL.length)]; for (let i = 0; used.has(last) && i < 20; i++) last = PL[Math.floor(r() * PL.length)];
+  const lean = party === "D" ? m.dem : 100 - m.dem; let x = party === "D" ? -(0.18 + clamp((lean - 50) / 60, 0, 0.4) + r() * 0.12) : 0.3 + clamp((lean - 50) / 60, 0, 0.35) + r() * 0.12;
+  if (preset) { first = preset.first; last = preset.last; x = preset.x ?? x; }
   const t = { ambition: 0.2 + r() * 0.7, loyalty: 0.2 + r() * 0.7, ego: 0.2 + r() * 0.7, ethics: 0.2 + r() * 0.7, deal: 0.2 + r() * 0.7 }; t.label = TRAITS_JS[Math.floor(r() * TRAITS_JS.length)];
   const comm = (m.comm || []).map((c) => ({ ...c, role: "", title: "" }));
   const keepKeys = { ch: m.ch, st: m.st, d: m.d, dem: m.dem, id: m.id, cls: m.cls };
   for (const k of Object.keys(m)) delete m[k];
-  Object.assign(m, keepKeys, { first, last, sf: first, sl: last, p: party, x: Math.round(x * 1000) / 1000, y: 0, born: 1975 + Math.floor(r() * 18), since: year + 1, comm, lead: [], t, g: r() < 0.45 ? "F" : "M", fictional: true, est: true, new: true });
+  Object.assign(m, keepKeys, { first, last, sf: first, sl: last, p: party, x: Math.round(x * 1000) / 1000, y: 0, born: 1975 + Math.floor(r() * 18), since: year + 1, comm, lead: [], t, g: preset?.g || (r() < 0.45 ? "F" : "M"), fictional: true, est: true, new: true });
   derive(m); m.fund = fundOf(m); keep(s, m);
   for (const k of ["rel", "know", "owedToYou"]) delete s[k][m.id];
 }
@@ -1494,27 +1502,41 @@ function electWorld(s) {
   const r = rng(hash(`${s.seed}:world:${s.term}`)), year = electionYear(s), cls = cycleClass(s.term), out = { flips: { H: 0, S: 0 }, retire: 0 };
   s.lastSenate = senateMap(s, true);
   const before = { H: HOUSE.filter((m) => m.p === "D").length >= 218 ? "D" : "R", S: SENATE.filter((m) => m.p === "D").length >= 51 ? "D" : "R" };
-  for (const m of [...MEMBERS]) {
-    if (m.id === s.youId) continue;
-    if (m.ch === "S" && m.cls !== cls) continue;
-    const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`);
-    const margin = (m.dem - 50) * 2 + s.mood * (m.ch === "H" ? 0.9 : 0.8) + inc * (m.ch === "H" ? 4 : 4) + n * (m.ch === "H" ? 5 : 6) + aidPts(s, m);
-    const winner = margin > 0 ? "D" : "R";
-    const retires = noise(`${s.seed}:ret${s.term}:${m.id}`) < -0.86 || (YEAR + 1 - (m.born || 1960) > 82);
-    if (winner !== m.p) { out.flips[m.ch]++; newcomer(s, m, winner, year); backersWin(s, m, year); }
-    else if (retires) { out.retire++; newcomer(s, m, m.p, year); }
+  const A = s.amb && s.amb.year === year ? s.amb : null; out.prim = 0;
+  // Senate seats first, so a House member who wins one is moved before their old seat is refilled.
+  for (const m of [...MEMBERS].sort((a, b) => (a.ch === "S" ? 0 : 1) - (b.ch === "S" ? 0 : 1))) {
+    if (m.id === s.youId || !upNow(s, m)) continue;
+    const o = A ? A.out[m.id] : retiresGeneric(s, m) ? { why: "retire" } : null;
+    const margin = seatMargin(s, m), winner = margin > 0 ? "D" : "R", named = m.ch === "S" ? A?.sen?.[m.st]?.[winner] : null;
+    if (winner !== m.p) { out.flips[m.ch]++; if (named) install(s, m, named, year); else { newcomer(s, m, winner, year); backersWin(s, m, year); } }
+    else if (o) { if (o.why === "primary") out.prim++; else out.retire++; if (named) install(s, m, named, year); else newcomer(s, m, m.p, year, o.why === "primary" ? o.by : null); }
   }
   // The White House, every four years.
   let presMsg = "";
   if (s.term % 2 === 1) {
     const map = s.lastPres && s.lastPres.year === year ? s.lastPres : presMap(s, true); s.lastPres = map;
-    const winner = map.winner;
-    presMsg = `${winner === "D" ? "A Democrat" : "A Republican"} wins the White House, ${Math.max(map.ev.D, map.ev.R)} electoral votes to ${Math.min(map.ev.D, map.ev.R)}${winner === PP ? ", keeping it for the President's party" : ""}.`;
+    const winner = map.winner, nom = A?.pr?.[winner]?.nom, loser = A?.pr?.[winner === "D" ? "R" : "D"]?.nom;
+    const ev = `${Math.max(map.ev.D, map.ev.R)} electoral votes to ${Math.min(map.ev.D, map.ev.R)}`;
+    const msgFor = (real) => nom && !nom.you ? `${pname(nom, real)} (${winner}) wins the White House, ${ev}${loser && !loser.you ? `, over ${pname(loser, real)}` : ""}.` : `${winner === "D" ? "A Democrat" : "A Republican"} wins the White House, ${ev}${winner === PP ? ", keeping it for the President's party" : ""}.`;
+    presMsg = msgFor(false); out.presMsgR = msgFor(true);
+    if (nom?.ref === "potus") { s.presApproval = 50; s.presHeat = 0.2; s.pp = PP; s.mood = s.mood * 0.3 + (PP === "R" ? 2 : -2); YEAR += 2; for (const m of MEMBERS) derive(m); rebuildChambers(); regroup();
+      const after0 = { H: HOUSE.filter((m) => m.p === "D").length >= 218 ? "D" : "R", S: SENATE.filter((m) => m.p === "D").length >= 51 ? "D" : "R" };
+      for (const ch of ["H", "S"]) if (after0[ch] !== before[ch]) flipTitles(ch, after0[ch]);
+      for (const m of MEMBERS) if (m.ch && (m.lead?.length || (m.comm || []).some((c) => c.role))) keep(s, m); clearCaches();
+      return { ...out, presMsg: `${presMsg} A second term.`, presMsgR: `${out.presMsgR} A second term.`, house: HOUSE.filter((m) => m.p === "D").length, senate: SENATE.filter((m) => m.p === "D").length, after: after0 }; }
+    // The outgoing administration's real people join the former officials.
+    s.formers = s.formers || [];
+    if (!PRES_M.fictional) s.formers.push({ first: PRES_M.first, last: PRES_M.last, sf: PRES_M.sf, sl: PRES_M.sl, p: PRES_M.p, born: PRES_M.born, g: PRES_M.g, look: PRES_M.look, title: "Former President" });
+    for (const c of s.cab || []) { const o = CABINET.find((x) => x.id === c.id); if (o && !c.vacant && c.last === o.last && !(nom && nom.last === c.last)) s.formers.push({ first: c.first, last: c.last, sf: c.sf, sl: c.sl, p: "R", born: c.born, g: c.id === "vp" ? "M" : undefined, title: `Former ${c.post}`, cab: c.id }); }
     if (winner !== PP) { PP = winner; s.presApproval = 52; } else s.presApproval = 48;
     s.presHeat = 0.2; s.rapport = 0; s.pres = [];
     // A new (fictional) President and cabinet: the real one is term-limited.
     const pick = (k) => [PF[Math.floor(rng(hash(`${s.seed}:pn:${year}:${k}`))() * PF.length)], PL[Math.floor(rng(hash(`${s.seed}:pl:${year}:${k}`))() * PL.length)]];
-    const [pf, pl] = pick("pres"); s.presRec = { first: pf, last: pl, p: PP, born: 1960 + Math.floor(r() * 18), g: r() < 0.4 ? "F" : "M", since: year + 1 }; applyPres(s);
+    const [pf, pl] = pick("pres");
+    if (nom && !nom.you) { s.presRec = { first: nom.first, last: nom.last, sf: nom.sf, sl: nom.sl, p: PP, born: nom.born, g: nom.g || "M", look: nom.look, since: year + 1, real: true };
+      const seat = nom.id && memberById[nom.id]; if (seat && seat.last === nom.last) newcomer(s, seat, seat.p, year); }
+    else s.presRec = { first: pf, last: pl, p: PP, born: 1960 + Math.floor(r() * 18), g: r() < 0.4 ? "F" : "M", since: year + 1 };
+    applyPres(s);
     s.cab = s.cab.map((c, i) => { const [f, l] = pick(c.id + i); return { ...c, first: f, last: l, sf: f, sl: l, born: 1955 + Math.floor(r() * 25), tone: undefined, vacant: false, heat: 0.15, loyal: 0.7, note: `Appointed in ${year + 1}. A fictional member of the new administration.`, imp: false }; });
     s.newPres = { party: PP, year };
   } else s.presApproval = clamp(s.presApproval - 1, 25, 60);
@@ -1548,7 +1570,8 @@ export function nextCongress(s0) {
   s.opp = null; s.camp = null; s.polls = []; s.dues = { paid: 0 }; s.aid = {}; s.alloc = {}; s.given = {}; s.askedHelp = null; s.petitions = [];
   if (fundedSeats.length) pushInbox(s, { kind: "staff", from: "Your finance director", title: `Your money on the map: ${fundedWon} of ${fundedSeats.length}`, done: true, body: `Of the ${fundedSeats.length} races you put money or time into, your party won ${fundedWon}.${(s.backedWon || []).filter((x) => x.year === electionYear({ ...s, term: s.term - 1 })).length ? ` New members you backed as challengers: ${(s.backedWon || []).filter((x) => x.year === electionYear({ ...s, term: s.term - 1 })).map((x) => x.name).join(", ")}. They start out in your corner.` : ""}` });
   const congress = 119 + s.term, hMaj = w.after.H, sMaj = w.after.S;
-  pushNews(s, `The ${ord(congress)} Congress convenes. ${w.presMsg} Democrats hold ${w.house} House seats and ${w.senate} Senate seats. ${w.flips.H + w.flips.S} seats changed parties and ${w.retire} members retired.`, "event");
+  { const tail = ` Democrats hold ${w.house} House seats and ${w.senate} Senate seats. ${w.flips.H + w.flips.S} seats changed parties, ${w.retire} members retired and ${w.prim || 0} lost primaries.`; pushNews(s, `The ${ord(congress)} Congress convenes. ${w.presMsg}${tail}`, "event"); if (w.presMsgR) s.news[0].rt = `The ${ord(congress)} Congress convenes. ${w.presMsgR}${tail}`; }
+  if (false) pushNews(s, `The ${ord(congress)} Congress convenes. ${w.presMsg} Democrats hold ${w.house} House seats and ${w.senate} Senate seats. ${w.flips.H + w.flips.S} seats changed parties and ${w.retire} members retired.`, "event");
   pushInbox(s, { kind: "staff", from: `${s.staff[0].name}, chief of staff`, title: `Welcome to the ${ord(congress)} Congress`, done: true,
     body: `${w.presMsg} ${hMaj === "D" ? "Democrats" : "Republicans"} run the House and ${sMaj === "D" ? "Democrats" : "Republicans"} run the Senate. You're ${you.p === (you.ch === "H" ? hMaj : sMaj) ? "in the majority" : "in the minority"}. You have more seniority and more clout than two years ago. New members won this year are fictional; everyone else is who was there.` });
   // Leadership races and committee posts.
@@ -1581,6 +1604,15 @@ function leaderRace(s, choice, commCode) {
     else s.toast = { title: "Passed over", text: "Steering went with someone more senior. Next time.", tone: "" };
   }
 }
+// You, as your party's nominee for president.
+function presGeneral(s, r) {
+  electionNight(s);
+  const you = memberById[s.youId], map = s.lastPres, won = map.winner === you.p, other = s.amb?.pr?.[you.p === "D" ? "R" : "D"]?.nom;
+  const ev = map.ev[you.p], evO = 538 - ev, opp = other ? pname(other, false) : "the other party's nominee", oppR = other ? pname(other, true) : opp;
+  newsBoth(s, (real) => `Election night: ${nameOf(you, real)} ${won ? "wins" : "loses"} the presidency, ${ev} electoral votes to ${evO}, ${won ? "over" : "to"} ${real ? oppR : opp}.`, won ? "good" : "bad");
+  if (won || upNow(s, you)) { s.over = true; s.result = { kind: "pres", won, ev, evO, opp, oppR, margin: Math.round(((ev - evO) / 5.38) * 10) / 10 }; return; }
+  termReview(s, r); s.result.presLost = { ev, evO, opp, oppR }; s.runFor = null;
+}
 // A House member running statewide for the Senate.
 function runHigher(s, r) {
   electionNight(s);
@@ -1612,7 +1644,7 @@ const phi = (z) => 1 / (1 + Math.exp(-1.7 * z));
 export function nationalPres(s) { return s.mood * 0.85 - PSIGN() * ((s.econ.growth - 1.6) * 1.2 - (s.econ.inflation - 3) * 1.0); }
 // final: draw the actual result with state-level error; otherwise a forecast with win probabilities.
 export function presMap(s, final = false, year = electionYear(s)) {
-  const nat = nationalPres(s), states = {}; const ev = { D: 0, R: 0 };
+  const nat = nationalPres(s) + nomEdge(s), states = {}; const ev = { D: 0, R: 0 };
   for (const st of Object.keys(EV)) {
     const base = (STATE_DEM[st] - 50) * 2 + (nat - NAT_2024);
     const m = final ? base + noise(`${s.seed}:pres:${year}:${st}`) * 4 + noise(`${s.seed}:presnat:${year}`) * 2 : base;
@@ -1625,10 +1657,9 @@ export function presMap(s, final = false, year = electionYear(s)) {
 // Senate races on the next ballot: forecast or result per state.
 export function senateMap(s, final = false) {
   const cls = cycleClass(s.term), states = {};
-  for (const m of SENATE.filter((x) => x.cls === cls)) {
-    const inc = m.p === "D" ? 1 : -1, base = (m.dem - 50) * 2 + s.mood * 0.8 + inc * 4 + aidPts(s, m);
-    const mm = final ? base + noise(`${s.seed}:el${s.term}:${m.id}`) * 6 : base;
-    states[m.st] = { m: Math.round(mm * 10) / 10, pD: final ? (mm > 0 ? 1 : 0) : phi(mm / 6), w: mm > 0 ? "D" : "R", holder: m.p, who: m.id };
+  for (const m of SENATE.filter((x) => upNow(s, x))) {
+    const n = noise(`${s.seed}:el${s.term}:${m.id}`) * 6, mm = final ? seatMargin(s, m) : seatMargin(s, m) - n, k = s.amb?.year === electionYear(s) ? s.amb.sen?.[m.st] : null;
+    states[m.st] = { m: Math.round(mm * 10) / 10, pD: final ? (mm > 0 ? 1 : 0) : phi(mm / 6), w: mm > 0 ? "D" : "R", holder: m.p, who: m.id, open: isOpen(s, m), noms: k ? { D: k.D ? { sf: k.D.sf, sl: k.D.sl, first: k.D.first, last: k.D.last } : null, R: k.R ? { sf: k.R.sf, sl: k.R.sl, first: k.R.first, last: k.R.last } : null } : null };
   }
   return { states, cls };
 }
@@ -1644,7 +1675,7 @@ export function houseMap() {
 const SCENE_DUE = 2;   // weeks before your staff handles it for you
 function pushScene(s, type, ctx, title, from) {
   if (s.inbox.some((m) => m.kind === "scene" && !m.done && m.scene.type === type)) return null;
-  const COOL = { tv: 7, hearing: 9, leader: 6, briefing: 4, oval: 5, debate: 0, sotu: 0, confirm: 0 }; s.sceneAt = s.sceneAt || {};
+  const COOL = { tv: 7, hearing: 9, leader: 6, briefing: 4, oval: 5, debate: 0, sotu: 0, confirm: 0, pdebate: 0 }; s.sceneAt = s.sceneAt || {};
   if (s.week - (s.sceneAt[type] ?? -99) < COOL[type]) return null; s.sceneAt[type] = s.week;
   s.sceneN = s.sceneN || {}; const nth = s.sceneN[type] = (s.sceneN[type] || 0) + 1;
   const msg = { kind: "scene", scene: { type, n: nth - 1, ...ctx }, from, title, body: "", due: s.week + SCENE_DUE };
@@ -1671,7 +1702,8 @@ function sceneWeek(s, r) {
   const b = s.bills.find((x) => x.stage === "committee" && x.party === you.p && x.floorWeek - s.week === 1 && x.yourVote === null);
   if (b && lean(you, b.pid, billCtx(s, b)).L < 0.3 && r() < 0.6) { const boss = MEMBERS.find((m) => m.ch === you.ch && m.p === you.p && /Whip|Leader|Speaker/.test(m.lead?.[0] || "")) || null; if (boss && boss.id !== s.youId) pushScene(s, "leader", { bill: b.id, boss: boss.id }, `The whip wants a word about ${byId[b.pid].name}`, "The whip's office"); }
   // The debate before your general election.
-  if (upThisTerm(s, you) && rw === ELECTION_WEEK - 5) { const opp = s.opp && !s.runFor ? `${s.opp.first} ${s.opp.last}` : `${PF[Math.floor(r() * PF.length)]} ${PL[Math.floor(r() * PL.length)]}`; pushScene(s, "debate", { opp, ch: s.runFor ? "S" : you.ch, ...(s.opp && !s.runFor ? { oppG: s.opp.g, oppId: `opp${s.seed}${s.opp.first}${s.opp.last}` } : {}) }, `Debate night against ${opp}`, "Your campaign manager"); }
+  if (s.runFor === "pres" && rw === ELECTION_WEEK - 5) { const o = s.amb?.pr?.[you.p === "D" ? "R" : "D"]?.nom; if (o) pushScene(s, "debate", { opp: pname(o, false), oppR: pname(o, true), oppG: o.g, oppId: "pr" + o.last, ch: "P" }, `Presidential debate against ${pname(o, false)}`, "Your campaign chair"); }
+  else if (upThisTerm(s, you) && rw === ELECTION_WEEK - 5) { const opp = s.opp && !s.runFor ? `${s.opp.first} ${s.opp.last}` : `${PF[Math.floor(r() * PF.length)]} ${PL[Math.floor(r() * PL.length)]}`; pushScene(s, "debate", { opp, ch: s.runFor ? "S" : you.ch, ...(s.opp && !s.runFor ? { oppG: s.opp.g, oppId: `opp${s.seed}${s.opp.first}${s.opp.last}`, oppR: s.opp.rname || null } : {}) }, `Debate night against ${opp}`, "Your campaign manager"); }
 }
 export function prepScene(s0, id) { const s = structuredClone(s0); const m = s.inbox.find((x) => x.id === id); if (m && !m.prep && s.hours >= 4) { m.prep = true; s.hours -= 4; } return s; }
 // Apply a played scene. out: { score (-6..6), base, swing, profile, rel: {id: d}, tags }
@@ -1687,6 +1719,7 @@ export function finishScene(s0, id, out) {
   if (sc.type === "hearing") { const c = s.cab.find((x) => x.id === sc.cab); if (c) c.heat = clamp(c.heat + (sc.mine ? 0.08 * k + 0.03 : -0.06 * Math.max(0, k)), 0, 1); }
   if (sc.type === "leader") { const b = s.bills.find((x) => x.id === sc.bill); if (b && out.tags?.includes("deal")) { b.yourVote = true; s.loyalty += 2; s.clout += 2; } if (out.tags?.includes("refuse")) { s.loyalty -= 2; if (b) b.yourVote = false; } }
   if (sc.type === "debate") s.debateBonus = k * 3.5;
+  if (sc.type === "pdebate") { if (sc.pres) { const c = s.amb?.pr?.[you.p]?.c.find((x) => x.you); if (c) c.mom += k * 1.1; } else s.pdebate = k * 5; }
   if (sc.type === "sotu") { s.mood = clamp(s.mood - PSIGN() * k * 0.4, -12, 12); s.clout += k * 4; for (const b of s.bills) if (!b.dead && b.party === PP) b.wh = (b.wh || 0) + 0.1 * Math.max(0, k); }
   if (sc.type === "confirm" && s.court?.nom) { const opp = memberById[s.youId].p !== s.court.nom.by; s.court.nom.cont = clamp(s.court.nom.cont + (opp ? 0.12 : -0.08) * k, 0, 1); }
   if (sc.type === "oval") { const b = s.bills.find((x) => x.id === sc.bill); if (b && out.tags?.includes("won")) { b.deals[sc.who] = (b.deals[sc.who] || 0) - 0.5; s.know[sc.who] = Math.max(2, s.know[sc.who] || 0); } }
@@ -1761,7 +1794,7 @@ function voteReactions(s, ev, r) {
 export const wireAbout = (s, id) => (s.wire || []).filter((a) => a.who === id || a.target === id).slice(0, 4);
 
 // Election night: the presidential map (every four years), the Senate races and the House, as they'll be reported.
-function houseCount(s) { let d = 0; for (const m of HOUSE) { if (m.id === s.youId) { d += m.p === "D" ? 1 : 0; continue; } const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`); if ((m.dem - 50) * 2 + s.mood * 0.9 + inc * 4 + n * 5 + aidPts(s, m) > 0) d++; } return d; }
+function houseCount(s) { let d = 0; for (const m of HOUSE) { if (m.id === s.youId) { d += m.p === "D" ? 1 : 0; continue; } if (seatMargin(s, m) > 0) d++; } return d; }
 function electionNight(s) {
   const year = electionYear(s), pres = s.term % 2 === 1 ? (s.lastPres && s.lastPres.year === year ? s.lastPres : presMap(s, true)) : null;
   if (pres) s.lastPres = pres;
@@ -1862,6 +1895,7 @@ function makeOpp(s, r) {
   let bio = pool[Math.floor(r() * pool.length)]; if (g === "F") bio = bio.replace(" his ", " her ").replace("businessman", "businesswoman");
   if (you.ch === "S") bio = q > 0.45 ? ["the state attorney general", "a two-term former governor", "a self-funding executive", "a sitting member of the House"][Math.floor(r() * 4)] : bio.replace("district's", "state's").replace("the district", "the state");
   s.opp = { first: PF[Math.floor(r() * PF.length)], last: PL[Math.floor(r() * PL.length)], p: you.p === "D" ? "R" : "D", g, q, bio, cash: Math.round(40 + q * 300), raised: 0, st: { tv: 0, field: 0, mail: 0 }, since: s.week };
+  { const N = you.ch === "S" && s.amb?.year === electionYear(s) ? s.amb.sen?.[you.st]?.[s.opp.p] : null; if (N) { bio = N.why || bio; Object.assign(s.opp, { first: N.sf, last: N.sl, rname: `${N.first} ${N.last}`, g: N.g, q: Math.max(s.opp.q, 0.85), bio, cash: s.opp.cash + 800 }); } }
   pushInbox(s, { kind: "staff", from: "Your campaign manager", title: `${s.opp.first} ${s.opp.last} is running against you`, body: `${s.opp.first} ${s.opp.last} (${s.opp.p}), ${bio}, filed to run for your seat. ${q > 0.6 ? "This is a serious recruit, and the other party's committee is behind them. Expect real money." : q > 0.3 ? "Credible, not scary. They'll raise enough to be annoying." : "Not a strong recruit. Don't get lazy."} Your race is on the Campaign tab.`, done: true });
   pushNews(s, `${s.opp.first} ${s.opp.last} launches a campaign against ${nameOf(you)}.`, "event");
 }
@@ -2544,6 +2578,331 @@ export const orgRows = (s) => ORGS.map((o) => ({ o, st: (s.orgs || {})[o.id] || 
 
 // ════════ Rankings: everyone in Washington, and the people who used to run it ════════
 // Former officials and governors: rough game ratings (0-100) from public standing; favorability is approximate.
+
+// ════════ Ambitions and elections: real people make career moves ════════
+// Who might run for what. The chances are the game's guesses from public reporting through November 2026; what anyone
+// actually decides is invented. Refs: "m:Last ST" a member of Congress, "f:Last" a former official or governor, "c:vp" a Cabinet post.
+// The 2028 presidential field: ref, chance they run, ideology (-1 left .. +1 right; members use their own), national fame, favorability.
+const FIELD28 = [
+  ["f:Newsom", 0.85, -0.42, 90, 45], ["f:Buttigieg", 0.66, -0.3, 84, 48], ["f:Shapiro", 0.65, -0.22, 72, 54], ["f:Pritzker", 0.55, -0.4, 66, 48],
+  ["f:Beshear", 0.6, -0.22, 60, 55], ["m:Ocasio-Cortez NY", 0.3, null, 94, 46], ["f:Harris", 0.3, -0.4, 88, 43], ["f:Moore", 0.4, -0.32, 62, 52],
+  ["m:Khanna CA", 0.5, null, 58, 46], ["m:Booker NJ", 0.3, null, 72, 47], ["m:Murphy CT", 0.35, null, 62, 47], ["m:Kelly AZ", 0.22, null, 66, 52],
+  ["m:Gallego AZ", 0.2, null, 56, 49], ["f:Whitmer", 0.2, -0.32, 64, 50], ["f:Emanuel", 0.3, -0.1, 55, 42], ["f:Walz", 0.06, -0.35, 60, 44],
+  ["c:vp", 0.92, 0.66, 94, 42], ["c:state", 0.5, 0.55, 82, 45], ["f:DeSantis", 0.45, 0.68, 76, 46], ["m:Cruz TX", 0.4, null, 86, 41],
+  ["m:Hawley MO", 0.3, null, 70, 43], ["f:Youngkin", 0.45, 0.5, 58, 50], ["f:Haley", 0.3, 0.4, 72, 45], ["f:Greene", 0.22, 0.85, 80, 34],
+  ["m:Paul KY", 0.2, null, 74, 45], ["f:Ramaswamy", 0.12, 0.7, 68, 40], ["f:Kemp", 0.15, 0.45, 55, 52], ["m:Scott SC", 0.1, null, 64, 50],
+];
+// Senate runs in 2028: ref, state, chance, ideology, quality in a general (points), the incumbent they'd take on in a primary.
+const SEN28 = [
+  ["m:Ocasio-Cortez NY", "NY", 0.38, null, 0, "Schumer NY", "Says the party needs a fighter, not a dealmaker"],
+  ["f:Kemp", "GA", 0.5, 0.45, 4, null, "Georgia's two-term governor, the strongest recruit Republicans have"],
+  ["f:Sununu", "NH", 0.35, 0.3, 5, null, "the popular former governor who turned the race down once before"],
+  ["f:Hogan", "MD", 0.08, 0.25, 3, null, "the former governor who lost the 2024 Senate race"],
+  ["f:Buttigieg", "IN", 0.05, -0.3, 3, null, "back in the state where he was mayor"],
+  ["f:Lamb", "PA", 0.3, -0.2, 1, "Fetterman PA", "the former congressman, running from the party's middle"],
+  ["f:Walz", "MN", 0.2, -0.35, 0, null, "for the special election to finish Amy Klobuchar's term"],
+];
+// Senators and members most likely to call it a career in 2028 (everyone else: age and chance).
+const RETIRE28 = { "Grassley IA": 0.9, "Johnson WI": 0.7, "Blumenthal CT": 0.4, "Wyden OR": 0.4, "Murray WA": 0.3, "Welch VT": 0.3, "Schumer NY": 0.16, "Fetterman PA": 0.22,
+  "Crapo ID": 0.2, "Boozman AR": 0.25, "Moran KS": 0.2, "Hoeven ND": 0.2, "Kennedy LA": 0.12, "Waters CA": 0.55 };
+// Delegates and the calendar (weeks into the term, share of all delegates at stake).
+const CAL = [[55, "Iowa and New Hampshire", 0.02], [57, "Nevada and South Carolina", 0.03], [61, "Super Tuesday", 0.36], [63, "Michigan, Florida, Illinois and Ohio", 0.15],
+  [66, "New York, Pennsylvania and Wisconsin", 0.15], [70, "The May primaries", 0.12], [74, "The last primaries, in June", 0.17]];
+export const DELS = { D: 3950, R: 2430 }, BASE_X = { D: -0.38, R: 0.62 };
+export const upNow = (s, m) => m.ch === "H" || m.cls === cycleClass(s.term) || (m.appointee && electionYear(s) === 2028);
+const isReal = (P) => P && !P.fictional;
+export const pname = (P, real) => (P === "you" ? "You" : !P ? "" : real ? `${P.first} ${P.last}` : `${P.sf} ${P.sl}`);
+function newsBoth(s, build, tone = "") { pushNews(s, build(false), tone); s.news[0].rt = build(true); }
+function inboxBoth(s, msg, build) { const a = build(false), b = build(true); pushInbox(s, { ...msg, title: a.title, body: a.body, rtitle: b.title, rbody: b.body }); }
+// A real person from the data, as a plain record the race can carry around.
+export function person(s, ref) {
+  const t = ref[0], key = ref.slice(2);
+  if (t === "m") { const m = MEMBERS.find((x) => `${x.last} ${x.st}` === key && !x.fictional && !x.custom); return m ? { ref, id: m.id, first: m.first, last: m.last, sf: m.sf, sl: m.sl, p: m.p, x: m.x, born: m.born, g: m.g, look: m.look, ch: m.ch, st: m.st, t: m.t, title: `${titleOf(m)}` } : null; }
+  if (t === "c") { const c = (s.cab || []).find((x) => x.id === key), o = CABINET.find((x) => x.id === key); return c && o && !c.vacant && c.last === o.last ? { ref, cab: key, first: c.first, last: c.last, sf: c.sf, sl: c.sl, p: "R", born: c.born, g: "M", look: { skin: c.tone ?? 0 }, title: c.post } : null; }
+  const f = FORMER.find((x) => x[1] === key); if (!f) return null;
+  const [first, last, p, born, g, skin, title] = f, [sf, sl] = swapPair(first.split(" ")[0], last);
+  if (PRES_M.last === last && PRES_M.first === first) return null;
+  if (MEMBERS.some((m) => m.last === last && m.first === first)) return null;    // already in Congress
+  return { ref, first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, born, g, look: { skin }, title };
+}
+const youCand = (s) => { const y = memberById[s.youId]; return { ref: "you", id: y.id, first: y.first, last: y.last, sf: y.sf, sl: y.sl, p: y.p, x: y.x, born: y.born, g: y.g, look: y.look, you: true }; };
+// The generic retirement rule: old age, or a random few.
+function retiresGeneric(s, m) { return noise(`${s.seed}:ret${s.term}:${m.id}`) < -0.86 || (YEAR + 1 - (m.born || 1960) > 82); }
+const notable = (m) => m.ch === "S" || m.lead?.length || FAME[`${m.last} ${m.st}`] || (m.seniority || 0) > 24;
+function primaryLoss(s, m) {
+  const base = BASE_X[m.p], off = Math.abs(m.x - base), age = YEAR + 1 - (m.born || 1960);
+  const p = (0.008 + (age >= 80 ? 0.03 : 0) + (m.prisk > 0.7 ? 0.02 : 0) + (off > 0.55 ? 0.03 : 0)) * (m.ch === "S" ? 0.5 : 1);
+  return rng(hash(`${s.seed}:pl${s.term}:${m.id}`))() < p;
+}
+function chalName(s, m) {
+  const r = rng(hash(`${s.seed}:chal:${m.id}:${s.term}`)), used = new Set(MEMBERS.map((x) => x.last));
+  let last = PL[Math.floor(r() * PL.length)]; for (let i = 0; used.has(last) && i < 20; i++) last = PL[Math.floor(r() * PL.length)];
+  const first = PF[Math.floor(r() * PF.length)], base = BASE_X[m.p];
+  return { first, last, sf: first, sl: last, p: m.p, g: r() < 0.45 ? "F" : "M", x: Math.round((m.x * 0.4 + base * 0.6 + (r() - 0.5) * 0.15) * 1000) / 1000, fictional: true };
+}
+function ambSeed(s) {
+  const year = electionYear(s), r = rng(hash(`${s.seed}:amb:${year}`)), presYr = year % 4 === 0;
+  const A = { year, plans: [], log: [], out: {}, sen: {}, quiet: 0, pr: null, done: {} };
+  const wk = (a, b) => a + Math.floor(r() * (b - a));
+  // Who isn't running again.
+  for (const m of MEMBERS) {
+    if (m.id === s.youId || !upNow(s, m)) continue;
+    const curated = year === 2028 && !m.fictional ? RETIRE28[`${m.last} ${m.st}`] : null;
+    if (curated != null ? r() < curated : retiresGeneric(s, m)) A.out[m.id] = { why: "retire", wk: wk(16, 70), say: notable(m) };
+  }
+  if (year === 2028) {
+    const plans = {};
+    // One decision per person: the White House, the Senate, or staying put.
+    const vance = FIELD28.find((x) => x[0] === "c:vp");
+    const vanceRuns = r() < vance[1];
+    for (const row of FIELD28) { const [ref, p0] = row; let p = p0; if (ref === "c:vp") p = vanceRuns ? 1 : 0; if (ref === "c:state") p = vanceRuns ? 0.12 : 0.8; plans[ref] = { ref, pres: p, row }; }
+    for (const row of SEN28) (plans[row[0]] = plans[row[0]] || { ref: row[0], pres: 0 }).sen = row;
+    for (const pl of Object.values(plans)) {
+      const P = person(s, pl.ref); if (!P || P.id === s.youId) continue;
+      const roll = r(), sp = pl.sen ? pl.sen[2] : 0;
+      const kind = roll < pl.pres ? "pres" : roll < pl.pres + sp ? "sen" : "stay";
+      if (kind === "stay" && (pl.row?.[3] || 0) < 80) continue;      // only the biggest names make news by saying no
+      A.plans.push({ ref: pl.ref, kind, wk: kind === "pres" ? (pl.ref === "c:vp" ? wk(40, 50) : wk(16, 50)) : kind === "sen" ? wk(22, 56) : wk(30, 54), row: pl.row, sen: pl.sen });
+    }
+  }
+  // The White House race: both parties, unless a President is running for a second term.
+  if (presYr) {
+    A.pr = { D: { c: [], nom: null }, R: { c: [], nom: null }, cal: CAL.map(([w, name, f]) => ({ w, name, f, res: null })) };
+    const inc = s.presRec && (s.presRec.since || 0) >= year - 4 && s.presRec.p;      // a first-term President
+    if (inc && electionYear(s) > 2028) { const P = { ...s.presRec, sf: s.presRec.sf || s.presRec.first, sl: s.presRec.sl || s.presRec.last, ref: "potus", x: BASE_X[s.presRec.p] * 0.8 }; A.pr[inc].c.push(cand(P, 90, 48)); A.pr[inc].nom = A.pr[inc].c[0]; A.pr[inc].solo = true; }
+    if (year > 2028) {
+      // Later cycles: the biggest names in each party with no incumbent take a shot.
+      for (const p of ["D", "R"]) { if (A.pr[p].nom) continue;
+        const pool = MEMBERS.filter((m) => m.p === p && !m.fictional && m.id !== s.youId && (FAME[`${m.last} ${m.st}`] || 0) >= 62 && YEAR + 1 - (m.born || 1960) < 76)
+          .map((m) => [`m:${m.last} ${m.st}`, FAME[`${m.last} ${m.st}`]]);
+        for (const row of FIELD28.filter((x) => x[0][0] === "f")) { const P = person(s, row[0]); if (P && P.p === p && YEAR + 1 - P.born < 76) pool.push([row[0], row[3]]); }
+        pool.sort((a, b) => b[1] - a[1] + (r() - 0.5) * 20).slice(0, 6).forEach(([ref, fame]) => A.plans.push({ ref, kind: "pres", wk: wk(12, 48), row: [ref, 1, null, fame, 47] }));
+      }
+    }
+  }
+  return A;
+}
+function cand(P, fame, pop, x) { return { ...P, x: x ?? P.x ?? 0, fame, pop, sup: 0, del: 0, mom: 0, out: false }; }
+// Open seat: if a real House member of that party in the state wants it, they run.
+function stepUp(s, A, seat, p, r, chance) {
+  const pick = HOUSE.filter((m) => m.st === seat.st && m.p === p && m.id !== s.youId && !A.out[m.id] && !m.fictional && YEAR + 1 - (m.born || 1960) < 72).sort((a, b) => (b.t.ambition + (FAME[`${b.last} ${b.st}`] || 0) / 100) - (a.t.ambition + (FAME[`${a.last} ${a.st}`] || 0) / 100))[0];
+  if (!pick || r() > chance) return null;
+  const P = person(s, `m:${pick.last} ${pick.st}`); if (!P) return null;
+  A.out[pick.id] = { why: "senate", st: seat.st, wk: s.week - (s.termStart || 0), say: false };
+  return { ...P, q: 0, how: "house" };
+}
+function senKey(A, st) { return (A.sen[st] = A.sen[st] || {}); }
+// Fill open Senate seats with nominees once the field settles.
+function openSeats(s, A, r, rw) {
+  for (const m of SENATE) {
+    if (!upNow(s, m) || m.id === s.youId) continue;
+    const o = A.out[m.id], k = senKey(A, m.st);
+    if (o && o.wk > rw) continue;                     // not public yet
+    if (rw < 72 && r() > 0.2) continue;               // campaigns launch over the spring, not all at once
+    if (o && !k[m.p] && k[`chal${m.p}`]) k[m.p] = k[`chal${m.p}`];
+    if (o && !k[m.p]) { const P = stepUp(s, A, m, m.p, r, 0.6); if (P) { k[m.p] = P; newsBoth(s, (real) => `${P.title} ${pname(P, real)} launches a campaign for the open Senate seat in ${m.st}.`, "event"); } }
+    const other = m.p === "D" ? "R" : "D";
+    if (!k[other] && (o || Math.abs(m.dem - 50) < 5)) { const P = stepUp(s, A, m, other, r, o ? 0.35 : 0.15); if (P) { k[other] = P; newsBoth(s, (real) => `${P.title} ${pname(P, real)} (${other}) will run for Senate in ${m.st}.`, "event"); } }
+  }
+}
+function announce(s, A, pl, r) {
+  const P = person(s, pl.ref); pl.done = true; if (!P) return;
+  const you = memberById[s.youId];
+  if (pl.kind === "stay") { newsBoth(s, (real) => `${pname(P, real)} rules out a 2028 run for president: "Not this time."`); A.log.push({ wk: s.week, ref: pl.ref, kind: "stay" }); return; }
+  if (pl.kind === "pres") {
+    const row = pl.row, c = cand(P, row[3], row[4], row[2] ?? P.x);
+    if (!A.pr || A.pr[P.p].solo) return;
+    A.pr[P.p].c.push(c);
+    const m = P.id && memberById[P.id]; if (m && upNow(s, m)) A.out[m.id] = { why: "pres", wk: s.week - s.termStart, say: false };
+    newsBoth(s, (real) => `${P.title} ${pname(P, real)} announces a run for president in ${A.year}.${m && upNow(s, m) ? ` ${m.ch === "S" ? "The Senate seat" : "The House seat"} goes on the ballot without them.` : ""}`, "event");
+    A.log.push({ wk: s.week, ref: pl.ref, kind: "pres", p: P.p });
+    return;
+  }
+  // A Senate run.
+  const [, st, , x, q, target, why] = pl.sen, seat = SENATE.find((m) => m.st === st && upNow(s, m)); if (!seat) return;
+  const N = { ...P, x: x ?? P.x, q, why }, k = senKey(A, st);
+  const m = P.id && memberById[P.id]; if (m) A.out[m.id] = { why: "senate", st, wk: s.week - s.termStart, say: false };
+  A.log.push({ wk: s.week, ref: pl.ref, kind: "sen", st, p: P.p });
+  if (seat.p === P.p && target === `${seat.last} ${seat.st}` && !seat.fictional) {
+    // A primary challenge to a sitting senator.
+    N.vs = seat.id; k[`chal${P.p}`] = N;
+    newsBoth(s, (real) => `${P.title} ${pname(P, real)} will challenge ${nameOf(seat, real)} in the ${st} Senate primary. ${why}.`, "event");
+    if (seat.id === s.youId) {
+      s.pchal = { ...N, real: true, q: 0.85, cash: 2500, backer: P.p === "D" ? "jd" : "cfg", bio: why.toLowerCase(), since: s.week };
+      inboxBoth(s, { kind: "pchal", from: "Your campaign manager", choices: ["Hit back now ($150K in contrast mail)", "Lock down endorsements (8 hours)", "Ignore it"] }, (real) => ({ title: `${pname(P, real)} is challenging you in the primary`,
+        body: `It's official: ${pname(P, real)} is running against you for the nomination. This is not a gadfly. National money and a real following come with it. How do you answer?` }));
+    } else if (r() < (RETIRE28[`${seat.last} ${seat.st}`] || 0.1) + 0.3) A.out[seat.id] = A.out[seat.id] || { why: "retire", wk: s.week - s.termStart + 3 + Math.floor(r() * 8), say: true, after: pname(P, false), afterR: pname(P, true) };
+    return;
+  }
+  if (seat.p === P.p && !A.out[seat.id]) A.out[seat.id] = { why: "retire", wk: s.week - s.termStart + 1, say: true, quiet: true };   // a placeholder appointee steps aside
+  k[P.p] = N;
+  newsBoth(s, (real) => `${pname(P, real)} enters the Senate race in ${st}: ${why}.`, "event");
+  if (seat.id === s.youId && s.opp) { Object.assign(s.opp, { first: P.sf, last: P.sl, rname: `${P.first} ${P.last}`, g: P.g, q: Math.max(s.opp.q, 0.85), bio: why, cash: s.opp.cash + 800 });
+    inboxBoth(s, { kind: "staff", from: "Your campaign manager", done: true }, (real) => ({ title: `${pname(P, real)} is your opponent now`, body: `The other side cleared the field. ${pname(P, real)}, ${why}, is running for your seat, and the money is coming with them. This just became the race of the cycle.` })); }
+}
+// The race for the nomination, week by week.
+function util(s, c, p, wkKey, spread = 0.25) {
+  const you = c.you, fame = you ? s.profile * 0.9 : c.fame, pop = you ? youPop(s) : c.pop, cash = you ? Math.min(0.3, s.cash / 8000) : 0;
+  return fame / 14 + (pop - 45) / 12 - Math.abs(c.x - BASE_X[p]) * 3.2 + c.mom + cash + noise(`${s.seed}:pr:${c.last}:${wkKey}`) * spread;
+}
+function shares(s, P, p, key, spread) {
+  const act = P.c.filter((c) => !c.out); const u = act.map((c) => Math.exp(util(s, c, p, key, spread))), t = u.reduce((a, b) => a + b, 0) || 1;
+  act.forEach((c, i) => (c._sh = u[i] / t)); return act;
+}
+function endorse(s, P, p, c) {
+  const rest = P.c.filter((x) => !x.out && x !== c); if (!rest.length) return null;
+  const to = rest.sort((a, b) => Math.abs(a.x - c.x) - Math.abs(b.x - c.x) - (b.sup - a.sup) * 2)[0]; to.mom += 0.3 + c.sup * 3; c.endorse = { first: to.first, last: to.last, sf: to.sf, sl: to.sl, you: !!to.you }; return to;
+}
+function prWeek(s, A, r, rw) {
+  for (const p of ["D", "R"]) {
+    const P = A.pr[p]; if (P.nom || P.solo) continue;
+    if (!P.c.length) continue;
+    for (const c of P.c) c.mom *= 0.8;
+    const act = shares(s, P, p, s.week);
+    for (const c of act) c.sup = c.sup ? c.sup * 0.7 + c._sh * 0.3 : c._sh;
+    // Polls and debates before the voting starts.
+    if (rw < 55 && rw >= 34 && rw % 6 === 4 && act.length > 1) { const top = [...act].sort((a, b) => b.sup - a.sup).slice(0, 4); newsBoth(s, (real) => `New ${A.year} poll, ${p === "D" ? "Democratic" : "Republican"} primary: ${top.map((c) => `${c.you ? nameOf(memberById[s.youId], real) : pname(c, real)} ${Math.round(c.sup * 100)}%`).join(", ")}.`); }
+    if ((rw === 44 || rw === 52) && act.length > 1 && !act.some((c) => c.you)) { const w = act[Math.floor(r() * Math.min(4, act.length))]; w.mom += 0.4; newsBoth(s, (real) => `${p === "D" ? "Democratic" : "Republican"} debate: ${pname(w, real)} has the night's best moment, and the clip is everywhere.`); }
+  }
+  const ev = A.pr.cal.find((x) => x.w === rw && !x.res); if (!ev) return;
+  ev.res = {};
+  for (const p of ["D", "R"]) {
+    const P = A.pr[p]; if (P.nom || !P.c.length) continue;
+    const act = shares(s, P, p, `c${rw}`, 0.7).sort((a, b) => b._sh - a._sh), tot = Math.round(DELS[p] * ev.f);
+    // Democrats split delegates by vote above 15%; Republican states lean winner-take-all.
+    const elig = p === "D" ? act.filter((c) => c._sh >= 0.15) : act, w = elig.map((c) => (p === "D" ? c._sh : c._sh ** 1.8)), wt = w.reduce((a, b) => a + b, 0) || 1;
+    elig.forEach((c, i) => (c.del += Math.round((tot * w[i]) / wt)));
+    act[0].mom += 0.8; if (act[1]) act[1].mom += 0.25;
+    ev.res[p] = act.slice(0, 3).map((c) => ({ last: c.last, sl: c.sl, first: c.first, sf: c.sf, you: !!c.you, v: Math.round(c._sh * 100) }));
+    const W = act[0];
+    newsBoth(s, (real) => `${ev.name}: ${W.you ? `you win the ${p === "D" ? "Democratic" : "Republican"} vote` : `${pname(W, real)} wins the ${p === "D" ? "Democratic" : "Republican"} vote`} with ${Math.round(W._sh * 100)}%${act[1] ? `, ahead of ${act[1].you ? "you" : pname(act[1], real)} at ${Math.round(act[1]._sh * 100)}%` : ""}.`, act[0].you ? "good" : "event");
+    // Dropouts.
+    const idx = A.pr.cal.indexOf(ev), lead = Math.max(...act.map((c) => c.del));
+    for (const c of act) {
+      if (c === W) continue;
+      const bar = idx === 0 ? 0.04 : idx === 1 ? 0.07 : idx === 2 ? 0.14 : 0.2;
+      if (c._sh < bar || (idx >= 3 && c.del < lead / 3) || (idx >= 4 && act.filter((x) => !x.out).length > 2 && c !== act[1])) {
+        c.out = rw; const to = endorse(s, P, p, c);
+        if (c.you) youOut(s, A, to); else { const m = c.id && memberById[c.id]; if (m && A.out[m.id]?.why === "pres" && rw < 70) delete A.out[m.id];
+          newsBoth(s, (real) => `${pname(c, real)} ends ${c.g === "F" ? "her" : "his"} campaign${to ? ` and endorses ${to.you ? nameOf(memberById[s.youId], real) : pname(to, real)}` : ""}.`, to?.you ? "good" : ""); }
+      }
+    }
+    const left = P.c.filter((c) => !c.out), top = [...left].sort((a, b) => b.del - a.del)[0];
+    if (top && (top.del > DELS[p] / 2 || left.length === 1 || idx === A.pr.cal.length - 1)) clinch(s, A, p, top);
+  }
+}
+function clinch(s, A, p, c) {
+  const P = A.pr[p]; P.nom = c;
+  for (const x of P.c) if (x !== c && !x.out) { x.out = s.week - s.termStart; if (x.you) youOut(s, A, null, c); }
+  if (c.you) {
+    s.runFor = "pres"; s.profile = clamp(s.profile + 20, 0, 100); s.clout += 10;
+    newsBoth(s, (real) => `${nameOf(memberById[s.youId], real)} clinches the ${p === "D" ? "Democratic" : "Republican"} nomination for president.`, "good");
+    pushInbox(s, { kind: "staff", from: "Your campaign chair", done: true, title: "You're the nominee", body: `You have the delegates. The convention is a coronation now. ${memberById[s.youId].ch === "H" || upNow(s, memberById[s.youId]) ? "Your own seat goes on the ballot without you." : "Win or lose in November, your Senate seat is safe until it's up."} Everything now is November.` });
+    s.toast = { title: "You're the nominee", text: "You won the nomination for president. Now the general election.", tone: "good" };
+  } else newsBoth(s, (real) => `${pname(c, real)} clinches the ${p === "D" ? "Democratic" : "Republican"} nomination for president.`, "event");
+}
+function youOut(s, A, to, winner = null) {
+  const you = memberById[s.youId];
+  if (winner) newsBoth(s, (real) => `${nameOf(you, real)} concedes the nomination to ${pname(winner, real)}.`, "bad");
+  else newsBoth(s, (real) => `${nameOf(you, real)} drops out of the presidential race${to ? ` and endorses ${pname(to, real)}` : ""}.`, "bad");
+  s.youPres = "out"; s.profile = clamp(s.profile + 4, 0, 100);
+  pushInbox(s, { kind: "staff", from: "Your campaign chair", done: true, title: "The campaign is over", body: `${winner ? "The other side reached the magic number first. You concede and promise to campaign for the ticket." : "The delegate math stopped working, so you suspended."} ${upNow(s, you) ? "You filed for re-election to your own seat in time, so that race is still yours to win." : "You go back to your day job with a bigger name than you had."} ${to ? "Your endorsement was worth something; that campaign will remember it." : ""}` });
+}
+// Your own primary challenger: a real person when one is in the data, otherwise someone new with a backer and a message.
+const CHAL_BIO = {
+  left: [["a 31-year-old tenant organizer with a viral launch video", "jd"], ["a state legislator and DSA member", "dsa"], ["a former Sunrise organizer who now sits on the city council", "sunrise"]],
+  center: [["a former prosecutor backed by crypto money", "fairshake"], ["a self-funding health care executive", null], ["a state senator who says you've lost touch with the district", "aipac"]],
+  right: [["a combat veteran and talk-radio regular who calls you a RINO", "cfg"], ["a MAGA influencer with a million followers", "tpusa"], ["a state senator with Club money behind him", "cfg"]],
+  estab: [["a former county judge backed by business groups", "uscc"], ["a farm-bureau president running as the grown-up in the room", "afp"]] };
+const CHAL_LINE = { left: "You've gone soft. This district deserves a fighter.", center: "You're out of step with the people who actually live here.", right: "You voted with Democrats when it counted.", estab: "You're more interested in TV than in getting anything done." };
+function makeChallenger(s, r) {
+  const you = memberById[s.youId], side = you.p === "D" ? (you.x > -0.5 ? "left" : "center") : (you.x < 0.75 ? "right" : "estab");
+  const [bio, backer] = CHAL_BIO[side][Math.floor(r() * CHAL_BIO[side].length)], g = /\bhim\b|his\b/.test(bio) ? "M" : r() < 0.5 ? "F" : "M";
+  let first = PF[Math.floor(r() * PF.length)]; const last = PL[Math.floor(r() * PL.length)];
+  const fit = 1 - Math.min(1, Math.abs(you.x - BASE_X[you.p]) * 1.6), q = clamp(0.2 + r() * 0.4 + (1 - fit) * 0.3 + (55 - s.baseApproval) / 60, 0.1, 0.95);
+  s.pchal = { first, last, sf: first, sl: last, g, side, bio, backer, q, cash: Math.round(80 + q * 900), since: s.week, line: CHAL_LINE[side], fictional: true };
+  const org = backer && orgById[backer];
+  pushInbox(s, { kind: "pchal", from: "Your campaign manager", choices: ["Hit back now ($150K in contrast mail)", "Lock down endorsements (8 hours)", "Ignore it"],
+    title: `${first} ${last} files to run against you in the primary`,
+    body: `${first} ${last}, ${bio}, is challenging you for the ${you.p === "D" ? "Democratic" : "Republican"} nomination.${org ? ` ${org.name} is behind the campaign.` : ""} The pitch: "${CHAL_LINE[side]}" ${q > 0.6 ? "This one is real. They're raising fast." : q > 0.35 ? "Credible enough to cost you money and attention." : "Probably a nuisance, unless you give them oxygen."}` });
+  pushNews(s, `${first} ${last} launches a primary challenge to ${nameOf(you)}.`, "event");
+}
+function answerChal(s, m, choice) {
+  const c = s.pchal; if (!c) return;
+  if (choice === 0 && s.cash >= 150) { s.cash -= 150; c.q = clamp(c.q - 0.15, 0.05, 1); s.integrity -= 1; s.toast = { title: "You go negative early", text: "The mailers land before they've introduced themselves. Their numbers stall.", tone: "good" }; }
+  else if (choice === 1 && s.hours >= 8) { s.hours -= 8; s.pchalLock = (s.pchalLock || 0) + 4; s.loyalty += 1; s.toast = { title: "Endorsements locked", text: "The local party, the unions and the mayor sign on with you. The challenger's path narrows.", tone: "good" }; }
+  else { c.q = clamp(c.q + 0.06, 0, 1); s.toast = { title: "You ignore it", text: "No oxygen for them. Unless they find it on their own.", tone: "" }; }
+}
+// Marquee primaries across the country: some incumbents lose.
+function primaryNight(s, A) {
+  const year = A.year; let lost = 0; const names = [];
+  for (const m of MEMBERS) {
+    if (m.id === s.youId || !upNow(s, m) || A.out[m.id]) continue;
+    const k = m.ch === "S" ? A.sen[m.st]?.[`chal${m.p}`] : null;
+    if (k && k.vs === m.id) {   // a named challenger (AOC against Schumer, say)
+      const win = rng(hash(`${s.seed}:named:${m.id}:${year}`))() < (k.ref === "m:Ocasio-Cortez NY" ? 0.6 : 0.4);
+      if (win) { A.out[m.id] = { why: "primary", by: k }; senKey(A, m.st)[m.p] = k; lost++; newsBoth(s, (real) => `Upset in ${m.st}: ${pname(k, real)} defeats ${nameOf(m, real)} in the Senate primary.`, "event"); }
+      else { newsBoth(s, (real) => `${nameOf(m, real)} holds off ${pname(k, real)} in the ${m.st} Senate primary.`, "event"); }
+      continue;
+    }
+    if (!primaryLoss(s, m)) continue;
+    const c = chalName(s, m); A.out[m.id] = { why: "primary", by: c }; lost++;
+    if (notable(m)) names.push(m);
+  }
+  for (const m of names.slice(0, 4)) { const c = A.out[m.id].by; newsBoth(s, (real) => `Primary upset: ${titleOf(m)} ${nameOf(m, real)} loses the ${m.p === "D" ? "Democratic" : "Republican"} nomination to ${c.first} ${c.last}.`, "event"); }
+  pushNews(s, `Primary season wraps up: ${lost} incumbent${lost === 1 ? "" : "s"} lost renomination this year, and ${Object.values(A.out).filter((o) => o.why === "retire").length} members are retiring.`);
+  A.prim = lost;
+}
+function ambitionWeek(s, r) {
+  if (roleOf(s) === "P") return;
+  const rw = s.week - (s.termStart || 0), you = memberById[s.youId];
+  if (!s.amb || s.amb.year !== electionYear(s)) { s.amb = ambSeed(s); s.pchal = null; s.pchalLock = 0; s.pdebate = 0; s.youPres = null; }
+  const A = s.amb;
+  for (const pl of A.plans) if (!pl.done && pl.wk === rw) announce(s, A, pl, r);
+  for (const [id, o] of Object.entries(A.out)) if (o.why === "retire" && o.say && o.wk === rw && !o.said) { o.said = true; const m = memberById[id]; if (!m) continue;
+    if (o.quiet) newsBoth(s, (real) => `${titleOf(m)} ${nameOf(m, real)}, appointed to the seat, says ${m.g === "F" ? "she" : "he"} won't run to keep it.`);
+    else newsBoth(s, (real) => `${titleOf(m)} ${nameOf(m, real)} (${m.p}-${m.st}) won't seek re-election${o.after ? `, ending a primary fight with ${real ? o.afterR : o.after} before it starts` : ""}.${m.ch === "S" ? " The Senate seat is open." : ""}`, "event"); }
+  if (rw >= 40 && rw <= 72) openSeats(s, A, r, rw);
+  if (A.pr && rw >= 30) prWeek(s, A, r, rw);
+  if (rw === 76) primaryNight(s, A);
+  // You: a presidential run, if you're big enough.
+  if (A.pr && rw === 30 && !s.runFor && !A.pr[you.p].solo && (s.profile >= 70 || (you.ch === "S" && s.profile >= 50 && s.clout >= 70)) && !A.pr[you.p].c.some((c) => c.id === you.id))
+    pushInbox(s, { kind: "presrun", from: "Your political director", choices: ["Run for president", "Not this time"], title: `The ${A.year} question`,
+      body: `Donors are calling and the early-state chairs want a meeting. With your profile you'd start in the conversation, not at the kids' table. A run means debates, Iowa and New Hampshire, and months away from Washington. ${upNow(s, you) ? "If it goes badly early enough, you can still file for your own seat." : "Your Senate seat is safe either way."}` });
+  if (s.youPres === "in" && A.pr && !A.pr[you.p].nom) { s.hours = Math.max(0, s.hours - 6); if (rw === 44 || rw === 52) { const top = A.pr[you.p].c.filter((c) => !c.out && !c.you).sort((a, b) => b.sup - a.sup)[0]; if (top) pushScene(s, "pdebate", { pres: true, opp: pname(top, false), oppR: pname(top, true), oppG: top.g, oppId: "pr" + top.last, side: Math.abs(top.x - you.x) < 0.2 ? "center" : (you.p === "D" ? (top.x < you.x ? "left" : "center") : (top.x > you.x ? "right" : "estab")) }, `${A.year} primary debate`, "Your campaign chair"); } }
+  // Your own primary.
+  if (upNow(s, you) && !s.runFor && s.youPres !== "in") {
+    if (rw === 42 && !s.pchal) { const fit = 1 - Math.min(1, Math.abs(you.x - BASE_X[you.p]) * 1.6), est = s.baseApproval + fit * 8 - (you.prisk > 0.5 ? 6 : 0); if (r() < clamp((64 - est) / 20, 0, 0.75) + 0.12) makeChallenger(s, r); }
+    if (s.pchal && rw > 42 && rw < PRIMARY_WEEK) s.pchal.q = clamp(s.pchal.q + 0.004, 0, 1);
+    if (s.pchal && rw === PRIMARY_WEEK - 3) pushScene(s, "pdebate", { opp: pname(s.pchal, false), oppR: s.pchal.real ? pname(s.pchal, true) : null, oppG: s.pchal.g, oppId: "pc" + s.pchal.last, side: s.pchal.side || "left", line: s.pchal.line, ch: you.ch }, `Primary debate against ${pname(s.pchal, false)}`, "Your campaign manager");
+  }
+}
+// How much a nominee helps or hurts their ticket in November, in points.
+// Your favorability with the whole country: your record and reputation, not your numbers back home.
+const youPop = (s) => 44 + clamp((s.approval - 50) * 0.15 + (s.integrity - 60) * 0.08, -6, 6);
+function nomQ(c, s) { if (!c) return 0; const fame = c.you ? s.profile * 0.9 : c.fame, pop = c.you ? youPop(s) + (s.debateBonus || 0) : c.pop; return (fame - 75) * 0.05 + (pop - 46) * 0.22 - Math.max(0, Math.abs(c.x) - 0.42) * 10; }
+export function nomEdge(s) { const P = s.amb?.pr; if (!P || s.amb.year !== electionYear(s)) return 0; return clamp(nomQ(P.D.nom, s) - nomQ(P.R.nom, s), -5, 5); }
+// A Senate seat's quality edge: named nominees bring their own following (or baggage).
+function seatQ(s, m) { const k = s.amb?.year === electionYear(s) ? s.amb.sen?.[m.st] : null; if (!k || m.ch !== "S") return 0; return (k.D?.q || 0) - (k.R?.q || 0); }
+const isOpen = (s, m) => !!(s.amb?.year === electionYear(s) && s.amb.out?.[m.id]);
+function seatMargin(s, m) {
+  const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`), H = m.ch === "H";
+  return (m.dem - 50) * 2 + s.mood * (H ? 0.9 : 0.8) + (isOpen(s, m) ? 0 : inc * 4) + n * (H ? 5 : 6) + aidPts(s, m) + seatQ(s, m);
+}
+// Put a real person into a seat (keeping the seat's id, state and lean). Used when a named candidate wins.
+function install(s, seat, P, year) {
+  const live = P.id && memberById[P.id] && memberById[P.id].last === P.last ? memberById[P.id] : null;
+  const keepKeys = { ch: seat.ch, st: seat.st, d: seat.d, dem: seat.dem, id: seat.id, cls: seat.cls };
+  const t = live?.t || P.t || { ambition: 0.8, loyalty: 0.5, ego: 0.6, ethics: 0.6, deal: 0.5, label: "showhorse" };
+  const comm = (seat.comm || []).map((c) => ({ ...c, role: "", title: "" }));
+  const rel = live ? s.rel[live.id] : undefined, know = live ? s.know[live.id] : undefined;
+  for (const k of Object.keys(seat)) delete seat[k];
+  Object.assign(seat, keepKeys, { first: P.first, last: P.last, sf: P.sf, sl: P.sl, p: P.p, x: Math.round((P.x ?? BASE_X[P.p] * 0.7) * 1000) / 1000, y: live?.y || 0, born: P.born, since: year + 1, comm, lead: [], t, g: P.g, look: P.look, fictional: false, new: true, real: true });
+  derive(seat); seat.fund = fundOf(seat); keep(s, seat);
+  for (const k of ["rel", "know", "owedToYou"]) delete s[k][seat.id];
+  if (rel != null) s.rel[seat.id] = rel; if (know != null) s.know[seat.id] = know;
+}
+
 const FORMER = [
   ["Barack", "Obama", "D", 1961, "M", 4, "Former President", { influence: 92, legis: 70, pop: 58, profile: 99, integrity: 82, cash: 1500 }],
   ["Joe", "Biden", "D", 1942, "M", 0, "Former President", { influence: 40, legis: 90, pop: 38, profile: 78, integrity: 66, cash: 200 }],
@@ -2596,6 +2955,10 @@ const FORMER = [
   ["Jocelyn", "Benson", "D", 1977, "F", 0, "Governor-elect of Michigan", { influence: 40, legis: 25, pop: 50, profile: 46, integrity: 70, cash: 200 }],
   ["Deb", "Haaland", "D", 1960, "F", 3, "Governor-elect of New Mexico", { influence: 35, legis: 35, pop: 52, profile: 56, integrity: 70, cash: 100 }],
   ["Rob", "Sand", "D", 1982, "M", 0, "Governor-elect of Iowa", { influence: 32, legis: 15, pop: 52, profile: 42, integrity: 72, cash: 100 }],
+  ["Rahm", "Emanuel", "D", 1959, "M", 0, "Former Ambassador to Japan", { influence: 32, legis: 45, pop: 40, profile: 58, integrity: 55, cash: 300 }],
+  ["Chris", "Sununu", "R", 1974, "M", 0, "Former Governor of New Hampshire", { influence: 30, legis: 35, pop: 52, profile: 50, integrity: 66, cash: 200 }],
+  ["Larry", "Hogan", "R", 1956, "M", 0, "Former Governor of Maryland", { influence: 22, legis: 35, pop: 50, profile: 45, integrity: 68, cash: 150 }],
+  ["Conor", "Lamb", "D", 1984, "M", 0, "Former Representative", { influence: 12, legis: 20, pop: 50, profile: 30, integrity: 70, cash: 50 }],
   ["Glenn", "Youngkin", "R", 1966, "M", 0, "Former Governor of Virginia", { influence: 40, legis: 30, pop: 48, profile: 55, integrity: 65, cash: 800 }],
 ];
 // National profile for members whose fame outruns their seniority (0-100), and the people already running for 2028.
@@ -2633,10 +2996,15 @@ export function allRankings(s) {
     const med = Math.abs(j.x - courtMedian(s)) < 0.12, yrs = gameYear(s) - j.since, lean = Math.abs(j.x);
     rows.push({ ...row(m, false, { influence: Math.round((j.chief ? 82 : med ? 75 : 50) + Math.min(15, yrs * 0.5) + lean * 8), legis: 20 + Math.min(20, yrs), pop: 45, cash: 0, integrity: 70, profile: Math.round(40 + Math.min(20, yrs * 0.6) + lean * 15 + (j.chief ? 15 : 0)) }, j.chief ? "Chief Justice" : "Associate Justice"), grp: "J", title: j.chief ? "Chief Justice" : "Associate Justice" }); }
   // Former officials and governors: they still move money, voters and members.
-  for (const [first, last, p, born, g, skin, title, st] of FORMER) { const [sf, sl] = swapPair(first.split(" ")[0], last); const m = { id: "fmr-" + last + first, first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, born, g, look: { skin }, seat: title };
+  const inOffice = new Set([...MEMBERS.map((m) => `${m.first} ${m.last}`), `${PRES_M.first} ${PRES_M.last}`]);
+  for (const f of s.formers || []) { if (inOffice.has(`${f.first} ${f.last}`)) continue; inOffice.add(`${f.first} ${f.last}`); const m = { id: "fmr-" + f.last + f.first, first: f.first, last: f.last, sf: f.sf || f.first, sl: f.sl || f.last, p: f.p, born: f.born, g: f.g || "M", look: f.look, seat: f.title };
+    const st = f.title === "Former President" ? { influence: 75, legis: 60, pop: 44, profile: 96, integrity: 40, cash: 2500 } : f.cab === "vp" ? { influence: 50, legis: 30, pop: 40, profile: 82, integrity: 55, cash: 400 } : { influence: 30, legis: 25, pop: 38, profile: 55, integrity: 55, cash: 100 };
+    rows.push({ ...row(m, false, st, f.title), grp: "F", title: f.title }); }
+  for (const [first, last, p, born, g, skin, title, st] of FORMER) { if (inOffice.has(`${first} ${last}`)) continue; const [sf, sl] = swapPair(first.split(" ")[0], last); const m = { id: "fmr-" + last + first, first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, born, g, look: { skin }, seat: title };
     rows.push({ ...row(m, false, st, title), grp: "F", title }); }
   for (const r of rows) if (STANDING[r.m.last] && !r.me) r.score += STANDING[r.m.last];
   const keys = ["score", "influence", "legis", "pop", "cash", "integrity", "profile"];
   for (const k of keys) [...rows].sort((a, b) => b[k] - a[k]).forEach((x, i) => (x["a_" + k] = i + 1));
   return rows;
 }
+export { CABINET };

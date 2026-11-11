@@ -347,6 +347,7 @@ for m in house + senate:
     m["look"] = look
 missing = [k for k in GROUP if k not in seen]
 if missing: print("skin table names not found:", missing)
+SWAP_FIX = {"Sheldon Whitehouse": ("Wheldon", "Sitehouse"), "Mitchell Berman": ("Mitch", "Bergman")}
 out = []
 for m in house + senate:
     key = m["id"]
@@ -355,6 +356,8 @@ for m in house + senate:
         m["sf"], m["sl"] = m["first"], m["last"]   # invented people keep their names
     else:
         m["sf"], m["sl"] = swap(m["first"], m["last"])
+    # A few sound swaps land on a crude word; use a gentler variant.
+    m["sf"], m["sl"] = SWAP_FIX.get(f'{m["first"]} {m["last"]}', (m["sf"], m["sl"]))
     out.append(m)
 json.dump(out, open(os.path.join(os.path.dirname(__file__), "..", "src", "data", "members.json"), "w"), separators=(",", ":"))
 import collections
