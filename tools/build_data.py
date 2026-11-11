@@ -158,6 +158,8 @@ RESULTS = {
   ("TX",21): ("Mark","Teixeira","R",0.55,1980,""), ("KY",4): ("Ed","Gallrein","R",0.6,None,""), ("FL",19): ("Jim","Schwartzel","R",0.5,None,""),
   ("FL",7): ("Ryan","Elijah","R",0.5,None,"lead"), ("FL",22): ("Pia","Dandiya","D",-0.35,None,""), ("FL",24): ("Oliver","Gilbert","D",-0.4,1962,""),
   ("NY",21): ("Anthony","Constantino","R",0.6,None,"lead"),
+  # House members who won Senate seats, and who replaced them
+  ("NH",1): ("Stefany","Shaheen","D",-0.3,1974,""), ("MN",2): ("Matt","Little","D",-0.25,1985,""), ("AL",1): ("Jerry","Carl","R",0.55,1958,""),
 }
 # Incumbents who won in a renumbered seat: (to) <- (from)
 MOVES = {("CA",3): ("CA",6), ("CA",40): ("CA",41), ("CA",41): ("CA",38), ("FL",20): ("FL",25), ("FL",25): ("FL",23), ("FL",23): ("FL",22)}
@@ -198,12 +200,18 @@ for st, old, fn, ln, x, born in WON:
         print("seat not found by name, using the state's Republican seat:", st, old, [m["last"] for m in senate if m["st"] == st])
         s = next((m for m in senate if m["st"] == st and m["p"] == "R"), None) or next(m for m in senate if m["st"] == st)
     s.update({"id": f"W{st}{ln[:3].upper()}", "first": fn, "last": ln, "p": "D", "x": x, "y": 0.1, "born": born, "since": 2027, "comm": [], "lead": [], "new": True, "est": True, "ind": False})
-# Retiring senators whose successors this file does not know: placeholder newcomers of the same party.
-for st, old in [("KY", "McConnell"), ("IL", "Durbin"), ("NH", "Shaheen"), ("MN", "Smith"), ("AL", "Tuberville")]:
+# Open Senate seats, winners as called Nov 3-4, 2026. Former House members carry their House record.
+OPEN = [("KY", "McConnell", "Andy", "Barr", "R", ("KY", 6), 0.45, 1973), ("IL", "Durbin", "Juliana", "Stratton", "D", None, -0.42, 1965),
+        ("NH", "Shaheen", "Chris", "Pappas", "D", ("NH", 1), -0.3, 1980), ("MN", "Smith", "Peggy", "Flanagan", "D", None, -0.5, 1979),
+        ("AL", "Tuberville", "Barry", "Moore", "R", ("AL", 1), 0.65, 1966)]
+for st, old, fn, ln, party, house_seat, x, born in OPEN:
     s = next((m for m in senate if m["st"] == st and m["last"].startswith(old)), None)
-    if not s: continue
-    key = f"S{st}{old}"; fn, ln = newcomer_name(key)
-    s.update({"id": "N" + key, "first": fn, "last": ln, "x": round(s["x"] * 0.8, 3), "born": 1965 + int(h(key, "b") * 20), "since": 2027, "comm": [], "lead": [], "gen": True})
+    if not s: print("missing senate seat", st, old); continue
+    hr = before.get(house_seat) if house_seat else None
+    est = not (hr and hr.get("last") == ln)
+    if not est: x, born = hr["x"], hr.get("born") or born
+    s.update({"id": hr["id"] if not est else f"W{st}{ln[:3].upper()}", "first": fn, "last": ln, "p": party, "x": x, "y": hr["y"] if not est else 0.1, "born": born,
+              "since": 2027, "comm": [], "lead": [], "new": True, "est": est, "ind": False})
 
 # Control flipped in both chambers: majority and minority titles trade places, and so do chairs and ranking members.
 def flip_title(t):
