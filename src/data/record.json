@@ -1,10 +1,124 @@
 {
-  "_about": "Known crossover votes in the 119th Congress (2025-26) by members still serving in 2027. +1 = voted for the policy against their party, -1 = against it. Sources: Senate S.J.Res.37 (Canada tariffs, 51-48, Apr 2025); Senate Iran war powers (47-53, Jun 2025); Senate reconciliation bill (51-50, Jul 2025); Senate rescissions (51-48, Jul 2025); House SAVE Act (220-208, Apr 2025); House H.J.Res.72 (Canada tariffs, 219-211, Feb 2026).",
-  "votes": [
-    ["S", "Paul", "KY", "tariff_repeal", 1], ["S", "Murkowski", "AK", "tariff_repeal", 1],
-    ["S", "Paul", "KY", "war_powers", 1], ["S", "Paul", "KY", "iran_supp", -1], ["S", "Fetterman", "PA", "war_powers", -1], ["S", "Fetterman", "PA", "iran_supp", 1],
-    ["S", "Paul", "KY", "medicaid_cap", -1], ["S", "Murkowski", "AK", "foreign_aid", -1],
-    ["H", "Case", "HI", "save_act", 1], ["H", "Cuellar", "TX", "save_act", 1], ["H", "Gluesenkamp Perez", "WA", "save_act", 1],
-    ["H", "Hurd", "CO", "tariff_repeal", 1]
+ "_about": "Known crossover votes in the 119th Congress (2025-26) by members still serving in 2027. +1 = voted for the policy against their party, -1 = against it. Sources: Senate S.J.Res.37 (Canada tariffs, 51-48, Apr 2025); Senate Iran war powers (47-53, Jun 2025); Senate reconciliation bill (51-50, Jul 2025); Senate rescissions (51-48, Jul 2025); House SAVE Act (220-208, Apr 2025); House H.J.Res.72 (Canada tariffs, 219-211, Feb 2026). House ACA subsidy extension (230-196, Jan 8 2026): 17 Republicans voted yes; 5 are still serving in 2027.",
+ "votes": [
+  [
+   "S",
+   "Paul",
+   "KY",
+   "tariff_repeal",
+   1
+  ],
+  [
+   "S",
+   "Murkowski",
+   "AK",
+   "tariff_repeal",
+   1
+  ],
+  [
+   "S",
+   "Paul",
+   "KY",
+   "war_powers",
+   1
+  ],
+  [
+   "S",
+   "Paul",
+   "KY",
+   "iran_supp",
+   -1
+  ],
+  [
+   "S",
+   "Fetterman",
+   "PA",
+   "war_powers",
+   -1
+  ],
+  [
+   "S",
+   "Fetterman",
+   "PA",
+   "iran_supp",
+   1
+  ],
+  [
+   "S",
+   "Paul",
+   "KY",
+   "medicaid_cap",
+   -1
+  ],
+  [
+   "S",
+   "Murkowski",
+   "AK",
+   "foreign_aid",
+   -1
+  ],
+  [
+   "H",
+   "Case",
+   "HI",
+   "save_act",
+   1
+  ],
+  [
+   "H",
+   "Cuellar",
+   "TX",
+   "save_act",
+   1
+  ],
+  [
+   "H",
+   "Gluesenkamp Perez",
+   "WA",
+   "save_act",
+   1
+  ],
+  [
+   "H",
+   "Hurd",
+   "CO",
+   "tariff_repeal",
+   1
+  ],
+  [
+   "H",
+   "Hurd",
+   "CO",
+   "aca",
+   1
+  ],
+  [
+   "H",
+   "Salazar",
+   "FL",
+   "aca",
+   1
+  ],
+  [
+   "H",
+   "Garbarino",
+   "NY",
+   "aca",
+   1
+  ],
+  [
+   "H",
+   "LaLota",
+   "NY",
+   "aca",
+   1
+  ],
+  [
+   "H",
+   "Joyce",
+   "OH",
+   "aca",
+   1
   ]
+ ]
 }

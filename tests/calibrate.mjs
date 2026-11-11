@@ -4,7 +4,7 @@ export const BENCH = [
   ["SAVE Act (House, Apr 2025)", "save_act", "R", "H", null, { own: 1.0, cross: 4 / 212 }],
   ["Canada tariffs (House, Feb 2026)", "tariff_repeal", "D", "H", null, { own: 1 - 1 / 213, cross: 6 / 218 }],
   ["Canada tariffs (Senate, Apr 2025)", "tariff_repeal", "D", "S", null, { own: 1.0, cross: 4 / 53 }],
-  ["ACA subsidies (House, Jan 2026)", "aca", "D", "H", null, { own: 1.0, cross: 17 / 218 }],
+  ["ACA subsidies (House, Jan 2026; 5 of the 17 GOP yes votes still serve)", "aca", "D", "H", null, { own: 1.0, cross: 5 / 179 }],
   ["Iran war powers (Senate, Jun 2025)", "war_powers", "D", "S", null, { own: 46 / 47, cross: 1 / 53 }],
   ["Rescissions (House, Jun 2025)", "foreign_aid", "R", "H", null, { own: 1 - 4 / 218, cross: 0 }],
   ["Big bill: Medicaid cap (House, Jul 2025)", "medicaid_cap", "R", "H", "reconciliation", { own: 1 - 2 / 220, cross: 0 }],
