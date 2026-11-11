@@ -150,7 +150,7 @@ export function Office({ s, real, act, setS }) {
         <section className="panel pm-profile">
           <Face m={you} size={96} ring="#ffcf5a" />
           <div><h3>{S.titleOf(you)} {S.nameOf(you, real)}</h3><p className="muted">{you.p === "D" ? "Democrat" : "Republican"} · {you.seat} · {you.faction} · in office since {you.since}</p>
-            <p className="small">{(you.comm || []).map((c) => c.n + (c.role ? ` (${c.role})` : "")).join(", ") || "No committee seats yet"}</p></div>
+            <p className="small">{(you.comm || []).map((c) => c.n + (c.role ? ` (${c.role}${c.exp ? ", expected" : ""})` : c.exp ? " (expected)" : "")).join(", ") || "No committee seats yet"}</p></div>
         </section>
         <section className="panel"><h3>Attributes</h3><p className="muted small">On a 1 to 20 scale, like Football Manager. They rise with use: TV builds Media, call time builds Fundraising, kept promises build Integrity.</p><Attrs a={a} know={3} /></section>
         <section className="panel"><h3>Your numbers over time</h3><Trend s={s} keys={[["a", "Approval at home", "#2fbf71"], ["b", "Your base", "#3d7bd9"], ["p", "The President", "#c8443a"]]} /></section>

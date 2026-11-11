@@ -163,9 +163,39 @@ RESULTS = {
   # House members who won Senate seats, and who replaced them
   ("NH",1): ("Stefany","Shaheen","D",-0.3,1974,""), ("MN",2): ("Matt","Little","D",-0.25,1985,""), ("AL",1): ("Jerry","Carl","R",0.55,1958,""),
   ("OK",1): ("Mark","Tedford","R",0.55,None,""),
+  # Members who retired, ran for something else or lost a primary, and who replaced them
+  # (AP calls and primary results reported Mar-Nov 2026: Fox5 Atlanta, Roll Call, CalMatters, WSLS/AP,
+  # HPPR/Texas Tribune, Greenberg Traurig FL overview, WAFB, Fox5 DC, 6abc, Cowboy State Daily, The Green Papers).
+  ("TX",2): ("Steve","Toth","R",0.7,1959,""), ("TX",8): ("Jessica","Steinmann","R",0.6,None,""), ("TX",9): ("Leticia","Gutierrez","D",-0.3,None,""),
+  ("TX",10): ("Chris","Gober","R",0.55,None,""), ("TX",19): ("Tom","Sell","R",0.6,None,""), ("TX",22): ("Trever","Nehls","R",0.6,1968,""),
+  ("TX",35): ("Johnny","Garcia","D",-0.2,None,""), ("TX",38): ("Jon","Bonck","R",0.6,None,""),
+  ("GA",1): ("Jim","Kingston","R",0.55,None,""), ("GA",10): ("Houston","Gaines","R",0.6,1985,""), ("GA",11): ("John","Cowan","R",0.6,None,""),
+  ("GA",13): ("Jasmine","Clark","D",-0.4,None,""),
+  ("MI",11): ("Jeremy","Moss","D",-0.4,1986,""), ("MI",13): ("Donavan","McKinney","D",-0.6,None,""), ("WI",7): ("Michael","Alfonso","R",0.6,None,""),
+  ("NY",7): ("Claire","Valdez","D",-0.65,None,""), ("NY",10): ("Brad","Lander","D",-0.55,1969,""), ("NY",12): ("Micah","Lasher","D",-0.4,1981,""),
+  ("NY",13): ("Darializa","Avila Chevalier","D",-0.65,None,""),
+  ("NJ",12): ("Adam","Hamawy","D",-0.6,None,""), ("CO",1): ("Melat","Kiros","D",-0.6,None,""), ("MA",6): ("Dan","Koh","D",-0.3,1984,""),
+  ("CT",1): ("Luke","Bronin","D",-0.3,1979,""), ("PA",3): ("Chris","Rabb","D",-0.65,1970,""), ("MD",5): ("Adrian","Boafo","D",-0.35,1990,""),
+  ("CA",34): ("Angela","Gonzales-Torres","D",-0.55,None,""), ("CA",26): ("Jacqui","Irwin","D",-0.3,1962,"lead"),
+  ("IL",2): ("Donna","Miller","D",-0.4,None,""), ("IL",4): ("Patty","Garcia","D",-0.5,None,""), ("IL",7): ("La Shawn","Ford","D",-0.45,1972,""),
+  ("IL",8): ("Melissa","Bean","D",-0.15,1962,""), ("IL",9): ("Daniel","Biss","D",-0.5,1977,""),
+  ("FL",2): ("Austin","Rogers","R",0.55,None,""), ("FL",11): ("Joe","Strada","R",0.55,None,""), ("FL",16): ("Sydney","Gruters","R",0.55,None,""),
+  ("LA",5): ("Gabe","Firment","R",0.6,None,"lead"), ("LA",6): ("Blake","Miguez","R",0.65,1981,"lead"),   # Dec. 12 runoffs
+  ("TN",5): ("Charlie","Hatcher","R",0.5,None,""), ("TN",6): ("Johnny","Garrett","R",0.6,None,""),
+  ("AZ",5): ("Mark","Lamb","R",0.7,1972,""), ("IA",4): ("Chris","McGowan","R",0.55,None,""), ("MO",6): ("Chris","Stigall","R",0.65,None,""),
+  ("SD",0): ("Marty","Jackley","R",0.5,1970,""), ("SC",5): ("Wes","Climer","R",0.6,1981,""), ("WY",0): ("Chuck","Gray","R",0.75,1990,""),
+  ("WA",4): ("Amanda","McKinney","R",0.55,None,""),
 }
 # Incumbents who won in a renumbered seat: (to) <- (from)
-MOVES = {("CA",3): ("CA",6), ("CA",40): ("CA",41), ("CA",41): ("CA",38), ("FL",20): ("FL",25), ("FL",25): ("FL",23), ("FL",23): ("FL",22)}
+MOVES = {("CA",3): ("CA",6), ("CA",40): ("CA",41), ("CA",41): ("CA",38), ("FL",20): ("FL",25), ("FL",25): ("FL",23), ("FL",23): ("FL",22),
+         ("TX",37): ("TX",35),                                   # Casar won the new Austin seat Doggett left
+         ("UT",2): ("UT",1), ("UT",3): ("UT",2), ("UT",4): ("UT",3)}   # Utah's court-drawn map: McAdams took the Salt Lake seat
+# Redrawn seats where the 2024 number no longer fits: estimated 2024 presidential share on the new lines (Dem two-party %).
+NEW_LEAN = {("TX",9): 45.0, ("TX",35): 46.0, ("TX",34): 46.0, ("TX",28): 46.0, ("TX",15): 46.5, ("TX",23): 45.5, ("TX",32): 40.0,
+            ("LA",6): 42.0, ("UT",1): 54.0, ("NC",1): 47.0, ("MO",5): 41.0, ("OH",9): 45.0, ("OH",13): 47.0}
+def inherit(prev):
+    # A newcomer is expected to take the seats their predecessor held, at the bottom of the bench.
+    return [{"c": c["c"], "n": c["n"], "rank": 90 + i, "title": "", "exp": True} for i, c in enumerate((prev or {}).get("comm", [])[:3])]
 idx = {(m["st"], m["d"]): m for m in house}
 before = {k: dict(v) for k, v in idx.items()}
 for to, frm in MOVES.items():
@@ -174,11 +204,12 @@ for to, frm in MOVES.items():
 for (st, d), (fn, ln, party, x, born, note) in RESULTS.items():
     m = idx[(st, d)]; keep = {"ch": "H", "st": st, "d": d, "dem": m["dem"]}
     m.clear(); m.update({**keep, "id": f"E{st}{d}", "first": fn, "last": ln, "p": party, "x": x, "y": 0, "born": born, "since": 2027,
-                         "comm": [], "lead": [], "new": True, "est": True, "flip": party != before[(st, d)]["p"], "uncalled": note == "lead"})
+                         "comm": inherit(before[(st, d)]), "lead": [], "new": True, "est": True, "flip": party != before[(st, d)]["p"], "uncalled": note == "lead"})
 # A winner in a seat that voted 15+ points the other way only happens on redrawn lines: use an estimated lean instead.
 for m in house:
     own = m["dem"] if m["p"] == "D" else 100 - m["dem"]
     if m.get("new") and own < 42 and (m["p"] == "R" or m["st"] in ("CA", "UT", "TX")): m["dem"] = 54.0 if m["p"] == "D" else 45.0; m["newLines"] = True
+    if (m["st"], m["d"]) in NEW_LEAN: m["dem"] = NEW_LEAN[(m["st"], m["d"])]; m["newLines"] = True
 flips = [m for m in house if m.get("flip")]
 for m in house:
     if m.get("gen") and "first" not in m:
@@ -206,12 +237,14 @@ for st, old, fn, ln, x, born in WON:
     if not s:
         print("seat not found by name, using the state's Republican seat:", st, old, [m["last"] for m in senate if m["st"] == st])
         s = next((m for m in senate if m["st"] == st and m["p"] == "R"), None) or next(m for m in senate if m["st"] == st)
-    s.update({"id": f"W{st}{ln[:3].upper()}", "first": fn, "last": ln, "p": "D", "x": x, "y": 0.1, "born": born, "since": 2027, "comm": [], "lead": [], "new": True, "est": True, "ind": False})
+    s.update({"id": f"W{st}{ln[:3].upper()}", "first": fn, "last": ln, "p": "D", "x": x, "y": 0.1, "born": born, "since": 2027, "comm": inherit(s), "lead": [], "new": True, "est": True, "ind": False})
 # Open Senate seats, winners as called Nov 3-4, 2026. Former House members carry their House record.
 OPEN = [("KY", "McConnell", "Andy", "Barr", "R", ("KY", 6), 0.45, 1973), ("IL", "Durbin", "Juliana", "Stratton", "D", None, -0.42, 1965),
         ("NH", "Shaheen", "Chris", "Pappas", "D", ("NH", 1), -0.3, 1980), ("MN", "Smith", "Peggy", "Flanagan", "D", None, -0.5, 1979),
         ("AL", "Tuberville", "Barry", "Moore", "R", ("AL", 1), 0.65, 1966),
-        ("OK", "Armstrong", "Kevin", "Hern", "R", ("OK", 1), 0.55, 1961)]   # Mullin left for DHS in March; appointee Armstrong served to year's end
+        ("OK", "Armstrong", "Kevin", "Hern", "R", ("OK", 1), 0.55, 1961),
+        ("LA", "Cassidy", "Julia", "Letlow", "R", ("LA", 5), 0.5, 1981), ("MT", "Daines", "Kurt", "Alme", "R", None, 0.55, 1966),
+        ("WY", "Lummis", "Harriet", "Hageman", "R", ("WY", 0), 0.75, 1962)]   # Mullin left for DHS in March; appointee Armstrong served to year's end
 for st, old, fn, ln, party, house_seat, x, born in OPEN:
     s = next((m for m in senate if m["st"] == st and m["last"].startswith(old)), None)
     if not s: print("missing senate seat", st, old); continue
@@ -219,7 +252,7 @@ for st, old, fn, ln, party, house_seat, x, born in OPEN:
     est = not (hr and hr.get("last") == ln)
     if not est: x, born = hr["x"], hr.get("born") or born
     s.update({"id": hr["id"] if not est else f"W{st}{ln[:3].upper()}", "first": fn, "last": ln, "p": party, "x": x, "y": hr["y"] if not est else 0.1, "born": born,
-              "since": 2027, "comm": [], "lead": [], "new": True, "est": est, "ind": False})
+              "since": 2027, "comm": inherit(s), "lead": [], "new": True, "est": est, "ind": False})
 
 # Control flipped in both chambers: majority and minority titles trade places, and so do chairs and ranking members.
 def flip_title(t):
@@ -234,6 +267,28 @@ for m in house + senate:
     if m.get("last") == "Johnson" and m.get("first") == "Mike" and m["ch"] == "H": m["lead"] = ["Former Speaker"]
     if m.get("last") == "Scalise": m["lead"] = ["House Republican Leader (contested)"]
     m["lead"] = m["lead"][:1]
+# Leadership for the 120th Congress: elected or expected as of Nov 10, 2026.
+LEAD = {("H", "Katherine", "Clark"): "House Majority Leader (expected)", ("H", "Jim", "Jordan"): "Running for House Republican Leader",
+        ("S", "Chuck", "Grassley"): None, ("S", "Patty", "Murray"): "President Pro Tempore (expected)",
+        ("S", "Brian", "Schatz"): "Senate Majority Whip (expected)"}
+for m in house + senate:
+    k = (m["ch"], m.get("first"), m.get("last"))
+    if k in LEAD: m["lead"] = [LEAD[k]] if LEAD[k] else []
+# Committees: the new majority (Democrats) chairs every panel. Where the chair or ranking member left,
+# the next member of that party by seniority on the panel takes the post (marked expected).
+for ch, pool in (("H", house), ("S", senate)):
+    panels = {}
+    for m in pool:
+        for c in m.get("comm", []): panels.setdefault(c["c"], []).append((m, c))
+    for code, rows in panels.items():
+        for party, post in (("D", "Chair"), ("R", "Ranking Member")):
+            mine = [(m, c) for m, c in rows if m["p"] == party]
+            for m, c in mine:
+                if c["title"] in ("Chair", "Ranking Member") and c["title"] != post: c["title"] = ""
+            if mine and not any(c["title"] == post for m, c in mine):
+                vice = [(m, c) for m, c in mine if c["title"].startswith("Vice")]   # select panels: the vice chair moves up
+                m, c = vice[0] if vice else min(mine, key=lambda r: (r[0].get("since") or 2027, r[1]["rank"]))
+                c["title"] = post; c["exp"] = True
 
 out = []
 for m in house + senate:

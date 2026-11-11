@@ -628,7 +628,7 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
             <div><dt>Voting record</dt><dd>More conservative than {lr}% of the {m.ch === "H" ? "House" : "Senate"}{m.est || m.gen ? " (estimated)" : ""}</dd></div>
             <div><dt>{m.ch === "H" ? "District" : "State"} in 2024</dt><dd>{m.dem >= 50 ? `Democrats +${((m.dem - 50) * 2).toFixed(0)}` : `Republicans +${((50 - m.dem) * 2).toFixed(0)}`}</dd></div>
             <div><dt>Feels pressure from</dt><dd>{m.vuln > 0.6 ? "The general election" : m.prisk > 0.5 ? "A primary" : "Neither much"}</dd></div>
-            {m.comm?.length > 0 && <div className="wide"><dt>Committees</dt><dd>{m.comm.map((c) => c.n + (c.title ? ` (${c.title})` : "")).join(", ")}</dd></div>}
+            {m.comm?.length > 0 && <div className="wide"><dt>Committees</dt><dd>{m.comm.map((c) => c.n + (c.title ? ` (${c.title}${c.exp ? ", expected" : ""})` : c.exp ? " (expected)" : "")).join(", ")}</dd></div>}
           </dl>
           {!me && (
             <>
