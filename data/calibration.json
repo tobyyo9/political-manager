@@ -1,0 +1,54 @@
+{
+ "source": "Voteview roll calls, 119th Congress, through 2026-11-09",
+ "method": "Logistic fit on a random 70% of roll calls, scored on the held-out 30%. Bill positions are Voteview's own estimates.",
+ "results": [
+  {
+   "chamber": "House",
+   "members": 450,
+   "rollcalls": 676,
+   "votes_cast": 282559,
+   "test_rollcalls": 202,
+   "accuracy": 0.9749,
+   "party_line_baseline": 0.9662,
+   "leadership_only": 0.9658,
+   "ideology_only": 0.9598,
+   "accuracy_close_votes": 0.9883,
+   "defections_in_test": 2502,
+   "defections_caught": 0.271,
+   "weights": {
+    "conv1": 25.311,
+    "conv2": 4.364,
+    "own": 0.602,
+    "other": 0.448,
+    "district": 0.886,
+    "own_proc": 0.918,
+    "bipart": 0.601
+   },
+   "intercept": 0.026
+  },
+  {
+   "chamber": "Senate",
+   "members": 104,
+   "rollcalls": 916,
+   "votes_cast": 88869,
+   "test_rollcalls": 274,
+   "accuracy": 0.9704,
+   "party_line_baseline": 0.94,
+   "leadership_only": 0.9616,
+   "ideology_only": 0.9602,
+   "accuracy_close_votes": 0.9937,
+   "defections_in_test": 570,
+   "defections_caught": 0.2333,
+   "weights": {
+    "conv1": 19.828,
+    "conv2": 4.486,
+    "own": 0.73,
+    "other": -0.292,
+    "district": 0.0,
+    "own_proc": -0.1,
+    "bipart": 0.224
+   },
+   "intercept": 0.12
+  }
+ ]
+}
