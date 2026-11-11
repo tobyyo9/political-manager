@@ -112,6 +112,16 @@ function Start({ onStart, real, setReal }) {
       { m: by((a, b) => (b.p === "R" && !b.gen && b.own > 62 ? b.x : -9) - (a.p === "R" && !a.gen && a.own > 62 ? a.x : -9)), tag: "Different", title: "The hardliner", note: "Safe seat, no power, loud voice. Can you matter from the minority?" },
     ];
   }, []);
+  const famous = useMemo(() => [
+    ["Ocasio-Cortez", "NY", "Progressive star", "The best-known progressive in the House. A national following and a safe seat, so the fight is with your own leadership."],
+    ["Jeffries", "NY", "Speaker-to-be", "Democrats are expected to make you Speaker. Every bill, deal and floor fight runs through your office."],
+    ["Johnson", "LA", "The former Speaker", "You lost the gavel when Republicans lost the House. Still close to the President, with a conference deciding who leads it next."],
+    ["Jordan", "OH", "The brawler", "Founding chair of the Freedom Caucus and the right's top fighter on Judiciary. In the minority now."],
+    ["Boebert", "CO", "The loud voice", "A national profile on the right and a safe seat. Can you turn attention into power from the minority?"],
+    ["Omar", "MN", "Lightning rod", "Deputy chair of the Progressive Caucus and a constant target. Safe at home, scrutinized everywhere else."],
+    ["Raskin", "MD", "The lawyer", "The top Democrat on Judiciary. Investigations, impeachment talk and the hearings everyone watches."],
+    ["Khanna", "CA", "The dealmaker", "Silicon Valley's progressive. Known for teaming up with unlikely partners on the right."],
+  ].map(([l, st, title, note]) => ({ m: S.HOUSE.find((m) => m.last === l && m.st === st), title, note })).filter((x) => x.m), []);
   const hits = q.length > 1 ? S.HOUSE.filter((m) => `${m.first} ${m.last} ${m.sf} ${m.sl} ${m.seat}`.toLowerCase().includes(q.toLowerCase())).slice(0, 12) : [];
   return (
     <div className="pm-start">
@@ -140,6 +150,20 @@ function Start({ onStart, real, setReal }) {
               </button>
             ))}
           </div>
+          <section className="panel pm-famous">
+            <h3>Famous faces</h3>
+            <p className="muted small">Play one of the best-known members of the House.{!real && " Names are altered; tick Show real names to see who they are."}</p>
+            <div className="pm-featured">
+              {famous.map(({ m, title, note }) => (
+                <button key={m.id} type="button" className={`pm-seatcard ${pc(m.p)}`} onClick={() => onStart(S.newCareer(m.id, undefined, null, diff))}>
+                  <span className="cast-trait">{title}</span>
+                  <span className="pm-who"><Face m={m} size={40} /><strong>{S.nameOf(m, real)}</strong></span>
+                  <small>{m.p === "D" ? "Democrat" : "Republican"} · {m.seat} · {m.faction}</small>
+                  <p>{note}</p>
+                </button>
+              ))}
+            </div>
+          </section>
           <section className="panel">
             <h3>Or take over any House member</h3>
             <input className="pm-search" placeholder="Search by name or seat, like TX-15 or Pelosi" value={q} onChange={(e) => setQ(e.target.value)} />
