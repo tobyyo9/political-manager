@@ -330,7 +330,7 @@ function Create({ onStart, diff }) {
 }
 
 // ── Inbox ──
-function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene }) {
+function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene, real, setCard }) {
   const steps = S.firstSteps(s), left = steps.filter((x) => !x.done).length;
   const list = [...s.inbox].sort((a, b) => Number(a.done) - Number(b.done) || b.week - a.week).slice(0, 40);
   return (
@@ -364,6 +364,7 @@ function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene }) {
             <p className="muted small">You have 50 hours a week. Everything costs time, and you can never do it all.</p>
           </section>
         )}
+        {(s.wire || []).length > 0 && <section className="pm-today"><h2 className="pm-h">Today's papers</h2>{s.wire.slice(0, 2).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={setCard} />)}<button type="button" className="linkbtn" onClick={() => setTab("news")}>All the coverage →</button></section>}
         <h2 className="pm-h">Spend your hours</h2>
         <div className="pm-actions">
           {(role === "P" ? [["rally", "A rally in a swing state. Lifts approval; less each time if you overdo it."]] : [["district", role === "S" ? "Tour the state. Raises approval." : "Town halls and events back home. Raises approval."], ["funds", "Dial for dollars. Fills the war chest."], ["committee", "Hearings and markups. Builds your record and clout."], ["tv", "A cable hit. Raises your profile; small risk of a gaffe."]]).map(([a, d]) => (
@@ -572,6 +573,7 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
         <div className="modal-body">
           <dl className="pm-facts">
             <div><dt>{m.ch === "H" ? "Caucus" : "Bloc"}</dt><dd title={S.FACTION_NOTE[m.faction]}>{S.caucusOf(m).join(" · ")}{m.cauEst ? <small className="muted"> (estimated)</small> : m.ch === "H" ? <small className="muted"> (real roster)</small> : null}</dd></div>
+            {(() => { const v = S.voiceOf(m), info = S.VOICES[v]; return <div className="wide"><dt>Personality</dt><dd><strong>{info.label}.</strong> {info.desc}</dd></div>; })()}
             <div><dt>Voting record</dt><dd>More conservative than {lr}% of the {m.ch === "H" ? "House" : "Senate"}{m.est || m.gen ? " (estimated)" : ""}</dd></div>
             <div><dt>{m.ch === "H" ? "District" : "State"} in 2024</dt><dd>{m.dem >= 50 ? `Democrats +${((m.dem - 50) * 2).toFixed(0)}` : `Republicans +${((50 - m.dem) * 2).toFixed(0)}`}</dd></div>
             <div><dt>Feels pressure from</dt><dd>{m.vuln > 0.6 ? "The general election" : m.prisk > 0.5 ? "A primary" : "Neither much"}</dd></div>
@@ -592,6 +594,7 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
               <div><h4 className="pm-subh">At odds with</h4>{B.rivals.map(({ m: o, why }) => <button key={o.id} type="button" className="linkless pm-bond neg" onClick={() => setCard(o.id)}><Face m={o} size={30} /><span><b>{S.nameOf(o, real)}</b><small>{why}</small></span></button>)}</div>
             </div>); })()}
           {me && <><h4 className="pm-subh">Attributes</h4><Attrs a={S.yourAttrs(s)} know={3} /></>}
+          {S.wireAbout(s, id).length > 0 && <div className="pm-inpapers"><h4 className="pm-subh">In the papers</h4>{S.wireAbout(s, id).slice(0, 2).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={() => {}} />)}</div>}
           {bills.length > 0 && <p className="small">Carrying: {bills.map((b) => <button key={b.id} type="button" className="linkbtn" onClick={() => { onClose(); setBillOpen(b.id); }}>{S.byId[b.pid].name}</button>)}</p>}
           <div className="bill-actions">
             {!me && <button type="button" className="primary" disabled={!S.can(s, "meet")} onClick={() => act("meet", { id })}>Meet with them (6 hours)</button>}
@@ -679,8 +682,31 @@ function Rankings({ s, real, setCard }) {
     </div>
   );
 }
-function News({ s }) {
-  return <div className="stack"><h2 className="pm-h">News</h2><ul className="pm-news">{s.news.map((n, i) => <li key={i} className={n.tone}><small>{S.fmtDate(n.week)}</small>{n.text}</li>)}</ul></div>;
+// Articles are written with the altered names; with real names on, swap them back for the people involved.
+const realize = (text, ids, real) => { if (!real || !text) return text; let t = text; for (const id of ids) { const m = id === "POTUS" ? S.PRES_M : S.memberById[id]; if (!m || !m.sf) continue; t = t.split(`${m.sf} ${m.sl}`).join(`${m.first} ${m.last}`).split(m.sl).join(m.last); } return t; };
+function Article({ a, s, real, setCard, big }) {
+  const m = a.who === "POTUS" ? S.PRES_M : S.memberById[a.who];
+  const ids = [a.who, a.target].filter(Boolean); a = { ...a, headline: realize(a.headline, ids, real), quote: realize(a.quote, ids, real), dek: realize(a.dek, ids, real) };
+  return (
+    <article className={`pm-art ${big ? "big" : ""}`}>
+      <header><span className="pm-art-outlet">{a.outlet}</span><small>{S.fmtDate(a.week)}</small></header>
+      <h3>{a.headline}</h3>
+      {a.quote && <div className="pm-art-body">{m && <button type="button" className="linkless" onClick={() => m.id !== "POTUS" && setCard(m.id)} title={S.nameOf(m, real)}><Face m={m} size={big ? 64 : 44} /></button>}<blockquote>"{a.quote}"{a.dek && <small> {a.dek}</small>}</blockquote></div>}
+      {a.voice && <span className="pm-voice">{S.VOICES[a.voice]?.label}</span>}
+    </article>
+  );
+}
+function News({ s, real, setCard }) {
+  const wire = s.wire || [];
+  return (
+    <div className="pm-two">
+      <section className="stack">
+        <h2 className="pm-h">The papers</h2>
+        {wire.length ? <div className="pm-papers">{wire.slice(0, 24).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={setCard} big={i === 0} />)}</div> : <p className="muted">Nothing yet. Give it a week.</p>}
+      </section>
+      <aside className="stack"><h2 className="pm-h">The wire</h2><ul className="pm-news">{s.news.slice(0, 60).map((n, i) => <li key={i} className={n.tone}><small>{S.fmtDate(n.week)}</small>{realize(n.text, n.ids || [], real)}</li>)}</ul></aside>
+    </div>
+  );
 }
 
 // ── The end of a term ──

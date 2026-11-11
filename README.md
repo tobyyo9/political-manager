@@ -87,3 +87,8 @@ The Senate and the President as full characters, committees and amendments as pl
 - Save to file and load from file: a save holds the whole career, including every change to Washington since 2027, so it picks up exactly where you left off on any device. On claude.ai the save goes through the viewer's download prompt.
 - Hall of fame: one entry per career, updated each term, kept in your browser, ranked by a score for winning, terms, laws, clout and leadership posts.
 - Create a newcomer for the Senate: take any senator's seat; you face voters in 2028 only if that seat's class is up.
+
+## Tenth pass: personalities and the press
+- Every character has a voice: bombastic, firebrand, professional, artful dodger, beer buddy, true devotee (Republicans under a Republican President), show horse, wonk, old bull, or gaffe machine. It's set from their traits, ideology and seniority, shown on their card, and colors everything they say.
+- The papers: fictional outlets run 3 to 4 stories a week. The President riffs on whatever is on his mind (sharks, windmills, the ballroom, Greenland, gold) and hands out nicknames; members make news in their own voice; votes get reactions. Articles show in the News tab, the inbox and on member cards, with real names swapped in when that toggle is on.
+- All lines are invented for the game, written in character. Nothing is a real quote.

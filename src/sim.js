@@ -10,6 +10,7 @@ import { PRESIDENT_STANCE } from "./shared/data/president.js";
 import { groupScores, byId, tenYearOf } from "./shared/engine.js";
 import { IGROUPS, groupById, groupPull, dependence } from "./groups.js";
 import { CABINET, BENCH, PRESIDENT } from "./exec.js";
+import { VOICES, voiceOf as voiceOf0, line as vline, presRiff, memberStory, OUTLETS, isLoud, nickname, react, billRef } from "./voices.js";
 // The President's party and the current year change when a career runs past 2028.
 let PP = "R", YEAR = 2027;
 const PSIGN = () => (PP === "R" ? 1 : -1);
@@ -533,6 +534,8 @@ export function advance(s0) {
   // 5. Your inbox.
   if (roleOf(s) !== "P") inbox(s, r);
   sceneWeek(s, R(s, "scene"));
+  wireWeek(s, R(s, "wire"));
+  { const rr = R(s, "react"); for (const ev of events.slice(0, 2)) voteReactions(s, ev, rr); }
   // 6. Primary and general.
   const rw = s.week - (s.termStart || 0);
   if (roleOf(s) === "P") { if (rw >= ELECTION_WEEK && !s.over) presVerdict(s, r); }
@@ -892,7 +895,7 @@ function whiteHouse(s, r) {
     b.presSaid = true;
     const v = presView(s, b), pick = (a) => a[Math.floor(r() * a.length)];
     const line = v.score > 0.3 ? pick(P_LOVE) : v.score < -0.2 ? pick(P_HATE) : pick(P_MEH);
-    presPost(s, `On ${byId[b.pid].name}, the President ${line}.${r() < 0.35 ? " " + pick(P_ODD) : ""}`, b.pid);
+    presPost(s, `On ${byId[b.pid].name}, the President ${line}.${r() < 0.35 ? ` Then, unprompted: "${presRiff(r).quote}"` : ""}`, b.pid);
   }
   // Executive orders: he acts without Congress, and members feel it.
   if (r() < 0.05) { const opts = POLICIES.filter((p) => (PRESIDENT_STANCE[p.id] || 0) > 0.5 && !s.laws.includes(p.id)); const p = opts[Math.floor(r() * opts.length)];
@@ -1606,3 +1609,45 @@ export function fameEntry(s, real) {
   return { id: `${s.seed}-${s.youId}`, upto: s.week, when: new Date().toISOString(), name: role === "P" ? `President ${nameOf(you, real)}` : `${titleOf(you)} ${nameOf(you, real)}`, real: `${you.first} ${you.last}`, alt: `${you.sf} ${you.sl}`,
     role, party: you.p, seat: you.seat, terms, years: `2027-${electionYear(s)}`, verdict, won: !!r.won, laws, title: you.lead?.[0] || "", score, custom: !!s.custom };
 }
+
+// ════════ Personalities and the press ════════
+export const voiceOf = (m) => voiceOf0(m, PP);
+export { VOICES };
+function pushWire(s, a) { (s.wire = s.wire || []).unshift({ week: s.week, ...a }); if (s.wire.length > 80) s.wire.pop(); pushNews(s, `${a.outlet}: ${a.headline}`, a.tone || ""); s.news[0].ids = [a.who, a.target].filter(Boolean); }
+// Every week the papers fill up: the President riffs, members say things in their own voice, votes get reactions.
+function wireWeek(s, r) {
+  const role = roleOf(s), outlet = () => OUTLETS[Math.floor(r() * OUTLETS.length)], P = PRES_M, pv = voiceOf(P);
+  // The President, on whatever is on his mind.
+  if (r() < (pv === "bombast" ? 0.65 : 0.25)) {
+    const q = pv === "bombast" ? presRiff(r) : { quote: vline(pv, "press", {}, r), subject: "the press", dek: "Reporters noted the change in tone." };
+    if (role === "P") { pushWire(s, { outlet: outlet(), who: "POTUS", voice: pv, headline: pv === "bombast" ? `Overnight, your account posted about ${q.subject}` : "Your remarks to reporters make the rounds", quote: q.quote, dek: q.dek });
+      if (pv === "bombast") { s.baseApproval = clamp(s.baseApproval + 0.3, 5, 99); s.presApproval = clamp(s.presApproval - 0.1, 20, 70); } }
+    else pushWire(s, { outlet: outlet(), who: "POTUS", voice: pv, headline: pv === "bombast" ? `President on ${q.subject}: "${q.head}"` : "President takes questions on the South Lawn", quote: q.quote, dek: q.dek });
+  }
+  // The President goes after someone by nickname now and then.
+  if (pv === "bombast" && r() < 0.18) { const pool = MEMBERS.filter((m) => m.p !== PP && (m.lead?.length || isLoud(voiceOf(m)))); const m = pool[Math.floor(r() * pool.length)];
+    const nick = m && nickname(m.sl, r);
+    if (m) pushWire(s, { outlet: outlet(), who: "POTUS", target: m.id, voice: pv, headline: `President dubs ${titleOf(m)} ${m.sl} "${nick}"`, quote: `${nick}? Total lightweight. Nobody likes ${m.g === "F" ? "her" : "him"}, even ${m.g === "F" ? "her" : "his"} own people.`, dek: `${titleOf(m)} ${m.sl}'s office answered with a fundraising email.` }); }
+  // Members in their own voices: loud ones make news most weeks; the quiet ones now and then.
+  const n = 1 + (r() < 0.6 ? 1 : 0) + (r() < 0.25 ? 1 : 0);
+  const live = s.bills.filter((b) => !b.dead && b.stage === "committee");
+  for (let i = 0; i < n; i++) {
+    const loud = r() < 0.75, pool = MEMBERS.filter((m) => m.id !== s.youId && (loud ? isLoud(voiceOf(m)) : !isLoud(voiceOf(m))));
+    const m = pool[Math.floor(r() * pool.length)]; if (!m) continue;
+    const b = live[Math.floor(r() * Math.max(1, live.length))], bill = b ? billRef(byId[b.pid].name) : "the spending bill";
+    const stance = b ? (lean(m, b.pid, billCtx(s, b)).L > 0 ? "for" : "against") : "against";
+    const st = memberStory(m, voiceOf(m), { name: nameOf(m), title: titleOf(m), bill, stance }, r);
+    pushWire(s, { outlet: outlet(), who: m.id, voice: voiceOf(m), headline: st.headline, quote: st.quote, pid: b?.pid });
+  }
+}
+// After a vote, someone always has something to say.
+function voteReactions(s, ev, r) {
+  if (!ev?.pid || !ev.house) return;
+  const pass = ev.result === "signed" || ev.result === "overridden" || ev.result === "desk" || ev.result === "states";
+  const voters = Object.entries(ev.house.votes || {}).filter(([id]) => id !== s.youId).map(([id, v]) => [memberById[id], v]).filter(([m]) => m);
+  if (r() < 0.45) return;
+  const sayers = voters.filter(([m]) => isLoud(voiceOf(m)) || r() < 0.1).sort(() => r() - 0.5).slice(0, 1);
+  for (const [m, v] of sayers) pushWire(s, { outlet: OUTLETS[Math.floor(r() * OUTLETS.length)], who: m.id, voice: voiceOf(m), pid: ev.pid,
+    headline: v === pass ? `${titleOf(m)} ${nameOf(m)} ${pass ? "cheers" : "celebrates the defeat of"} ${billRef(byId[ev.pid].name)}` : `${titleOf(m)} ${nameOf(m)} ${pass ? "fumes as Congress passes" : "fumes as Congress sinks"} ${billRef(byId[ev.pid].name)}`, quote: react(voiceOf(m), v === pass, r) });
+}
+export const wireAbout = (s, id) => (s.wire || []).filter((a) => a.who === id || a.target === id).slice(0, 4);

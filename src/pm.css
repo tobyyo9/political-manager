@@ -328,3 +328,16 @@ button.danger{color:#c8443a;border-color:#e8a093}
 .pm-fame-score{font-size:1.2rem;text-align:right}
 .pm-create-ch{margin:10px 0 4px}
 @media(max-width:560px){.pm-fame li{grid-template-columns:24px 24px minmax(0,1fr) 40px}.pm-fame-verdict{display:none}}
+.pm-papers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pm-art{background:#fbf8f1;color:#1b1b1b;border:1px solid #e3dccb;border-top:4px double #1b1b1b;border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-family:Georgia,"Times New Roman",serif}
+.pm-art.big{grid-column:1/-1}
+.pm-art header{display:flex;justify-content:space-between;align-items:baseline;font-family:inherit}
+.pm-art-outlet{font-variant:small-caps;letter-spacing:.06em;font-weight:700;font-size:13px}
+.pm-art header small{font-size:11.5px;opacity:.6}
+.pm-art h3{margin:0;font-size:1.08rem;line-height:1.25}.pm-art.big h3{font-size:1.45rem}
+.pm-art-body{display:flex;gap:10px;align-items:flex-start}
+.pm-art blockquote{margin:0;font-style:italic;font-size:14px;line-height:1.45}.pm-art blockquote small{font-style:normal;opacity:.7}
+.pm-voice{align-self:flex-start;font-family:system-ui,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;background:#ece5d3;color:#5a4b2a}
+.pm-today{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.pm-inpapers{display:flex;flex-direction:column;gap:8px;margin:8px 0}
+@media(max-width:720px){.pm-papers{grid-template-columns:1fr}}
