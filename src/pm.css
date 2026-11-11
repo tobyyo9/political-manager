@@ -622,3 +622,4 @@ body.pm-desk .pm-start{background:transparent}
 .pm-cal-w.D{background:#2f62b8}.pm-cal-w.R{background:#c8443a}
 .pm-prim{align-self:start}
 .pm-probe{margin:4px 0;color:#a3281f}.pm-probe b{font-weight:700}
+.pm-gov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.pm-gov-grid>div{display:flex;flex-direction:column;gap:2px}.pm-gov-grid b{font-size:1.3em}

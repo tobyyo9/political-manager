@@ -222,7 +222,24 @@ for (const q of ["Murphy CT", "Raskin MD", "Warren MA", "Kelly AZ"]) for (let se
 S.resetWorld();
 if (!cabIn) { fail++; console.log("FAIL cabinet: nobody ever served"); }
 console.log("Cabinet careers:", cabIn, "served ·", cabOut.join(" "));const by = (f) => out.reduce((a, r) => ((a[f(r)] = a[f(r)] || []).push(r), a), {});
-for (const [k, rs] of Object.entries(by((r) => `${r.seat} ${r.p} own ${r.own} · ${r.style}`)))
+
+// Governors: win a governorship, govern, face re-election on the state's calendar, and hit the term limit.
+const govArc = []; let govs = 0;
+for (const [q, seed] of [["Khanna CA", 1], ["Gallego AZ", 1], ["Raskin MD", 1], ["Murphy CT", 1]]) {
+  S.resetWorld(); const y = S.MEMBERS.find((m) => `${m.last} ${m.st}` === q); let s = S.newCareer(y.id, seed), guard = 0, terms = 0; const log = [];
+  try {
+    while (guard++ < 1400) {
+      for (const m of s.inbox.filter((x) => !x.done && x.choices).slice(0, 5)) s = S.answer(s, m.id, m.kind === "foreign" ? 1 : m.kind === "govrun" ? 0 : m.kind === "presrun" || m.kind === "higher" ? 1 : 0);
+      if (S.roleOf(s) === "G") for (const a of ["gbudget", "gtour", "gmanage", "gsue", "gmedicaid"]) if (S.can(s, a)) s = S.doAction(s, a);
+      s = S.advance(s);
+      if (s.over) { log.push(`${S.electionYear(s)}:${s.result.kind}`); if (S.canContinue(s) && terms < 6) { s = S.nextCongress(s); terms++; } else break; }
+    }
+    if (s.govCareer) govs++; govArc.push(`${y.last ?? q} ${log.join(" ")}`); n++;
+  } catch (e) { fail++; console.log("FAIL governor", q, seed, "week", s.week, e.stack.split("\n").slice(0, 4).join(" | ")); }
+}
+S.resetWorld();
+if (!govs) { fail++; console.log("FAIL governors: nobody ever governed"); }
+console.log("Governor careers:", govs, "·", govArc.join(" · "));for (const [k, rs] of Object.entries(by((r) => `${r.seat} ${r.p} own ${r.own} · ${r.style}`)))
   console.log(k.padEnd(34), "won", rs.filter((r) => r.won).length + "/" + rs.length, "avg margin", (rs.reduce((a, r) => a + r.margin, 0) / rs.length).toFixed(1), "laws", (rs.reduce((a, r) => a + r.laws, 0) / rs.length).toFixed(1), "ended by", [...new Set(rs.map((r) => r.kind))].join("/"));
 console.log("careers", n, "failures", fail, "House D after election, range", Math.min(...out.map((r) => r.houseD ?? 999)), "to", Math.max(...out.map((r) => r.houseD ?? 0)));
 process.exit(fail ? 1 : 0);

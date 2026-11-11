@@ -279,7 +279,7 @@ export const HOURS = 50;
 export const ACTIONS = {
   meet: { label: "Meet a colleague", hours: 6 }, funds: { label: "Call time with donors", hours: 8 }, district: { label: "District events", hours: 8 },
   tv: { label: "Go on TV", hours: 4 }, committee: { label: "Committee work", hours: 8 }, whip: { label: "Whip a member", hours: 5 }, wh: { label: "Lobby the White House", hours: 8 }, cosponsor: { label: "Cosponsor a bill", hours: 2 }, introduce: { label: "Write and introduce a bill", hours: 12 },
-  hold: { label: "Place a hold", hours: 2, role: "S" }, filibuster: { label: "Lead a talking filibuster", hours: 12, role: "S" }, nuke: { label: "Push to end the filibuster", hours: 6, role: "S" }, dpush: { label: "Lobby Congress for your agenda", hours: 6, role: "C" }, drule: { label: "Issue a rule", hours: 10, role: "C" }, dtravel: { label: "Travel the country", hours: 8, role: "C" }, dmanage: { label: "Run the department", hours: 8, role: "C" }, probe: { label: "Open an investigation", hours: 10, role: "HS" },
+  hold: { label: "Place a hold", hours: 2, role: "S" }, filibuster: { label: "Lead a talking filibuster", hours: 12, role: "S" }, nuke: { label: "Push to end the filibuster", hours: 6, role: "S" }, dpush: { label: "Lobby Congress for your agenda", hours: 6, role: "C" }, drule: { label: "Issue a rule", hours: 10, role: "C" }, dtravel: { label: "Travel the country", hours: 8, role: "C" }, dmanage: { label: "Run the department", hours: 8, role: "C" }, gbudget: { label: "Pass your budget", hours: 10, role: "G" }, gtour: { label: "Tour the state", hours: 8, role: "G" }, gmanage: { label: "Run the state government", hours: 8, role: "G" }, gsue: { label: "Sue the administration", hours: 6, role: "G" }, gmedicaid: { label: "Expand Medicaid", hours: 12, role: "G" }, probe: { label: "Open an investigation", hours: 10, role: "HS" },
   hearing: { label: "Oversight hearing", hours: 8, role: "HS" }, defend: { label: "Defend a cabinet member", hours: 4, role: "HS" },
   call: { label: "Call a member", hours: 3, role: "P" }, push: { label: "Use the bully pulpit", hours: 4, role: "P" }, threat: { label: "Threaten a veto", hours: 1, role: "P" },
   eo: { label: "Sign an executive order", hours: 6, role: "P" }, rally: { label: "Hold a rally", hours: 8, role: "P" }, fire: { label: "Fire a cabinet member", hours: 4, role: "P" },
@@ -468,6 +468,7 @@ export function doAction(s0, act, arg = {}) {
     s.toast = { title: `${hrs} hours on your feet`, text: "Cable carries it live. Your side rallies; colleagues in your party feel the pressure to hold the line on cloture.", tone: "good" };
   }
   if (["dpush", "drule", "dtravel", "dmanage"].includes(act)) { cabAction(s, act, arg, r); return s; }
+  if (["gbudget", "gtour", "gmanage", "gsue", "gmedicaid"].includes(act)) { govAction(s, act, arg, r); return s; }
   if (act === "nuke") {
     if (s.filOff || s.nuke) { s.hours += ACTIONS.nuke.hours; s.toast = { title: "Nothing to push", text: s.filOff ? "The filibuster is already gone." : "The vote is already scheduled.", tone: "" }; return s; }
     if (you.p !== senMaj()) { s.hours += ACTIONS.nuke.hours; s.toast = { title: "Not your call", text: "Only the majority can change the rules. In the minority, the filibuster is your best friend.", tone: "" }; return s; }
@@ -547,6 +548,7 @@ export function answer(s0, msgId, choice) {
   if (m.kind === "govask") answerGov(s, m, choice);
   if (m.kind === "probedefy") answerProbe(s, m, choice);
   if (m.kind === "presask" || m.kind === "testify") answerCabMode(s, m, choice);
+  if (m.kind === "gcrisis") answerGovMode(s, m, choice);
   if (m.kind === "lastterm" && choice === 1) { s.lastTerm = true; newsBoth(s, (real) => `${titleOf(you)} ${nameOf(you, real)} announces this will be ${you.g === "F" ? "her" : "his"} last term.`, "event"); s.toast = { title: "Your last term", text: "No campaign this time. Use the time you have; the clock is now visible to everyone.", tone: "" }; }
   if (m.kind === "caboffer" && choice === 0 && !s.cabNom) { s.cabNom = { post: m.post, week: s.week + 4 }; newsBoth(s, (real) => `The President nominates ${titleOf(you)} ${nameOf(you, real)} to be ${s.cab.find((c) => c.id === m.post)?.post}.`, "event"); }
   if (m.kind === "spkrun" && choice === 0 && s.spkRace) s.spkRace.you = true;
@@ -643,9 +645,10 @@ export function advance(s0) {
   for (const k in s.boost) { s.boost[k] *= 0.8; if (Math.abs(s.boost[k]) < 0.02) delete s.boost[k]; }
   worldEvent(s, r);
   execTick(s, r);
-  const inCab = roleOf(s) === "C";
+  const inCab = roleOf(s) === "C" || roleOf(s) === "G";
   if (roleOf(s) === "P") presWeek(s, r);
-  else if (inCab) cabWeek(s, r);
+  else if (roleOf(s) === "C") cabWeek(s, r);
+  else if (roleOf(s) === "G") govModeWeek(s, r);
   else { others(s, r); whiteHouse(s, r); staffNotes(s, r); }
   (s.trend = s.trend || []).push({ w: s.week, a: Math.round(s.approval), b: Math.round(s.baseApproval), p: Math.round(s.presApproval), m: Math.round(s.mood * 10) / 10 });
   // 5. Your inbox.
@@ -670,7 +673,8 @@ export function advance(s0) {
   // 6. Primary and general.
   const rw = s.week - (s.termStart || 0);
   if (roleOf(s) === "P") { if (rw >= ELECTION_WEEK && !s.over) presVerdict(s, r); }
-  else if (inCab) { if (rw >= ELECTION_WEEK && !s.over) cabVerdict(s, r); }
+  else if (roleOf(s) === "C") { if (rw >= ELECTION_WEEK && !s.over) cabVerdict(s, r); }
+  else if (roleOf(s) === "G") { if (rw >= ELECTION_WEEK && !s.over) govCareerVerdict(s, r); }
   else if (!upThisTerm(s, you) && !s.runFor) { if (rw >= ELECTION_WEEK && !s.over) termReview(s, r); }
   else if (s.lastTerm && !s.runFor) { if (rw >= ELECTION_WEEK && !s.over) { electionNight(s); s.over = true; s.result = { kind: "retired", won: true, age: yourAge(s) }; newsBoth(s, (real) => `${titleOf(you)} ${nameOf(you, real)} retires after ${s.career.length + 1} terms in this game, at ${yourAge(s)}.`, "event"); } }
   else { if (rw === PRIMARY_WEEK && s.runFor !== "pres") primary(s, r); if (rw >= ELECTION_WEEK && !s.over) { if (s.runFor === "pres") presGeneral(s, r); else if (s.runFor === "gov") govGeneral(s, r); else if (s.runFor) runHigher(s, r); else general(s, r); } }
@@ -1168,15 +1172,15 @@ function nominate(s, c, pick) {
   const [first, last, cont, loyal] = pick;
   const n = { id: `n${s.week}${s.noms.length}`, post: c.id, first, last, cont, loyal, vote: s.week + 4, done: false };
   s.noms.push(n);
-  pushNews(s, `The President nominates ${first} ${last} for ${c.post}. ${cont > 0.5 ? "Democrats vow a fight." : "Senators sound open to it."}`);
+  pushNews(s, `The President nominates ${first} ${last} for ${c.post}. ${cont > 0.5 ? `${PP === "R" ? "Democrats" : "Republicans"} vow a fight.` : "Senators sound open to it."}`);
   if (roleOf(s) === "S") pushInbox(s, { kind: "confirm", nom: n.id, from: "Your legislative director", title: `Confirmation vote: ${first} ${last} for ${c.short}`, body: `The vote is ${fmtDate(n.vote)}. ${cont > 0.5 ? "A loyalist with a thin record for the job." : "Qualified on paper, close to the President in practice."} How do you vote?`, choices: ["Vote to confirm", "Vote no"] });
 }
 function confirmVote(s, n) {
   const you = memberById[s.youId]; let yes = 0; const votes = {};
   for (const m of SENATE) {
-    const p = m.p === "R" ? sig(8 * (0.7 - n.cont * 0.6 - (s.presApproval < 35 ? 0.15 : 0) + (s.rel[m.id] || 0) * (roleOf(s) === "P" ? 0.3 : 0)))
-      : sig(8 * (-0.25 + (0.45 - n.cont) * 1.2 + (m.x + 0.25) * 0.6 + (roleOf(s) === "P" ? (s.rel[m.id] || 0) * 0.3 : 0)));
-    const v = m.id === s.youId && n.yourVote !== undefined ? n.yourVote : m.id === s.youId ? you.p === "R" : noise(`${s.seed}:cf:${n.id}:${m.id}`) * 0.5 + 0.5 < p;
+    const p = m.p === PP ? sig(8 * (0.7 - n.cont * 0.6 - (s.presApproval < 35 ? 0.15 : 0) + (s.rel[m.id] || 0) * (roleOf(s) === "P" ? 0.3 : 0)))
+      : sig(8 * (-0.25 + (0.45 - n.cont) * 1.2 + (PSIGN() * m.x + 0.25) * 0.6 + (roleOf(s) === "P" ? (s.rel[m.id] || 0) * 0.3 : 0)));
+    const v = m.id === s.youId && n.yourVote !== undefined ? n.yourVote : m.id === s.youId ? you.p === PP : noise(`${s.seed}:cf:${n.id}:${m.id}`) * 0.5 + 0.5 < p;
     votes[m.id] = v; if (v) yes++;
   }
   return { yes, no: 100 - yes, votes, ok: yes >= 51 || yes === 50 };    // the Vice President breaks a tie
@@ -1188,21 +1192,30 @@ function execTick(s, r) {
   for (const c of s.cab) {
     if (c.vacant) continue;
     const before = c.heat;
-    c.heat = clamp(c.heat + (r() - 0.5) * 0.035 + (r() < 0.025 ? 0.12 : 0), 0, 1);
+    c.heat = clamp(c.heat + (r() - 0.5) * 0.035 + (r() < 0.02 ? 0.12 : 0) + (0.28 - c.heat) * 0.015, 0, 1);   // stories fade unless something feeds them
     if (before < 0.7 && c.heat >= 0.7) pushNews(s, `${c.post} ${cabName(c)} is under fire over ${HEAT_WHY[Math.floor(r() * HEAT_WHY.length)]}.`, "event");
     if (c.id === "vp" || c.you) continue;     // a Vice President can't be fired, and doesn't quit over a news cycle; your own fate is decided elsewhere
     if (c.heat > 0.88 && r() < 0.06) vacate(s, c, "resigns");
-    else if (r() < 0.0012) vacate(s, c, "resigns");
+    else if (r() < 0.0004) vacate(s, c, "resigns");   // about one quiet departure a Congress across 23 posts
     else if (role !== "P" && c.heat > 0.8 && c.loyal < 0.8 && r() < 0.03) vacate(s, c, "fired");
   }
   // Open posts get a nominee; the Senate votes a month later.
+  // After two failed nominations for the same post, an acting official serves out the Congress.
+  const tries = (s.cabTries = s.cabTries || {}), hostile = senMaj() !== PP, trump = !PRES_M.fictional && !PRES_M.realNew;
   for (const v of s.vacQ || []) if (v.week <= s.week && !v.done) { v.done = true; const c = s.cab.find((x) => x.id === v.post); if (!c.vacant) continue;
-    const used = new Set(s.noms.map((n) => n.last).concat(s.cab.map((x) => x.last))); const pool = BENCH.filter((b) => !used.has(b[1]));
-    const pick = pool.sort((a, b) => b[3] - a[3] + (r() - 0.5) * 0.3)[0]; if (pick) nominate(s, c, pick); }
+    const key = `${s.term}:${c.id}`; if ((tries[key] || 0) >= 2) continue;
+    let pick;
+    if (trump) { const used = new Set(s.noms.map((n) => n.last).concat(s.cab.map((x) => x.last))); const pool = BENCH.filter((b) => !used.has(b[1]));
+      // A hostile Senate, or a nominee already rejected, pushes the White House toward someone confirmable.
+      pick = pool.sort((a, b) => (hostile || tries[key] ? a[2] - b[2] : b[3] - a[3]) + (r() - 0.5) * 0.3)[0]; }
+    else pick = [PF[Math.floor(r() * PF.length)], PL[Math.floor(r() * PL.length)], clamp((hostile ? 0.2 : 0.3) + r() * 0.35, 0, 1), 0.6 + r() * 0.3];
+    if (pick) nominate(s, c, pick); }
   for (const n of s.noms) if (!n.done && n.vote <= s.week) {
     n.done = true; const c = s.cab.find((x) => x.id === n.post), v = confirmVote(s, n); n.result = v;
     if (v.ok) { Object.assign(c, { first: n.first, last: n.last, sf: swapPair(n.first, n.last)[0], sl: swapPair(n.first, n.last)[1], vacant: false, tone: undefined, heat: 0.15 + n.cont * 0.4, loyal: n.loyal, note: "Confirmed this Congress.", since: s.week }); pushNews(s, `The Senate confirms ${n.first} ${n.last} as ${c.post}, ${v.yes}-${v.no}.`, "good"); if (role === "P") { s.clout += 3; s.legacy = (s.legacy || 0) + 1; } }
-    else { pushNews(s, `The Senate rejects ${n.first} ${n.last} for ${c.post}, ${v.yes}-${v.no}.`, "bad"); if (role === "P") { s.presApproval -= 0.8; s.clout -= 4; vacate(s, c, "still"); c.vacant = true; } else s.vacQ.push({ post: c.id, week: s.week + 2 }); }
+    else { const key = `${s.term}:${c.id}`; tries[key] = (tries[key] || 0) + 1;
+      pushNews(s, `The Senate rejects ${n.first} ${n.last} for ${c.post}, ${v.yes}-${v.no}.${tries[key] >= 2 && role !== "P" ? ` An acting ${c.short} chief will serve for the rest of this Congress.` : ""}`, "bad");
+      if (role === "P") { s.presApproval -= 0.8; s.clout -= 4; vacate(s, c, "still"); c.vacant = true; } else if (tries[key] < 2) s.vacQ.push({ post: c.id, week: s.week + 3 }); }
     if (role === "S") { const mine = v.votes[s.youId]; s.rapport = clamp(s.rapport + (mine ? 0.1 : -0.08), -1, 1); s.baseApproval = clamp(s.baseApproval + ((mine ? 1 : -1) * (you.p === "R" ? 1 : -1)) * 1.2, 5, 95); }
   }
   // Impeachment: the House needs a majority; the Senate needs 67 to remove.
@@ -1512,12 +1525,12 @@ function applyPres(s) {
   Object.assign(PRES_M, { first: P.first, last: P.last, sf: P.first, sl: P.last, p: P.p, born: P.born, g: P.g, look: { skin: (P.first.length * 7 + P.last.length * 3) % 6 }, fictional: true, realNew: false });
 }
 export function restore(s) {
-  applyPres(s); applyCab(s);
+  applyPres(s); applyCab(s); applyGov(s);
   if (!s?.edits || !Object.keys(s.edits).length) return;
   resetWorld(); PP = s.pp || "R"; YEAR = 2027 + 2 * ((s.term || 1) - 1);
   for (const [id, rec] of Object.entries(s.edits)) { const m = memberById[id]; if (!m) continue; for (const k of Object.keys(m)) delete m[k]; Object.assign(m, JSON.parse(JSON.stringify(rec))); }
   rebuildChambers(); regroup(); clearCaches();
-  applyPres(s); applyCab(s);   // resetWorld put the original President back; restore this career's
+  applyPres(s); applyCab(s); applyGov(s);   // resetWorld put the original President back; restore this career's
 }
 const keep = (s, m) => { s.edits[m.id] = JSON.parse(JSON.stringify(m)); };
 const TRAITS_JS = ["dealmaker", "believer", "grudge", "vain", "loyalist", "follower", "wonk", "showhorse"];
@@ -1604,12 +1617,14 @@ function electWorld(s) {
   return { ...out, presMsg, house: HOUSE.filter((m) => m.p === "D").length, senate: SENATE.filter((m) => m.p === "D").length, after };
 }
 export const ord = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
-export const canContinue = (s) => s.over && s.result && s.result.won && (roleOf(s) === "C" ? s.result.kind === "cabterm" : roleOf(s) === "P" ? !!s.presCareer && (s.result.kind === "midterm" || (s.result.kind === "pres" && s.result.reelect)) : (s.result.kind === "general" || s.result.kind === "term" || s.result.kind === "higher"));
+export const canContinue = (s) => s.over && s.result && s.result.won && (roleOf(s) === "G" ? s.result.kind === "govterm" : roleOf(s) === "C" ? s.result.kind === "cabterm" : s.result.kind === "gov" ? true : roleOf(s) === "P" ? !!s.presCareer && (s.result.kind === "midterm" || (s.result.kind === "pres" && s.result.reelect)) : (s.result.kind === "general" || s.result.kind === "term" || s.result.kind === "higher"));
 export function nextCongress(s0) {
   const s = structuredClone(s0);
   if (!canContinue(s)) return s;
   if (roleOf(s) === "P") return presNextCongress(s);
   if (roleOf(s) === "C") return cabNextCongress(s);
+  if (roleOf(s) === "G") return govNextCongress(s);
+  if (s.result.kind === "gov" && s.result.won) { enterGovernor(s); return s; }
   s.career.push({ congress: 119 + s.term, year: electionYear(s), kind: s.result.kind, margin: s.result.margin, role: roleOf(s), laws: s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length });
   const fundedSeats = [...new Set([...Object.keys(s.alloc || {}), ...Object.keys(s.given || {}), ...Object.values(s.cands || {}).filter((c) => c.backed).map((c) => c.seat)])], mineP = memberById[s.youId].p;
   const w = electWorld(s);
@@ -1715,6 +1730,17 @@ export let NAT_2026 = 0;
   const rel26 = {}; for (const [st, x] of Object.entries(raw)) rel26[st] = { m: x.m - NAT_2026, w: x.w };
   const typical = 0;
   for (const st of Object.keys(STATE_DEM)) { const x = rel26[st]; LEAN[st] = Math.round((x ? x.w * x.m + (1 - x.w) * REL24[st] : REL24[st] + 0.6 * typical) * 10) / 10; } }
+// House districts after 2026: each district's 2024 lean, moved as far as its state moved, then checked against who actually won
+// it in 2026 (Democrats won the national House vote by about 13). A district whose winner would have lost on those numbers is
+// nudged until that winner wins, allowing incumbents a personal vote of about 6 points. Relative to the nation, like LEAN.
+const NAT_H26 = 13;
+export const DIST26 = {};
+for (const m of ORIG) if (m.ch === "H") { const seat = `${m.st}-${m.d || "AL"}`, sg = m.p === "D" ? 1 : -1, inc = (m.since || 2027) < 2027 ? 6 : 0;
+  // The state's shift is capped at 6 points either way: statewide races carry candidate effects (Collins in Maine) that districts don't share.
+  let rel = (m.dem - 50) * 2 - NAT_2024 + clamp((LEAN[m.st] ?? REL24[m.st] ?? 0) - (REL24[m.st] ?? 0), -6, 6);
+  const marg = rel + NAT_H26 + sg * inc; if (sg * marg < 0.5) rel += sg * (0.5 - sg * marg);
+  DIST26[seat] = Math.round(rel * 10) / 10; }
+export const houseLean = (m) => DIST26[m.seat] ?? (m.dem - 50) * 2 + 0.5 * ((LEAN[m.st] ?? 0) - (REL24[m.st] ?? 0));
 const phi = (z) => 1 / (1 + Math.exp(-1.7 * z));
 // The national presidential margin for Democrats: the generic ballot plus the economy, which helps or hurts the party in power.
 export function nationalPres(s) { return s.mood * 0.85 - PSIGN() * ((s.econ.growth - 1.6) * 1.2 - (s.econ.inflation - 3) * 1.0); }
@@ -1959,7 +1985,7 @@ const addAid = (s, id, p, amt) => { s.aid = s.aid || {}; const a = (s.aid[id] = 
 export function projMargin(s) {
   const you = memberById[s.youId], env = you.p === "D" ? s.mood : -s.mood, gg = groupElection(s, "general");
   // Personal popularity matters, but only so much: even a well-liked member in a district that leans the other way rarely wins by double digits.
-  const shift = (you.p === "D" ? 1 : -1) * (you.ch === "S" ? (LEAN[you.st] ?? (you.dem - 50) * 2) - (you.dem - 50) * 2 : 0.5 * ((LEAN[you.st] ?? 0) - (REL24[you.st] ?? 0)));   // the 2026 shift in your state
+  const sgn = you.p === "D" ? 1 : -1, shift = sgn * (you.ch === "S" ? (LEAN[you.st] ?? (you.dem - 50) * 2) - (you.dem - 50) * 2 : houseLean(you) - (you.dem - 50) * 2);   // where your seat stands after 2026
   // In a wave against your party, incumbency and a good local brand count for less: 2026 swept out members who were popular at home.
   const against = Math.max(0, -env - 4), incB = Math.max(0, 3 - against * 0.5), apprCap = Math.max(1.5, 5 - against * 0.5);
   return (you.own - 50) * 2 + shift - Math.max(0, yourAge(s) - 78) * 0.4 + env + incB + clamp((s.approval - 50) * 0.25, -8, apprCap) + Math.min(2, s.cash / 1200) + gg.net * 0.5 + (s.debateBonus || 0) - (s.oppMoney || 0) * 1.2
@@ -2483,7 +2509,7 @@ function answerWorld(s, m, choice) {
 // $223,500 for the Speaker, $400,000 for the President. Honoraria are banned for members (since 1991);
 // outside earned income is capped at $33,855; book royalties from an established publisher are exempt.
 export const OUTSIDE_CAP = 33.855;
-export function salaryOf(s) { if (roleOf(s) === "P") return 400; if (roleOf(s) === "C") return 250.6; const l = memberById[s.youId]?.lead?.[0] || ""; return /^Speaker/.test(l) ? 223.5 : /Majority Leader|Minority Leader|Republican Leader|Democratic Leader|Pro Tempore/.test(l) && !/Assistant/.test(l) ? 193.4 : 174; }
+export function salaryOf(s) { if (roleOf(s) === "P") return 400; if (roleOf(s) === "C") return 250.6; if (roleOf(s) === "G") return 200; const l = memberById[s.youId]?.lead?.[0] || ""; return /^Speaker/.test(l) ? 223.5 : /Majority Leader|Minority Leader|Republican Leader|Democratic Leader|Pro Tempore/.test(l) && !/Assistant/.test(l) ? 193.4 : 174; }
 export const TRADE = { none: { label: "Cash and bonds", mu: 0.0007, sd: 0.001 }, index: { label: "Index funds", mu: 0.0015, sd: 0.02 }, active: { label: "Pick individual stocks", mu: 0.0016, sd: 0.032 }, informed: { label: "Trade on what you hear in closed briefings", mu: 0.0055, sd: 0.03 } };
 export const earnTotal = (s) => Object.values(s.earn || {}).reduce((a, v) => a + (typeof v === "number" ? v : 0), 0);
 function earnSeed(s) { const you = memberById[s.youId]; s.earn = { salary: 0, invest: 0, book: 0, outside: 0, spouse: 0, family: 0, after: 0 }; s.port = roleOf(s) === "P" ? 0 : Math.round(150 + (you?.seniority || 0) * 70 + (you?.lead?.length ? 500 : 0) + (2027 - (you?.born || 1975)) * 8); s.trade = "index"; }
@@ -3034,7 +3060,7 @@ function appointSenator(s, m, r) {
 }
 function specialElection(s, m, r) {
   const was = m.vacant.was, out = PP === "D" ? "R" : "D";
-  const margin = (m.dem - 50) * 2 + s.mood * 0.9 + (out === "D" ? 4 : -4) + noise(`${s.seed}:sp:${m.id}:${s.week}`) * 6, winner = margin > 0 ? "D" : "R";
+  const margin = houseLean(m) + s.mood * 0.9 + (out === "D" ? 4 : -4) + noise(`${s.seed}:sp:${m.id}:${s.week}`) * 6, winner = margin > 0 ? "D" : "R";
   newcomer(s, m, winner, gameYear(s) - 1); m.since = gameYear(s); keep(s, m); rebuildChambers(); regroup(); clearCaches();
   const c = ctrl();
   newsBoth(s, (real) => `Special election in ${m.seat}: ${nameOf(m, real)} (${winner}) wins by ${Math.abs(Math.round(margin * 10) / 10)} points${winner !== was.p ? `, flipping a seat ${was.p === "D" ? "Democrats" : "Republicans"} held` : ""}. The House is now ${c.H.D}-${c.H.R}.`, winner !== was.p ? "event" : "");
@@ -3196,22 +3222,29 @@ const GOVS0 = { AL: ["Tommy", "Tuberville", "R", "M", 2030], AK: ["Jonathan", "K
   VT: ["Phil", "Scott", "R", "M", 2028], VA: ["Abigail", "Spanberger", "D", "F", 2029, "tl"], WA: ["Bob", "Ferguson", "D", "M", 2028], WV: ["Patrick", "Morrisey", "R", "M", 2028], WI: ["David", "Crowley", "D", "M", 2030],
   WY: ["Eric", "Barlow", "R", "M", 2030] };
 const TWO_YEAR = new Set(["VT", "NH"]);
+// Term limits: none in these states, one term at a time in Virginia, two in a row (or two for life) everywhere else.
+const GOV_NOLIMIT = new Set(["CT", "ID", "IL", "IA", "MA", "MN", "NY", "TX", "UT", "VT", "WA", "WI", "NH"]);
+export const govLimit = (st) => (GOV_NOLIMIT.has(st) ? 0 : st === "VA" ? 1 : 2);
+// Terms already served by the governor in office in January 2027 (counting the one that begins).
+const GOV_TERMS0 = { AZ: 2, AR: 2, HI: 2, MD: 2, NE: 2, OR: 2, PA: 2, KY: 2, MS: 2, MT: 2, CT: 3, IL: 3, ID: 3, NY: 2, MA: 2, UT: 2, VT: 6, NH: 2 };
 // States whose law makes the governor appoint a senator from the departing senator's party.
 const SAME_PARTY_APPT = new Set(["AZ", "HI", "KY", "MD", "NC", "UT", "WV", "WY"]);
-function govSeed(s) { if (s.govs) return; s.govs = {}; for (const [st, [first, last, p, g, next, flag]] of Object.entries(GOVS0)) { const [sf, sl] = swapPair(first.split(" ")[0], last); s.govs[st] = { first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, g, next, tl: flag === "tl", lead: flag === "lead", real: true }; } }
+function govSeed(s) { if (s.govs) return; s.govs = {}; for (const [st, [first, last, p, g, next, flag]] of Object.entries(GOVS0)) { const [sf, sl] = swapPair(first.split(" ")[0], last); const terms = GOV_TERMS0[st] || 1; s.govs[st] = { first, last, sf: first.includes(" ") ? `${sf} ${first.split(" ").slice(1).join(" ")}` : sf, sl, p, g, next, terms, tl: govLimit(st) > 0 && terms >= govLimit(st), lead: flag === "lead", real: true }; } }
 export const govOf = (s, st) => s.govs?.[st] || null;
 export const govParty = (s, st) => s.govs?.[st]?.p || ((LEAN[st] ?? 0) >= 0 ? "D" : "R");
 // One governor's race. The party out of the White House usually gains; incumbents run a few points ahead.
 function govRace(s, st, year, youRun = null) {
-  const g = s.govs[st], inc = !g.tl && !youRun && noise(`${s.seed}:govret:${st}:${year}`) > -0.8 ? g : null, r = rng(hash(`${s.seed}:gov:${st}:${year}`));
+  const g = s.govs[st], inc = !g.tl && (!youRun || g.you) && noise(`${s.seed}:govret:${st}:${year}`) > -0.8 ? g : null, r = rng(hash(`${s.seed}:gov:${st}:${year}`));
   const midterm = year % 4 === 2 || year % 2 === 1, outP = PP === "D" ? "R" : "D";
   let m = (LEAN[st] ?? 0) * 0.85 + s.mood * 0.6 + (midterm ? (outP === "D" ? 2 : -2) : 0) + (inc ? (inc.p === "D" ? 5 : -5) : 0) + noise(`${s.seed}:govm:${st}:${year}`) * 8;
   if (youRun) m += (youRun.p === "D" ? 1 : -1) * youRun.edge;
+  if (youRun && g.you && inc) inc.you = true;
   const w = m > 0 ? "D" : "R", next = year + (TWO_YEAR.has(st) ? 2 : 4);
   const was = { ...g };
-  if (youRun && w === youRun.p) s.govs[st] = { first: youRun.first, last: youRun.last, sf: youRun.sf, sl: youRun.sl, p: w, g: youRun.g, next, tl: false, real: !youRun.fictional, you: true };
-  else if (inc && w === inc.p) s.govs[st] = { ...g, next, tl: !TWO_YEAR.has(st) && !["CT", "ID", "IL", "IA", "MA", "MN", "NY", "TX", "UT", "VT", "WI", "WA", "ND"].includes(st), lead: false };
-  else { const first = PF[Math.floor(r() * PF.length)], last = PL[Math.floor(r() * PL.length)]; s.govs[st] = { first, last, sf: first, sl: last, p: w, g: r() < 0.45 ? "F" : "M", next, tl: false, real: false }; }
+  const lim = govLimit(st);
+  if (youRun && w === youRun.p) { const t = g.you ? (g.terms || 1) + 1 : 1; s.govs[st] = { first: youRun.first, last: youRun.last, sf: youRun.sf, sl: youRun.sl, p: w, g: youRun.g, next, terms: t, tl: lim > 0 && t >= lim, real: !youRun.fictional, you: true }; }
+  else if (inc && w === inc.p) { const t = (g.terms || 1) + 1; s.govs[st] = { ...g, next, terms: t, tl: lim > 0 && t >= lim, lead: false }; }
+  else { const first = PF[Math.floor(r() * PF.length)], last = PL[Math.floor(r() * PL.length)]; s.govs[st] = { first, last, sf: first, sl: last, p: w, g: r() < 0.45 ? "F" : "M", next, terms: 1, tl: lim === 1, real: false }; }
   return { st, was, now: s.govs[st], margin: Math.round(m * 10) / 10, flip: w !== was.p, held: inc && w === inc.p };
 }
 // Even-year races run on election night; Kentucky, Louisiana and Mississippi vote in odd years (and New Jersey and Virginia).
@@ -3520,6 +3553,99 @@ function cabNextCongress(s) {
   return s;
 }
 
+// ════════ Serving as governor ════════
+// Win your state's governorship and you run it: pass budgets, tour the state, keep scandal out of the capitol, sue Washington
+// when the other party holds the White House, decide on Medicaid expansion, and handle disasters. You appoint senators when
+// a seat opens. You face the voters on your state's calendar until the term limit catches you.
+export const GOV_M = { id: "GOV", first: "", last: "", sf: "", sl: "", p: "D", x: 0, born: 1970, g: "M", seat: "", own: 50, dem: 50, vuln: 0.5, prisk: 0.1, seniority: 0, base: { influence: 60, cash: 0 }, comm: [], lead: [], t: { ambition: 0.6, loyalty: 0.6, ego: 0.5, ethics: 0.6, deal: 0.5, label: "dealmaker" }, cabTitle: "Gov." };
+memberById.GOV = GOV_M;
+// States that had not expanded Medicaid as of 2026.
+const NO_EXPANSION = new Set(["AL", "FL", "GA", "KS", "MS", "SC", "TN", "TX", "WI", "WY"]);
+function applyGov(s) { const G = s?.govCareer; if (!G) return; Object.assign(GOV_M, G.me, { id: "GOV", seat: `Governor of ${STATE_NAME[G.st] || G.st}`, cabTitle: "Gov." }); }
+function enterGovernor(s) {
+  const you = memberById[s.youId], year = electionYear(s), st = you.st;
+  const me = { first: you.first, last: you.last, sf: you.sf, sl: you.sl, p: you.p, x: you.x, born: you.born, g: you.g, look: you.look, st, t: you.t, fictional: !!you.fictional, custom: !!you.custom };
+  s.career.push({ congress: 119 + s.term, year, kind: "gov", margin: s.result.margin, role: roleOf(s), laws: s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length });
+  s.govDone = true; const w = electWorld(s);
+  // Your old seat goes to someone of your party: a successor for the House seat, your own appointee for the Senate seat.
+  const seat = memberById[you.id]; newcomer(s, seat, me.p, year); if (seat.ch === "S") { seat.appointee = true; seat.specialYear = year + 2; keep(s, seat); }
+  s.govCareer = { st, me, since: year + 1, terms: 1, heat: 0.15, legacy: 0, budgets: 0, suits: 0, medicaid: !NO_EXPANSION.has(st), disasters: 0 };
+  s.youId = "GOV"; s.role = "G"; applyGov(s);
+  s.term++; s.termStart = Math.ceil((731 * (s.term - 1)) / 7); s.week = s.termStart; s.hours = HOURS; s.over = false; s.result = null;
+  s.bills = []; s.youOwe = []; s.promises = []; s.inbox = []; s.trend = []; s.noms = s.noms.filter((x) => !x.done); s.imp = s.imp.filter((x) => !x.done); s.amb = null;
+  s.opp = null; s.camp = null; s.pchal = null; s.runFor = null; s.lastTerm = false; s.cabNom = null; s.youPres = null; s.polls = [];
+  s.approval = 55; s.baseApproval = 80; s.profile = clamp(s.profile + 10, 0, 100);
+  seedBills(s); mpSeed(s);
+  rebuildChambers(); regroup(); clearCaches();
+  govNews(s, w.gov);
+  pushNews(s, `${nameOf(GOV_M)} is sworn in as governor of ${STATE_NAME[st] || st}.`, "good"); s.news[0].rt = `${nameOf(GOV_M, true)} is sworn in as governor of ${STATE_NAME[st] || st}.`;
+  const g = s.govs[st];
+  pushInbox(s, { kind: "staff", from: "Your chief of staff", done: true, title: `Welcome to the governor's office`,
+    body: `You run ${STATE_NAME[st] || st} now. Pass a budget, travel the state, keep scandal out of the capitol, and decide how hard to fight Washington. ${!s.govCareer.medicaid ? "Your state never expanded Medicaid; that decision is yours now. " : ""}${g?.tl ? "" : `You're on the ballot again in ${g?.next}.`} When a Senate seat opens in your state, you pick the replacement.` });
+}
+const GOV_DISASTERS = { coast: ["A hurricane", "Flooding"], west: ["A wildfire", "A drought emergency"], plains: ["Tornadoes", "A blizzard"], other: ["Flooding", "A severe storm"] };
+const REGION = (st) => (["FL", "LA", "TX", "NC", "SC", "GA", "AL", "MS", "VA", "NJ", "NY"].includes(st) ? "coast" : ["CA", "OR", "WA", "NV", "AZ", "NM", "CO", "UT", "ID", "MT", "WY"].includes(st) ? "west" : ["KS", "OK", "NE", "SD", "ND", "IA", "MO", "MN"].includes(st) ? "plains" : "other");
+function govModeWeek(s, r) {
+  const G = s.govCareer; if (!G) return; const st = G.st;
+  G.heat = clamp(G.heat + (r() - 0.5) * 0.03 + (r() < 0.012 ? 0.12 : 0) + (0.22 - G.heat) * 0.015, 0, 1);
+  s.approval = clamp(s.approval + (50 + (GOV_M.p === "D" ? 1 : -1) * (LEAN[st] ?? 0) * 0.25 - s.approval) * 0.01 - (G.heat - 0.3) * 0.3, 15, 85);
+  if (r() < 0.015) { const kind = GOV_DISASTERS[REGION(st)][Math.floor(r() * 2)]; G.disasters++;
+    pushInbox(s, { kind: "gcrisis", from: "Your emergency management director", choices: ["Declare an emergency and ask Washington for help", "Handle it with state money"], title: `${kind} hits ${STATE_NAME[st] || st}`,
+      body: `Damage is spreading and the cameras are coming. A federal disaster declaration brings money fast, if the President approves it${PP === GOV_M.p ? ", and the President is your ally" : ", and the President belongs to the other party"}. Paying for it yourself is slower and costs your budget, but nobody in Washington gets to say no.` }); }
+  if (G.heat > 0.9 && r() < 0.08 && !s.over) { s.over = true; s.result = { kind: "govout", won: false, why: "scandal", st, terms: G.terms, legacy: G.legacy };
+    newsBoth(s, (real) => `Gov. ${nameOf(GOV_M, real)} resigns as the scandal in ${STATE_NAME[st] || st} grows.`, "bad"); }
+}
+function answerGovMode(s, m, choice) {
+  const G = s.govCareer; if (!G || m.kind !== "gcrisis") return;
+  if (choice === 0) { const ok = PP === GOV_M.p ? R(s, "gaid")() < 0.9 : R(s, "gaid")() < 0.55;
+    if (ok) { s.approval = clamp(s.approval + 3, 15, 85); s.profile = clamp(s.profile + 2, 0, 100); s.toast = { title: "Washington says yes", text: "Federal money and crews arrive within days. You're on every newscast in the state, in a windbreaker.", tone: "good" }; }
+    else { s.approval = clamp(s.approval + 1, 15, 85); s.baseApproval = clamp(s.baseApproval + 2, 5, 99); s.profile = clamp(s.profile + 4, 0, 100); s.toast = { title: "The White House drags its feet", text: "You go on national TV to demand help. Your voters rally to you; the money comes late.", tone: "" };
+      newsBoth(s, (real) => `Gov. ${nameOf(GOV_M, real)} accuses the White House of slow-walking disaster aid.`, "event"); } }
+  else { s.approval = clamp(s.approval + 1.5, 15, 85); G.legacy += 1; s.toast = { title: "The state handles it", text: "Slower, costlier, and entirely yours. People notice who showed up.", tone: "good" }; }
+}
+function govAction(s, act, arg, r) {
+  const G = s.govCareer; if (!G) return; const st = G.st;
+  if (act === "gbudget") { const ok = r() < 0.45 + (s.approval - 50) / 80 + s.clout / 400;
+    if (ok) { G.budgets++; G.legacy += 2; s.approval = clamp(s.approval + 1.5, 15, 85); s.toast = { title: "Your budget passes", text: "Schools, roads and a tax change with your name on it. The legislature grumbles and signs off.", tone: "good" }; newsBoth(s, (real) => `The ${STATE_NAME[st] || st} legislature passes Gov. ${nameOf(GOV_M, real)}'s budget.`, "good"); }
+    else { s.approval = clamp(s.approval - 1, 15, 85); s.toast = { title: "Stalled in the legislature", text: "Leaders want changes you won't make. Try again when you have more leverage.", tone: "bad" }; } }
+  if (act === "gtour") { s.approval = clamp(s.approval + 1.5 + r(), 15, 85); s.profile = clamp(s.profile + 1, 0, 100); s.toast = { title: "Every county", text: "Diners, plant floors, a county fair. Local TV follows you everywhere.", tone: "good" }; }
+  if (act === "gmanage") { G.heat = clamp(G.heat - 0.06, 0, 1); s.integrity += 1; s.toast = { title: "Running the state", text: "Audits answered, a bad contractor dropped, an agency head replaced. Scandals stay small.", tone: "good" }; }
+  if (act === "gsue") {
+    if (PP === GOV_M.p) { s.hours += ACTIONS.gsue.hours; s.toast = { title: "Not against your own party", text: "Suing your own party's administration would end your career. Try a phone call.", tone: "" }; return; }
+    const pid = [...s.laws].reverse().find((p) => byId[p]) || (s.eos || []).slice(-1)[0]?.pid;
+    G.suits++; s.profile = clamp(s.profile + 3, 0, 100); s.baseApproval = clamp(s.baseApproval + 2, 5, 99); G.legacy += 1;
+    newsBoth(s, (real) => `Gov. ${nameOf(GOV_M, real)} joins ${STATE_NAME[st] || st} to a multistate lawsuit against the administration${pid ? ` over ${byId[pid].name}` : ""}.`, "event");
+    s.toast = { title: "See you in court", text: "Your attorney general files this afternoon. Your party's donors are thrilled; the White House is not.", tone: "good" }; }
+  if (act === "gmedicaid") {
+    if (G.medicaid) { s.hours += ACTIONS.gmedicaid.hours; s.toast = { title: "Already expanded", text: `${STATE_NAME[st] || st} expanded Medicaid years ago.`, tone: "" }; return; }
+    G.medicaid = true; G.legacy += 3; const d = GOV_M.p === "D";
+    s.approval = clamp(s.approval + 2, 15, 85); s.baseApproval = clamp(s.baseApproval + (d ? 3 : -5), 5, 99);
+    newsBoth(s, (real) => `${STATE_NAME[st] || st} expands Medicaid under Gov. ${nameOf(GOV_M, real)}, covering hundreds of thousands of people.`, "good");
+    s.toast = { title: "Medicaid expanded", text: d ? "A promise kept. Hospitals in rural counties breathe easier." : "Hospitals and county judges cheer. Your party's activists do not.", tone: "good" }; }
+}
+function govCareerVerdict(s, r) {
+  electionNight(s); const G = s.govCareer, year = electionYear(s), g = s.govs[G.st];
+  if (g.next !== year) { s.over = true; s.result = { kind: "govterm", won: true, st: G.st }; return; }
+  if (g.tl) { s.over = true; s.result = { kind: "govout", won: true, why: "termlimit", st: G.st, terms: G.terms, legacy: G.legacy }; govElections(s, year, null); s.govDone = true; return; }
+  const edge = (s.approval - 50) * 0.3 + (s.profile - 30) * 0.05 - G.heat * 6 + (r() - 0.5) * 4;
+  const res = govElections(s, year, { ...GOV_M, edge }).find((x) => x.st === G.st); s.govDone = true;
+  if (res?.now.you) { G.terms++; s.govs[G.st].terms = G.terms; s.govs[G.st].tl = govLimit(G.st) > 0 && G.terms >= govLimit(G.st); s.over = true; s.result = { kind: "govterm", won: true, reelected: true, st: G.st, margin: Math.abs(res.margin) };
+    newsBoth(s, (real) => `Gov. ${nameOf(GOV_M, real)} wins re-election in ${STATE_NAME[G.st] || G.st}.`, "good"); }
+  else { s.over = true; s.result = { kind: "govout", won: false, why: "lost", st: G.st, terms: G.terms, legacy: G.legacy, to: pname(res.now, false), toR: pname(res.now, true) };
+    newsBoth(s, (real) => `Gov. ${nameOf(GOV_M, real)} loses re-election to ${pname(res.now, real)}.`, "bad"); }
+}
+function govNextCongress(s) {
+  s.career.push({ congress: 119 + s.term, year: electionYear(s), kind: "governor", role: "G" });
+  const w = electWorld(s); const G = s.govCareer;
+  s.term++; s.termStart = Math.ceil((731 * (s.term - 1)) / 7); s.week = s.termStart; s.hours = HOURS; s.over = false; s.result = null;
+  s.bills = []; s.youOwe = []; s.promises = []; s.inbox = []; s.trend = []; s.noms = s.noms.filter((x) => !x.done); s.imp = s.imp.filter((x) => !x.done); s.amb = null;
+  seedBills(s); mpSeed(s); applyGov(s); govNews(s, w.gov);
+  pushNews(s, `The ${ord(119 + s.term)} Congress convenes. ${w.presMsg} Democrats hold ${w.house} House seats and ${w.senate} Senate seats.`, "event"); if (w.presMsgR) s.news[0].rt = `The ${ord(119 + s.term)} Congress convenes. ${w.presMsgR} Democrats hold ${w.house} House seats and ${w.senate} Senate seats.`;
+  const g = s.govs[G.st];
+  pushInbox(s, { kind: "staff", from: "Your chief of staff", done: true, title: "Two more years", body: `${PP === GOV_M.p ? "Your party holds the White House: disaster aid comes faster, and you can't sue it." : "The other party holds the White House: lawsuits are your loudest tool."} ${g.tl ? "You're term-limited: this is your last stretch. Legacy now." : `You're on the ballot in ${g.next}.`}` });
+  return s;
+}
+
 // ════════ Your presidency: the oath, the midterms and a second term ════════
 export const canTakeOath = (s) => !!(s.over && s.result?.kind === "pres" && s.result.won && s.youId !== "POTUS");
 const CAB_STYLE = ["Team of rivals", "Loyalists", "Seasoned hands"];
@@ -3609,7 +3735,7 @@ const isOpen = (s, m) => !!m.vacant || !!(s.amb?.year === electionYear(s) && s.a
 function seatMargin(s, m) {
   const inc = m.p === "D" ? 1 : -1, n = noise(`${s.seed}:el${s.term}:${m.id}`), H = m.ch === "H";
   // Senate races start from the state's new lean; House districts from their 2024 vote, moved half as far as their state moved in 2026.
-  const lean = H ? (m.dem - 50) * 2 + 0.5 * ((LEAN[m.st] ?? 0) - (REL24[m.st] ?? 0)) : (LEAN[m.st] ?? (m.dem - 50) * 2);
+  const lean = H ? houseLean(m) : (LEAN[m.st] ?? (m.dem - 50) * 2);
   const against = Math.max(0, -inc * s.mood - 4), incB = Math.max(1.5, 4 - against * 0.5);   // incumbency shrinks in a wave
   return lean + s.mood * (H ? 0.9 : 0.8) + (isOpen(s, m) ? 0 : inc * incB) + n * (H ? 5 : 6) + aidPts(s, m) + seatQ(s, m);
 }

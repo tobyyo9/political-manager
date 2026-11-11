@@ -679,3 +679,26 @@ export function Donors({ s, setS, real, setToast }) {
     </div>
   );
 }
+
+// ── Governor: your state at a glance ──
+export function GovPanel({ s, real }) {
+  const G = s.govCareer; if (!G) return null;
+  const st = G.st, g = s.govs?.[st], others = Object.values(s.govs || {}), d = others.filter((x) => x.p === "D").length;
+  const sens = S.SENATE.filter((m) => m.st === st), lean = S.LEAN[st] ?? 0;
+  return (
+    <div className="stack">
+      <h2 className="pm-h">Governing {S.STATE_NAME[st]}</h2>
+      <section className="panel">
+        <div className="pm-gov-grid">
+          <div><span className="stat-label">Term</span><b>{G.terms}{g?.tl ? " (last)" : ""}</b><small>{g?.tl ? "term-limited" : `next election ${g?.next}`}</small></div>
+          <div><span className="stat-label">State lean</span><b>{lean >= 0 ? "D" : "R"}+{Math.abs(lean).toFixed(0)}</b><small>vs. the nation, after 2026</small></div>
+          <div><span className="stat-label">Budgets passed</span><b>{G.budgets}</b><small>{G.disasters} disasters handled</small></div>
+          <div><span className="stat-label">Lawsuits vs. Washington</span><b>{G.suits}</b><small>{S.presParty() === s.govCareer.me.p ? "your party holds the White House" : "the other party holds the White House"}</small></div>
+          <div><span className="stat-label">Medicaid</span><b>{G.medicaid ? "Expanded" : "Not expanded"}</b><small>legacy score {G.legacy}</small></div>
+          <div><span className="stat-label">Governors</span><b>{d} D · {others.length - d} R</b><small>nationwide</small></div>
+        </div>
+        <p className="small muted">Your senators: {sens.map((m) => `${S.nameOf(m, real)} (${m.p})`).join(" and ")}. If either seat opens, you name the replacement.</p>
+      </section>
+    </div>
+  );
+}
