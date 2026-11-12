@@ -369,7 +369,7 @@ export function whipCount(s, b, chamber = "H") {
 }
 
 // ── Your actions ──
-export function can(s, act) { const a = ACTIONS[act]; return !s.over && s.hours >= a.hours && (!a.role || a.role.includes(roleOf(s))); }
+export function can(s, act) { const a = ACTIONS[act]; return !s.over && s.hours >= a.hours && (!a.role || a.role.includes(roleOf(s))) && !(s.theme && THEMES[s.theme]?.off?.includes(act)); }
 function spend(s, act) { s.hours -= ACTIONS[act].hours; }
 // Doing the same thing over and over pays less each time: donors get tired of your calls, the district has seen you,
 // the bookers want someone new. Each repeat in the last three weeks cuts the payoff.
@@ -382,8 +382,8 @@ export function doAction(s0, act, arg = {}) {
   const s = structuredClone(s0);
   if (!can(s, act)) return s;
   if (BILL_ACTS.has(act) && !s.bills.some((b) => b.id === arg.bill && !b.dead && b.stage !== "law")) return s;
-  const mul = grindMul(s, act); if (GRIND.has(act)) { s.grind = s.grind || {}; s.grind[act] = [...(s.grind[act] || []).filter((w) => s.week - w < 3), s.week]; }
-  const worn = mul < 0.95 ? ` (You've done this ${Math.round((1 / mul - 1) / 0.4)} time${Math.round((1 / mul - 1) / 0.4) === 1 ? "" : "s"} in three weeks; it pays less each time.)` : "";
+  const gm = grindMul(s, act), tm = themeMul(s, act), mul = gm * tm; if (GRIND.has(act)) { s.grind = s.grind || {}; s.grind[act] = [...(s.grind[act] || []).filter((w) => s.week - w < 3), s.week]; }
+  const worn = (gm < 0.95 ? ` (You've done this ${Math.round((1 / gm - 1) / 0.4)} time${Math.round((1 / gm - 1) / 0.4) === 1 ? "" : "s"} in three weeks; it pays less each time.)` : "") + (tm !== 1 && s.theme ? ` (${THEMES[s.theme].label}: worth ${tm > 1 ? "more" : "less"} this week.)` : "");
   const you = memberById[s.youId], r = R(s, act);
   spend(s, act);
   if (act === "meet") {
@@ -612,6 +612,8 @@ export function answer(s0, msgId, choice) {
     else if (choice === 1) { s.approval = clamp(s.approval - 5, 5, 95); s.integrity -= 8; s.moments.push({ week: s.week, text: "You ignored an ethics complaint and it stuck to you." }); s.toast = { title: "The story runs", text: "With no answer from you, the local paper runs it three days in a row. Approval at home drops 5.", tone: "bad" }; }
     else { const back = Math.min(s.cash, Math.round(s.tookMoney * 0.5)); s.cash -= back; s.tookMoney -= back; s.integrity += 10; s.approval = clamp(s.approval + 1, 5, 95); s.toast = { title: "You give it back", text: `You return $${back}K and say you got it wrong. Donors are annoyed; voters mostly respect it.`, tone: "good" }; }
   }
+  if (m.kind === "district") answerDistrict(s, m, choice);
+  if (m.kind === "arc") answerArc(s, m, choice);
   if (m.kind === "local") { if (choice === 0) { s.hours = Math.max(0, s.hours - 8); s.approval = clamp(s.approval + 3, 5, 95); } else s.approval = clamp(s.approval - 2, 5, 95); }
   if (m.kind === "vote") { const b = s.bills.find((x) => x.id === m.bill); if (b) b.yourVote = choice === 0; }
   void you;
@@ -650,6 +652,8 @@ export function advance(s0) {
     if (isMem(roleOf(s))) { const staff = (s.staff || []).reduce((a, x) => a + (x.skill || 10), 0); s.cash = Math.max(0, s.cash - Math.round(3 + staff * 0.06)); if (s.clout > 30) s.clout -= 0.08; } }
   const exhausted = (s.energy ?? 80) < 12;
   s.week++; s.hours = exhausted ? Math.round(HOURS * 0.6) : HOURS;
+  s.theme = weekTheme(s);
+  if (isRecess(s)) { s.energy = clamp((s.energy ?? 80) + 4, 0, 100); for (const b of s.bills) if (!b.dead && b.stage === "committee" && b.floorWeek <= s.week) b.floorWeek = s.week + 1; }
   if (exhausted) { s.energy += 15; pushInbox(s, { kind: "staff", from: "Your chief of staff", done: true, title: "You're running on empty", body: "You've worked every hour for weeks. This week you're slower, you miss a meeting, and your scheduler blocked off time whether you like it or not. Leave some hours unspent, or spend a few with your family." }); }
   const r = R(s, "week");
   // 3. The world moves.
@@ -666,7 +670,9 @@ export function advance(s0) {
   if (r() < 0.55) {
     const party = r() < 0.72 ? "D" : "R";
     const pool = party === "D" ? AGENDA_D.filter((p) => byId[p]) : POLICIES.filter((p) => (PRESIDENT_STANCE[p.id] || 0) > 0.4).map((p) => p.id);
-    const pid = pool.find((p) => !s.bills.some((b) => b.pid === p && !b.dead) && !s.laws.includes(p)) || null;
+    // Leaders rotate their priorities: a bill that just died waits a while, and nothing comes back more than twice a Congress.
+    const cands = pool.filter((p) => !s.bills.some((b) => b.pid === p && (!b.dead || s.week - b.intro < 30)) && !s.laws.includes(p) && s.bills.filter((b) => b.pid === p && b.intro >= (s.termStart || 0)).length < 2).slice(0, 6);
+    const pid = cands.length ? cands[Math.floor(r() * cands.length)] : null;
     if (pid) { const b = addBill(s, pid, pickSponsor(s, pid, party, r, r() < (roleOf(s) === "S" ? 0.45 : 0.15) ? "S" : "H"), party === "D" ? 2 + Math.floor(r() * 4) : 6 + Math.floor(r() * 8)); if (b) pushNews(s, `${titleOf(memberById[b.sponsor])} ${nameOf(memberById[b.sponsor])} (${b.party}) introduces ${byId[pid].name}.`); }
   }
   // 4b. Events in the wider world, and characters acting on their own.
@@ -680,7 +686,7 @@ export function advance(s0) {
   else { others(s, r); whiteHouse(s, r); staffNotes(s, r); }
   (s.trend = s.trend || []).push({ w: s.week, a: Math.round(s.approval), b: Math.round(s.baseApproval), p: Math.round(s.presApproval), m: Math.round(s.mood * 10) / 10 });
   // 5. Your inbox.
-  if (isMem(roleOf(s))) inbox(s, r);
+  if (isMem(roleOf(s))) { inbox(s, r); districtWeek(s, R(s, "dist")); arcWeek(s, R(s, "arc")); }
   if (!inCab) { sceneWeek(s, R(s, "scene")); donorWeek(s, R(s, "donor")); campaignWeek(s, R(s, "camp")); moneyWeek(s, R(s, "money")); }
   if (isMem(roleOf(s)) || s.week % 2 === 0) petitionWeek(s, R(s, "pet"));
   courtWeek(s, R(s, "court"));
@@ -706,6 +712,9 @@ export function advance(s0) {
   else if (!upThisTerm(s, you) && !s.runFor) { if (rw >= ELECTION_WEEK && !s.over) termReview(s, r); }
   else if (s.lastTerm && !s.runFor) { if (rw >= ELECTION_WEEK && !s.over) { electionNight(s); s.over = true; s.result = { kind: "retired", won: true, age: yourAge(s) }; newsBoth(s, (real) => `${titleOf(you)} ${nameOf(you, real)} retires after ${s.career.length + 1} terms in this game, at ${yourAge(s)}.`, "event"); } }
   else { if (rw === PRIMARY_WEEK && s.runFor !== "pres") primary(s, r); if (rw >= ELECTION_WEEK && !s.over) { if (s.runFor === "pres") presGeneral(s, r); else if (s.runFor === "gov") govGeneral(s, r); else if (s.runFor) runHigher(s, r); else general(s, r); } }
+  if (!s.theme && isMem(roleOf(s)) && s.inbox.some((m) => m.week === s.week && (m.kind === "event" || m.kind === "crisis" || m.kind === "crisisreact"))) s.theme = "crisis";
+  if (!isMem(roleOf(s))) s.theme = null;
+  flushBrief(s);
   achWeek(s);
   s.events = events;
   return s;
@@ -803,24 +812,25 @@ function inbox(s, r) {
     pushInbox(s, { kind: "vote", bill: b.id, from: "Your legislative director", title: `On the floor this week: ${byId[b.pid].name}`,
       body: `${byId[b.pid].desc} At home: ${dz > 0.15 ? "popular" : dz < -0.15 ? "unpopular" : "mixed"}. With your primary voters: ${pz > 0.15 ? "popular" : pz < -0.15 ? "unpopular" : "mixed"}. ${(you.p === b.party) ? "Your leaders want a yes." : billInfo(b.pid, b.party).bipartisan ? "Both parties wrote it; you're free to vote your district." : "Your leaders want a no."}`,
       choices: ["Vote yes", "Vote no"] });
-    if (you.p === b.party && r() < 0.45 && !billInfo(b.pid, b.party).bipartisan) pushInbox(s, { kind: "leader", bill: b.id, want: true, from: "The whip's office", title: `Leadership is counting on you: ${byId[b.pid].name}`, body: "This is a party priority. A yes is noted. A no is noted too, and it affects committee assignments.", choices: ["Commit to yes", "Make no promise"] });
+    s.whipped = s.whipped || {};
+    if (you.p === b.party && r() < 0.45 && !billInfo(b.pid, b.party).bipartisan && s.whipped["L" + b.pid] !== s.term) { s.whipped["L" + b.pid] = s.term; pushInbox(s, { kind: "leader", bill: b.id, want: true, from: "The whip's office", title: `Leadership is counting on you: ${byId[b.pid].name}`, body: "This is a party priority. A yes is noted. A no is noted too, and it affects committee assignments.", choices: ["Commit to yes", "Make no promise"] }); }
   }
-  if (r() < 0.45) {
-    const pool = activeBills(s).filter((b) => b.stage === "committee" && b.sponsor !== s.youId && b.floorWeek > s.week && !s.inbox.some((m) => m.kind === "ask" && m.bill === b.id));
-    if (pool.length) { const b = pool[Math.floor(r() * pool.length)], m = memberById[b.sponsor];
+  if (r() < (s.theme === "budget" ? 0.6 : 0.4)) {
+    s.whipped = s.whipped || {};
+    const pool = activeBills(s).filter((b) => b.stage === "committee" && b.sponsor !== s.youId && b.floorWeek > s.week && s.whipped["A" + b.pid] !== s.term && !s.inbox.some((m) => m.kind === "ask" && m.bill === b.id));
+    if (pool.length) { const b = pool[Math.floor(r() * pool.length)], m = memberById[b.sponsor]; s.whipped["A" + b.pid] = s.term;
       pushInbox(s, { kind: "ask", bill: b.id, who: m.id, from: `${titleOf(m)} ${nameOf(m)}`, title: `Can I count on you for ${byId[b.pid].name}?`, body: `"I need your vote when this hits the floor. I won't forget it." Saying yes is a promise: they'll owe you a favor, and breaking it costs you.`, choices: ["Promise a yes", "Decline"] }); }
   }
-  if (r() < 0.22) {
+  if (r() < 0.16) {
     const opts = [];
     for (const g of IGROUPS) { if (dependence(you, g, noise) < 0.15 && g.party !== "any") continue; if (s.promises.some((p) => p.group === g.name && !p.done)) continue;
       for (const [pid, st] of Object.entries(g.cares)) if (byId[pid] && !s.laws.includes(pid) && s.bills.some((b) => b.pid === pid && !b.dead && b.stage === "committee")) opts.push({ g, pid, want: st > 0 }); }
     if (opts.length) { const o = opts[Math.floor(r() * opts.length)], amount = Math.round(o.g.budget * (0.2 + r() * 0.3));
-      pushInbox(s, { kind: "group", group: o.g.name, gid: o.g.id, pid: o.pid, want: o.want, amount, from: o.g.name, title: `$${amount}K for your campaign`, body: `Their PAC will back you if you vote ${o.want ? "yes" : "no"} on ${byId[o.pid].name}. ${o.g.note} Taking it fills your war chest, ties you to them, and hands opponents an attack line.`, choices: [`Take the $${amount}K`, "Turn it down"] }); }
+      pushInbox(s, { kind: "group", group: o.g.name, gid: o.g.id, pid: o.pid, want: o.want, amount, from: o.g.name, title: [`${o.g.name} offers $${amount}K`, `$${amount}K, with one condition`, `${o.g.name} wants your vote on ${byId[o.pid].name}`][Math.floor(r() * 3)], body: `Their PAC will back you if you vote ${o.want ? "yes" : "no"} on ${byId[o.pid].name}. ${o.g.note} Taking it fills your war chest, ties you to them, and hands opponents an attack line.`, choices: [`Take the $${amount}K`, "Turn it down"] }); }
   }
-  if (r() < 0.2) pushInbox(s, { kind: "local", from: "Your district director", title: ["A plant closing back home", "Flooding in the district", "The base hospital may close", "A local school board fight goes viral"][Math.floor(r() * 4)], body: "People want to see you. Going costs 8 hours this week; skipping it will be noticed.", choices: ["Go home (8 hours)", "Send a statement"] });
   if (r() < 0.12) {
     const m = HOUSE[Math.floor(r() * HOUSE.length)];
-    if (m.id !== s.youId && (s.know[m.id] || 0) < 3) { s.know[m.id] = (s.know[m.id] || 0) + 1; pushInbox(s, { kind: "staff", from: "Your chief of staff", title: `What I'm hearing about ${nameOf(m)}`, body: `Staff talk. ${TRAIT_LABEL[m.t.label]}: ${TRAIT_DESC[m.t.label]}`, done: true }); }
+    if (m.id !== s.youId && (s.know[m.id] || 0) < 3) { s.know[m.id] = (s.know[m.id] || 0) + 1; brief(s, "Your chief of staff", `What I'm hearing about ${nameOf(m)}`, `${TRAIT_LABEL[m.t.label]}: ${TRAIT_DESC[m.t.label]}`); }
   }
 }
 
@@ -1006,7 +1016,7 @@ function others(s, r) {
     const mine = s.bills.find((b) => b.sponsor === s.youId && b.stage === "committee" && !b.cos.includes(id));
     if (mine) { mine.cos.push(id); mine.deals[id] = (mine.deals[id] || 0) + 0.3; const friends = CH(s).filter((o) => o.faction === m.faction && o.p === m.p && o.id !== id).slice(0, 4 + Math.round(m.base.influence / 20)); for (const o of friends) mine.deals[o.id] = (mine.deals[o.id] || 0) + 0.08;
       pushInbox(s, { kind: "staff", from: `${titleOf(m)} ${nameOf(m)}`, title: `I signed on to ${byId[mine.pid].name}`, body: `"Put my name on it. I've told a few of my people to take a look."`, done: true }); }
-    else if ((s.know[id] || 0) >= 2) { const b = activeBills(s).find((x) => x.stage === "committee"); if (b) pushInbox(s, { kind: "staff", from: `${titleOf(m)} ${nameOf(m)}`, title: "A heads-up", body: `"${byId[b.pid].name} is ${rollCall("H", b.pid, billCtx(s, b)).yes >= 218 ? "going to pass" : "short of votes"}. Thought you'd want to know before you commit."`, done: true }); }
+    else if ((s.know[id] || 0) >= 2) { const b = activeBills(s).find((x) => x.stage === "committee"); if (b) brief(s, `${titleOf(m)} ${nameOf(m)}`, "A heads-up", `"${byId[b.pid].name} is ${rollCall("H", b.pid, billCtx(s, b)).yes >= 218 ? "going to pass" : "short of votes"}. Thought you'd want to know before you commit."`); }
   }
   // An ambitious colleague takes the credit, or the cameras.
   if (r() < 0.04 * t) { const mine = s.bills.find((b) => b.sponsor === s.youId && b.stage === "committee"); const rival = CH(s).filter((m) => m.p === you.p && m.st === you.st && m.id !== you.id && m.t.ambition > 0.6)[0];
@@ -1101,7 +1111,7 @@ function makeStaff(seed) {
 }
 function staffNotes(s, r) {
   const you = memberById[s.youId], st = Object.fromEntries(s.staff.map((x) => [x.role, x]));
-  const note = (who, title, body) => pushInbox(s, { kind: "staff", from: `${who.name}, ${who.title.toLowerCase()}`, title, body, done: true });
+  const note = (who, title, body) => brief(s, `${who.name}, ${who.title.toLowerCase()}`, title, body);
   if (s.week % 4 === 1) { const err = (20 - st.poll.skill) * 0.35, a = Math.round(s.approval + (r() - 0.5) * err * 2), env = you.p === "D" ? s.mood : -s.mood;
     note(st.poll, `New poll: ${a}% approve of you at home`, `Margin of error about ${Math.round(3 + err)} points. The national mood is ${env >= 0 ? "with" : "against"} your party by ${Math.abs(env).toFixed(1)}. The President is at ${Math.round(s.presApproval)}%. ${s.baseApproval < 55 ? "Your own party's voters are restless; watch for a primary." : "Your base is with you."}`); }
   const mine = s.bills.find((b) => b.sponsor === s.youId && b.stage === "committee");
@@ -1114,6 +1124,330 @@ function staffNotes(s, r) {
   if (r() < 0.18) { const items = ["The county party chairs want more of your time. They notice who shows up.", "Casework is up. People remember a fixed benefits check longer than any vote.", "A plant manager in the district asked where you are on tariffs. Jobs there depend on it."];
     note(st.district, "From back home", items[Math.floor(r() * items.length)]); }
 }
+
+// ── The Monday briefing: staff notes gathered into one message a week ──
+function brief(s, from, title, body) { (s.brief = s.brief || []).push({ from, title, body }); }
+function flushBrief(s) {
+  const th = s.theme && THEMES[s.theme];
+  const lines = [...(th ? [{ from: "Your scheduler", title: `This week: ${th.label}`, body: th.note }] : []), ...(s.brief || [])];
+  s.brief = [];
+  if (!lines.length || !isMem(roleOf(s))) return;
+  pushInbox(s, { kind: "brief", from: "Your chief of staff", title: "Monday briefing", body: lines.map((l) => `${l.title}. ${l.body}`).join(" "), lines, done: true });
+}
+
+// ── Weekly themes: recess, deadlines, campaign season and crisis weeks change what your hours are worth ──
+export const THEMES = {
+  recess: { label: "Recess", note: "Congress is out. No votes, no committee work and no hearings. District work and casework count for more, and you get some rest.", mul: { district: 1.6, casework: 1.6, funds: 1.1, smalldollar: 1.1, tv: 0.8, recruit: 1.3 }, off: ["committee", "hearing"] },
+  budget: { label: "Deadline week", note: "A must-pass deadline is days away. Committee work and TV count for more; donors and the district can wait.", mul: { committee: 1.5, tv: 1.2, district: 0.7, funds: 0.8, pacs: 0.8 } },
+  campaign: { label: "Campaign season", note: "The election is weeks away. Money, district work and TV count for more; committee work counts for less.", mul: { funds: 1.3, smalldollar: 1.3, pacs: 1.2, district: 1.3, tv: 1.2, casework: 1.2, committee: 0.5 } },
+  crisis: { label: "Crisis week", note: "One story is dominating the news. TV, op-eds and email appeals reach more people; everything else gets drowned out.", mul: { tv: 1.5, oped: 1.5, smalldollar: 1.4, district: 0.8, funds: 0.8 } },
+};
+export const themeMul = (s, act) => THEMES[s.theme]?.mul?.[act] ?? 1;
+export const isRecess = (s) => s.theme === "recess";
+function weekTheme(s) {
+  if (!isMem(roleOf(s))) return null;
+  const d = dateOf(s.week), mo = d.getUTCMonth(), day = d.getUTCDate(), rw = s.week - (s.termStart || 0), you = memberById[s.youId];
+  if (mo === 7 || (mo === 10 && day >= 21 && day <= 28) || (mo === 11 && day >= 20) || (mo === 0 && day <= 3) || (mo === 6 && day <= 5) || (mo === 3 && day <= 8)) return "recess";
+  if ((upThisTerm(s, you) || s.runFor) && !s.lastTerm && rw >= ELECTION_WEEK - 8 && rw < ELECTION_WEEK) return "campaign";
+  if ((s.mp || []).some((x) => !["law", "lapsed"].includes(x.stage) && x.deadline - s.week >= 0 && x.deadline - s.week <= 2)) return "budget";
+  return null;
+}
+
+// ── District events: many of them, each once a term, and some come back weeks later ──
+const COAST = new Set(["FL", "TX", "LA", "MS", "AL", "GA", "SC", "NC"]), WEST = new Set(["CA", "OR", "WA", "CO", "NM", "AZ", "MT", "ID", "NV", "UT"]), FARM = new Set(["IA", "NE", "KS", "ND", "SD", "MN", "WI", "IL", "IN", "OH", "MO", "AR", "OK"]), BORDER = new Set(["TX", "AZ", "NM", "CA"]);
+const FX_LABEL = { a: "approval at home", b: "your base", c: "money", cl: "clout", i: "integrity", p: "profile", e: "energy", l: "loyalty", lg: "record", rv: "primary threat" };
+function applyFx(s, fx = {}) {
+  if (fx.h) s.hours = Math.max(0, s.hours - fx.h);
+  if (fx.a) s.approval = clamp(s.approval + fx.a, 5, 95);
+  if (fx.b) s.baseApproval = clamp(s.baseApproval + fx.b, 5, 95);
+  if (fx.c) { s.cash = Math.max(0, s.cash + fx.c); if (fx.c > 0) addMoney(s, "large", fx.c); }
+  if (fx.cl) s.clout = Math.max(0, s.clout + fx.cl);
+  if (fx.i) s.integrity = clamp(s.integrity + fx.i, 0, 100);
+  if (fx.p) s.profile = clamp(s.profile + fx.p, 0, 100);
+  if (fx.e) s.energy = clamp((s.energy ?? 80) + fx.e, 0, 100);
+  if (fx.l) s.loyalty += fx.l;
+  if (fx.lg) s.legis += fx.lg;
+  if (fx.rv) s.rivals = Math.max(0, (s.rivals || 0) + fx.rv);
+}
+export function fxLine(fx = {}) {
+  const parts = Object.entries(fx).filter(([k, v]) => FX_LABEL[k] && v).map(([k, v]) => k === "c" ? `${v > 0 ? "+" : "−"}$${Math.abs(v)}K` : k === "rv" ? (v > 0 ? "a stronger primary threat" : "a weaker primary threat") : `${FX_LABEL[k]} ${v > 0 ? "+" : "−"}${Math.abs(Math.round(v * 10) / 10)}`);
+  return parts.length ? ` (${parts.join(", ")})` : "";
+}
+const addFx = (a, b) => { const o = { ...a }; for (const [k, v] of Object.entries(b || {})) o[k] = (o[k] || 0) + v; return o; };
+const DEV = [
+  { id: "plant", t: "A plant is closing back home", b: "The company is moving 440 jobs out of the district. The union wants you there, and the company says the decision is final.",
+    c: [{ t: "Go home and stand with the workers (8 hours)", fx: { h: 8, a: 2, b: 1, e: -4 }, m: "You stood on the loading dock with the night shift. Local TV led with it.", next: { in: 10, odds: 0.4, good: ["A buyer for the plant", "A regional manufacturer is buying the plant and keeping most of the jobs. People remember who showed up.", { a: 3 }], bad: ["The plant closed for good", "The last shift clocked out Friday. The union thanked you for coming, but it's a hard week at home.", { a: -1 }] } },
+      { t: "Call the CEO and lean on them (3 hours)", fx: { h: 3, cl: -2 }, m: "A tense call. They promised to look at options.", next: { in: 8, odds: 0.35, good: ["The company blinks", "They're keeping one line open, 180 jobs. The local paper says your call made the difference.", { a: 4, p: 2 }], bad: ["Your call to the CEO went nowhere", "The plant is closing on schedule. Workers say they never saw you.", { a: -2, b: -1 }] } },
+      { t: "Put out a statement", fx: { a: -1 }, m: "A statement about standing with working families. Nobody quotes it." }] },
+  { id: "flood", t: "Flooding in the district", b: "Two days of rain, a river over its banks and hundreds of homes underwater. The county wants a federal disaster declaration.",
+    c: [{ t: "Tour the damage (8 hours)", fx: { h: 8, a: 3, e: -4 }, m: "Waders, sandbags and a lot of handshakes. It's the right picture." },
+      { t: "Work FEMA and the White House for a fast declaration (3 hours)", fx: { h: 3, cl: -1 }, m: "You call everyone you know at FEMA.", next: { in: 3, odds: (s, you) => (you.p === PP ? 0.75 : 0.4), good: ["Disaster aid approved", "The declaration came through in days. Checks are going out and the county judge thanked you by name.", { a: 3, cl: 1 }], bad: ["Disaster aid is stuck", "The declaration is still pending. Local officials are blaming Washington, and that includes you.", { a: -2 }] } },
+      { t: "Put out a statement", fx: { a: -2 }, m: "People with water in their basements noticed you didn't come." }] },
+  { id: "hospital", t: "The rural hospital may close", b: "The only hospital in the north end of the district says it runs out of money in three months. Medicaid cuts hit it hard.",
+    c: [{ t: "Fight for emergency money in Washington (4 hours)", fx: { h: 4, cl: -3, lg: 1 }, m: "You call in favors with appropriators.", next: { in: 8, odds: (s) => clamp(0.3 + s.clout / 150, 0.2, 0.8), good: ["The hospital is saved", "A rural health grant came through. The hospital stays open and its CEO credits you.", { a: 4, p: 1 }], bad: ["The hospital is closing", "The grant didn't come. The emergency room closes next month and the nearest one is 50 minutes away.", { a: -2 }] } },
+      { t: "Hold a town hall about it (6 hours)", fx: { h: 6, a: 1, p: 1, e: -3 }, m: "A packed gym and a lot of anger, not all of it at you." },
+      { t: "Say it's the state's problem", fx: { a: -2, b: 1 }, m: "Technically true. Not what people wanted to hear." }] },
+  { id: "school", t: "A school board fight goes viral", b: "A shouting match over library books at a local school board meeting has millions of views. Reporters want to know whose side you're on.",
+    c: [{ t: "Weigh in hard for your side", fx: { b: 2, a: -2, p: 2 }, m: "Your base loves it. Moderates at home see a member of Congress picking a fight with a school board." },
+      { t: "Go to the next meeting and try to calm it (5 hours)", fx: { h: 5, e: -3 }, m: "You show up to the meeting yourself.", roll: { odds: 0.5, good: ["You lowered the temperature, and a clip of you doing it is everywhere.", { a: 2, p: 2 }], bad: ["You got shouted down, and that clip is everywhere.", { a: -1, p: 1 }] } },
+      { t: "Stay out of local business", fx: { b: -1 }, m: "Some on your side wanted you to fight." }] },
+  { id: "hurricane", w: (you) => COAST.has(you.st), t: "A hurricane is headed for the coast", b: "Landfall is in three days. You have a big donor dinner in New York the same night.",
+    c: [{ t: "Cancel the dinner and go home (10 hours)", fx: { h: 10, a: 4, e: -6 }, m: "You rode out the storm at the emergency operations center. People saw you there." },
+      { t: "Work the agencies from Washington (4 hours)", fx: { h: 4, a: 1, cl: 1 }, m: "Generators and water arrived early. Few people know you made the calls." },
+      { t: "Go to the dinner", fx: { c: 60, a: -4, i: -3 }, m: "You raised $60K. A photo of you at the dinner ran next to pictures of the flooding.", next: { in: 20, odds: 0.5, good: ["The dinner photo faded", "Nobody's talking about it anymore.", {}], bad: ["The dinner photo is back", "Your opponent put the photo in an ad.", { a: -2 }] } }] },
+  { id: "fire", w: (you) => WEST.has(you.st), t: "Wildfire near the district", b: "A fire has burned 40,000 acres and forced evacuations in two towns. The smoke is everywhere.",
+    c: [{ t: "Go to the evacuation centers (8 hours)", fx: { h: 8, a: 3, e: -4 }, m: "Cots, coffee and a lot of scared families. You stayed until midnight." },
+      { t: "Push a forest management bill", fx: { lg: 2, b: 1, cl: -1 }, m: "You introduce a bill on thinning and fire crews. It might go somewhere next year." },
+      { t: "Put out a statement", fx: { a: -1 }, m: "Thoughts with the firefighters." }] },
+  { id: "farm", w: (you) => FARM.has(you.st), t: "Farmers are hurting", b: "Drought and retaliatory tariffs have soybean and corn prices at a five-year low. The farm bureau wants emergency aid, and your leaders don't want to spend the money.",
+    c: [{ t: "Demand emergency aid, against your leaders", fx: { a: 3, l: -1.5 }, m: "Farm country notices. So does the whip." },
+      { t: "Hold listening sessions at county fairs (6 hours)", fx: { h: 6, a: 1, b: 1, e: -2 }, m: "Pie, livestock barns and a lot of honest talk." },
+      { t: "Tell them help is coming", fx: { a: 1 }, m: "It's a promise.", next: { in: 10, odds: 0.3, good: ["Farm aid came through", "The aid package passed. You said it would.", { a: 1 }], bad: ["The farm aid never came", "Farmers remember you said help was coming. The farm paper ran your quote again.", { a: -3, i: -2 }] } }] },
+  { id: "border", w: (you) => BORDER.has(you.st), t: "Buses of migrants arrive in the district", b: "Shelters in two towns are full and the mayor is asking Washington for help.",
+    c: [{ t: "Visit the shelter (5 hours)", fx: (s, you) => ({ h: 5, a: 1, b: you.p === "D" ? 1 : -2 }), m: "You saw it for yourself." },
+      { t: "Demand federal money for the towns", fx: { a: 1, cl: -1 }, m: "Local officials appreciate it." },
+      { t: "Blame the other party", fx: { b: 2, a: -1, p: 1 }, m: "Cable bookers call. Local officials wanted help, not a fight." }] },
+  { id: "va", t: "A veteran's story goes viral", b: "A Marine in the district has waited 14 months for a disability claim. His post about it has 50,000 shares.",
+    c: [{ t: "Fix it and hold a press conference (3 hours)", fx: { h: 3, a: 2, p: 1, i: -1 }, m: "The claim is approved. Some say you made it about you." },
+      { t: "Fix it quietly (2 hours)", fx: { h: 2, a: 1, i: 2 }, m: "His claim is approved. He tells everyone you called him yourself." },
+      { t: "Hold a hearing on VA backlogs (6 hours)", fx: { h: 6, lg: 1, p: 2, e: -2 }, m: "You put a VA official under oath. It's good TV.", next: { in: 6, odds: 0.6, good: ["The VA backlog is shrinking", "After your hearing the regional office added staff. Wait times are down.", { a: 2 }], bad: ["The VA backlog hasn't moved", "Nothing changed. The veteran's post now tags you.", { a: -1 }] } }] },
+  { id: "bridge", t: "The main bridge is closed", b: "Inspectors shut the bridge into town. It adds 40 minutes to everyone's commute and the state says it can't pay for repairs until 2030.",
+    c: [{ t: "Request federal money for it (4 hours)", fx: { h: 4, cl: -2 }, m: "You put it in for a community project grant.", next: { in: 12, odds: (s) => clamp(0.35 + s.clout / 200, 0.3, 0.8), good: ["Ribbon cutting at the bridge", "The bridge money came through. You hold the big scissors.", { a: 3, p: 1 }], bad: ["No money for the bridge", "The grant went to another district. The bridge is still closed.", { a: -1 }] } },
+      { t: "Blame the state", fx: { b: 1, a: -1 }, m: "Accurate, but the traffic is still there." },
+      { t: "Hold a town hall on the commute (5 hours)", fx: { h: 5, a: 1, e: -2 }, m: "Angry commuters, but they got to say it to your face." }] },
+  { id: "protest", t: "A police shooting sparks protests", b: "Video of the shooting is everywhere and there are protests downtown for a third night.",
+    c: [{ t: (you) => (you.p === "D" ? "March with the protesters" : "Stand with the police"), fx: { b: 3, a: -2 }, m: "Your base is fired up. Voters in the middle are uneasy." },
+      { t: "Call for calm and an independent investigation", fx: { a: 1, b: -2 }, m: "Both sides think you're hedging. Most voters think you're right." },
+      { t: "Meet privately with the family and the chief (4 hours)", fx: { h: 4, i: 2, e: -3 }, m: "No cameras.", roll: { odds: 0.6, good: ["Word got around that you listened, and both sides give you credit.", { a: 2 }], bad: ["Activists say you went into hiding.", { b: -1 }] } }] },
+  { id: "opioid", t: "Overdoses spike in the county", b: "Eleven overdose deaths in two weeks, most of them fentanyl. The sheriff and the treatment centers want different things.",
+    c: [{ t: "Push for treatment money (3 hours)", fx: { h: 3, lg: 1, cl: -1, a: 1 }, m: "Treatment centers are grateful. The sheriff wanted more." },
+      { t: "Hold a roundtable with families (5 hours)", fx: { h: 5, a: 2, e: -4 }, m: "Parents who lost kids told their stories. It was hard to hear." },
+      { t: "Call for a crackdown on dealers", fx: { b: 2, a: 0.5 }, m: "The sheriff stands next to you at the podium." }] },
+  { id: "cuts", t: "Federal job cuts hit the district", b: "A federal office in the district is losing 300 jobs in the administration's cuts.",
+    c: [{ t: "Fight the cuts publicly", fx: (s, you) => ({ a: 2, p: 2, l: you.p === PP ? -1.5 : 0, b: you.p === PP ? -1 : 1 }), m: "You go after the cuts on local TV." },
+      { t: "Work it quietly with the agency (4 hours)", fx: { h: 4, cl: -2 }, m: "You call the agency's chief of staff.", next: { in: 8, odds: (s, you) => (you.p === PP ? 0.55 : 0.2), good: ["Half the federal jobs are saved", "The agency kept 150 of the jobs. Employees know who made the calls.", { a: 3 }], bad: ["The federal cuts went through", "All 300 jobs are gone. The union says you were invisible.", { a: -2 }] } },
+      { t: "Defend the cuts", fx: (s, you) => ({ b: you.p === PP ? 2 : -2, a: -3 }), m: "It's a principled stand that 300 families won't forget." }] },
+  { id: "stadium", t: "The team wants a new stadium", b: "The local team says it will leave unless it gets $600 million in public money. The owner is a big donor.",
+    c: [{ t: "Back the deal", fx: { c: 40, a: -1, i: -2 }, m: "The owner hosts a fundraiser for you.", next: { in: 14, odds: 0.5, good: ["The stadium breaks ground", "Construction jobs and a new stadium. Fans are happy.", { a: 2 }], bad: ["The stadium's costs balloon", "The price is up 40% and taxpayers are on the hook. Your name is on the deal.", { a: -3 }] } },
+      { t: "Oppose the giveaway", fx: { a: 1, i: 2, c: -10 }, m: "Taxpayer groups love it. The owner's friends stop calling." },
+      { t: "Stay neutral", fx: { b: -0.5 }, m: "Both sides think you're ducking." }] },
+  { id: "parade", t: "The high school team won state", b: "The parade is Saturday and the whole town will be there. It's also your only free day this month.",
+    c: [{ t: "Ride in the parade (4 hours)", fx: { h: 4, a: 1.5, e: 2 }, m: "A convertible, a lot of waving and a very good day." },
+      { t: "Give a floor speech honoring them", fx: { a: 0.5 }, m: "The coach framed it." },
+      { t: "Take the day off", fx: { e: 6 }, m: "You slept in. Nobody noticed you weren't there." }] },
+  { id: "townhall", t: "Activists plan to pack your town hall", b: "Groups on the other side are busing people to your town hall on Thursday. They want a viral clip.",
+    c: [{ t: "Hold it anyway (6 hours)", fx: { h: 6, e: -4 }, m: "You face the room.", roll: { odds: (s) => clamp(0.4 + (s.train?.media || 0) * 0.06 + ((s.energy ?? 80) - 50) / 200, 0.2, 0.85), good: ["You kept your cool and won the room. The clip that went viral is a good one.", { a: 3, p: 2, b: 1 }], bad: ["You lost your temper on camera. That's the clip.", { a: -3, p: 2 }] } },
+      { t: "Switch to a telephone town hall (2 hours)", fx: { h: 2, i: -1, b: -0.5 }, m: "Safe, and everyone knows why you did it." },
+      { t: "Cancel it", fx: { a: -2 }, m: "The local paper's headline: member skips own town hall." }] },
+  { id: "ally", t: "A local ally is under investigation", b: "Your county party chair, who raised money for you, is under investigation for steering county contracts.",
+    c: [{ t: "Stand by them", fx: { b: 1, i: -3 }, m: "Loyalty matters, you say.", next: { in: 10, odds: 0.45, good: ["Your county chair is cleared", "Prosecutors dropped the case. You stood by them and they won't forget it.", { b: 1, cl: 2 }], bad: ["Your county chair is indicted", "The indictment names a contract you praised. Reporters are calling.", { a: -3, i: -3 }] } },
+      { t: "Distance yourself", fx: { b: -1, i: 1 }, m: "The party faithful think you threw a friend overboard." },
+      { t: "Give back their donations", fx: { c: -25, i: 3 }, m: "You return $25K. Your campaign is lighter and cleaner." }] },
+  { id: "strike", t: "Workers walk out at the biggest employer", b: "2,000 workers are on strike at the district's biggest employer. Both sides want you.",
+    c: [{ t: "Join the picket line (4 hours)", fx: (s, you) => ({ h: 4, b: you.p === "D" ? 3 : 0, a: 1, c: -20 }), m: "Labor will remember. Business donors already do." },
+      { t: "Urge both sides back to the table", fx: { a: 1, b: -1 }, m: "Reasonable, and not very satisfying to anyone." },
+      { t: "Side with the company", fx: (s, you) => ({ c: 30, b: you.p === "R" ? 1 : -3, a: -2 }), m: "The company's PAC is grateful." }] },
+  { id: "datacenter", t: "A data center wants to build here", b: "A tech company wants to build a $3 billion data center in the district. It means construction jobs and a big tax base, and it would use as much power as a small city.",
+    c: [{ t: "Champion it", fx: { c: 25, a: 1 }, m: "A groundbreaking, hard hats and a PAC check.", next: { in: 16, odds: 0.5, good: ["The data center is paying off", "The tax money paid for a new school, and power bills stayed flat.", { a: 2 }], bad: ["Power bills are up", "Electric bills in the county rose 12% after the data center came online. People know who cut the ribbon.", { a: -3 }] } },
+      { t: "Demand it pays for its own power", fx: { a: 1, i: 1, cl: -1 }, m: "The company grumbles and agrees to pay for new lines." },
+      { t: "Oppose it", fx: { a: -1, b: 1 }, m: "Neighbors are relieved. The building trades are not." }] },
+  { id: "tariff", t: "Local businesses say tariffs are crushing them", b: "Small manufacturers in the district say import costs are up 30%. Two have laid people off.",
+    c: [{ t: "Ask for exemptions for them (3 hours)", fx: { h: 3, cl: -2 }, m: "You file exemption requests with Commerce.", next: { in: 8, odds: (s, you) => (you.p === PP ? 0.55 : 0.25), good: ["Tariff exemptions granted", "Three local companies got their exemptions. They're hiring again.", { a: 3 }], bad: ["Tariff exemptions denied", "Commerce turned them down. The owners say at least you tried.", { a: -0.5 }] } },
+      { t: "Defend the trade policy", fx: (s, you) => ({ b: you.p === PP ? 2 : -2, a: -2 }), m: "You say short-term pain brings long-term gain." },
+      { t: "Hold a roundtable (5 hours)", fx: { h: 5, a: 1, e: -2 }, m: "Owners got to vent. Nothing changed, but they feel heard." }] },
+  { id: "base", t: "The Pentagon may shrink the local base", b: "A new review puts the district's military base on a list for cuts. It's 6,000 jobs.",
+    c: [{ t: "Fight it in the defense bill (4 hours)", fx: { h: 4, cl: -3, lg: 1 }, m: "You write language protecting the base.", next: { in: 12, odds: (s) => clamp(0.4 + s.clout / 200, 0.3, 0.85), good: ["The base is safe", "Your language made it into the final defense bill. The base stays.", { a: 4, p: 1 }], bad: ["The base is losing a wing", "The cuts went ahead. 1,800 jobs leave over two years.", { a: -3 }] } },
+      { t: "Rally the community (6 hours)", fx: { h: 6, a: 2, e: -3 }, m: "Yard signs, a rally at the gate and the governor on stage." },
+      { t: "Push for redevelopment money instead", fx: { a: -2, lg: 1, i: 1 }, m: "Realistic, and it sounds like giving up." }] },
+  { id: "housing", t: "A big housing development is proposed", b: "A developer wants to build 1,200 apartments. Rents are up 20% in two years, and the neighbors are organizing against it.",
+    c: [{ t: "Back the development", fx: { a: 1, b: -1, c: 15 }, m: "Young renters are with you. The neighbors are furious." },
+      { t: "Side with the neighbors", fx: { b: 1, a: -1 }, m: "The neighbors vote. Renters notice." },
+      { t: "Push for federal housing money (3 hours)", fx: { h: 3, lg: 1, cl: -1 }, m: "You get it into a grant application. It'll take years." }] },
+  { id: "reporter", t: "A reporter is digging into your stock trades", b: "A local reporter has a list of trades you made and wants an interview.",
+    c: [{ t: "Sit down for the interview (3 hours)", fx: { h: 3, i: 2 }, m: "You answer every question.", roll: { odds: (s) => clamp(s.integrity / 100, 0.2, 0.9), good: ["The story runs and says you did nothing wrong.", { a: 1 }], bad: ["The story runs anyway, with a bad quote.", { a: -2 }] } },
+      { t: "Put everything in a blind trust", fx: { c: -40, i: 5, p: 1 }, m: "It cost you $40K in fees and paperwork. It ends the story." },
+      { t: "Refuse to comment", fx: { i: -2 }, m: "Did not respond to requests for comment.", next: { in: 4, odds: 0.4, good: ["The stock story died", "The reporter moved on.", {}], bad: ["The stock story ran", "Front page: your trades and your committee votes, side by side.", { a: -4, i: -3 }] } }] },
+  { id: "broadband", t: "The county wants broadband money", b: "Half the rural households in the district don't have real internet. The county wants your help with a federal grant.",
+    c: [{ t: "Push the application (3 hours)", fx: { h: 3, cl: -1 }, m: "You write the letter and make the calls.", next: { in: 14, odds: 0.6, good: ["Broadband grant awarded", "$40 million for rural internet. Families will have it by next year.", { a: 3 }], bad: ["Broadband grant denied", "The grant went elsewhere. The county will apply again.", { a: -0.5 }] } },
+      { t: "Write a supportive letter", fx: { a: 0.5 }, m: "It's in the file." },
+      { t: "Tell them to apply next year", fx: { a: -1 }, m: "Fine. They'll remember." }] },
+  { id: "power", t: "Power bills spike", b: "A heat wave and a rate hike have power bills up 25%. Seniors are calling your office.",
+    c: [{ t: "Push for more home energy aid (3 hours)", fx: { h: 3, lg: 1, cl: -1, a: 1 }, m: "You lean on appropriators for home energy assistance money." },
+      { t: "Go after the utility", fx: { b: 1, p: 2, c: -15 }, m: "The utility's PAC stops returning calls. Voters love it." },
+      { t: "Tour the cooling centers (5 hours)", fx: { h: 5, a: 2, e: -3 }, m: "Fans, water and a lot of grateful seniors." }] },
+  { id: "foodbank", t: "The food bank is running out", b: "The local food bank is nearly empty after the SNAP cuts. Lines go around the block.",
+    c: [{ t: "Volunteer a shift (3 hours)", fx: { h: 3, a: 1, e: 2 }, m: "You packed boxes for three hours. It felt good." },
+      { t: "Raise money for it from your donors", fx: { c: -20, a: 1, i: 2 }, m: "Your donors gave the food bank $20K, money that won't go to your campaign." },
+      { t: "Use it to fight the SNAP cuts", fx: (s, you) => ({ b: you.p === "D" ? 2 : -2, p: 1 }), m: "You hold a press conference in front of the line." }] },
+  { id: "play", t: "Your kid's school play is tonight", b: "It's the same night as a donor dinner your finance director set up two months ago.",
+    c: [{ t: "Go to the play", fx: { e: 8 }, m: "You saw the whole thing. Your finance director is not speaking to you." },
+      { t: "Go to the dinner", fx: { c: 45, e: -4 }, m: "You raised $45K. You watched the play on your phone in the car." },
+      { t: "Leave the dinner early", fx: { c: 20, e: 3 }, m: "You raised $20K and made it for the second act." }] },
+  { id: "rival", w: (you, s) => upThisTerm(s, you) && s.week - (s.termStart || 0) < PRIMARY_WEEK - 12, t: "A local official is testing the waters", b: "A popular county official in your party is calling donors about a primary run against you.",
+    c: [{ t: "Call them and make peace (3 hours)", fx: { h: 3, cl: -1 }, m: "Coffee and a promise to help them with something.", roll: { odds: 0.6, good: ["They're not running. For now.", {}], bad: ["They took the coffee and kept calling donors.", { rv: 1 }] } },
+      { t: "Line up endorsements first (6 hours)", fx: { h: 6, b: 2, e: -3 }, m: "Sheriffs, mayors and the county party, all on the record for you." },
+      { t: "Ignore it", fx: {}, m: "You have other things to do.", next: { in: 10, odds: 0.5, good: ["The primary threat faded", "The county official decided not to run.", {}], bad: ["The county official is running", "They filed papers and have $300K in the bank.", { rv: 1, b: -1 }] } }] },
+  { id: "shooting", t: "A shooting at a local mall", b: "Three people were killed at a mall in the district. The national press is here.",
+    c: [{ t: "Call for new gun laws", fx: (s, you) => ({ b: you.p === "D" ? 2 : -3, a: you.dem > 50 ? 1 : -1, p: 2 }), m: "You go to the podium with the police chief." },
+      { t: "Go to the vigil and stay off policy (4 hours)", fx: { h: 4, a: 2, e: -4 }, m: "You hugged a lot of people. It was not about politics." },
+      { t: "Talk about mental health and security", fx: (s, you) => ({ b: you.p === "R" ? 1 : -2 }), m: "Some say it's a dodge." }] },
+];
+const locTxt = (s, t) => (roleOf(s) === "S" ? String(t).replace(/\bthe district's\b/g, "the state's").replace(/\bthe district\b/g, "the state").replace(/\bin the district\b/g, "in the state").replace(/\bAnother district\b/g, "another state").replace(/\banother district\b/g, "another state") : t);
+const devOdds = (o, s, you) => (typeof o === "function" ? o(s, you) : o);
+function districtWeek(s, r) {
+  const you = memberById[s.youId]; if (!isMem(roleOf(s)) || !you) return;
+  // Follow-ups from choices made weeks ago.
+  for (const p of s.dPend || []) {
+    if (p.done || s.week < p.at) continue; p.done = true;
+    const e = DEV.find((x) => x.id === p.ev), ch = e?.c[p.ci]; if (!ch?.next) continue;
+    const ok = rng(hash(`${s.seed}:devnext:${p.mid}`))() < devOdds(ch.next.odds, s, you), [title, body, fx] = ok ? ch.next.good : ch.next.bad;
+    applyFx(s, fx);
+    pushInbox(s, { kind: "staff", from: roleOf(s) === "S" ? "Your state director" : "Your district director", title: locTxt(s, title), body: `${locTxt(s, body)}${fxLine(fx)}`, done: true, followup: true });
+    if (Math.abs(fx.a || 0) >= 3) s.moments.push({ week: s.week, text: `${locTxt(s, title)}. ${locTxt(s, body)}` });
+  }
+  s.dPend = (s.dPend || []).filter((p) => !p.done);
+  const rate = isRecess(s) ? 0.35 : s.theme === "campaign" ? 0.22 : 0.17;
+  if (r() > rate) return;
+  s.dUsed = s.dUsed || {};
+  const pool = DEV.filter((e) => s.dUsed[e.id] !== (s.term || 1) && (!e.w || e.w(you, s)));
+  if (!pool.length) return;
+  const e = pool[Math.floor(r() * pool.length)]; s.dUsed[e.id] = s.term || 1;
+  pushInbox(s, { kind: "district", dev: e.id, from: roleOf(s) === "S" ? "Your state director" : "Your district director", title: locTxt(s, e.t), body: locTxt(s, e.b), choices: e.c.map((c) => locTxt(s, typeof c.t === "function" ? c.t(you) : c.t)) });
+}
+function answerDistrict(s, m, choice) {
+  const you = memberById[s.youId], e = DEV.find((x) => x.id === m.dev), ch = e?.c[choice]; if (!ch) return;
+  let fx = typeof ch.fx === "function" ? ch.fx(s, you) : ch.fx, text = locTxt(s, ch.m);
+  if (fx.h && s.hours < fx.h) { const short = fx.h - s.hours; fx = { ...fx, e: (fx.e || 0) - short }; text += ` You didn't have the hours, so it came out of your sleep.`; }
+  applyFx(s, fx); let total = { ...fx };
+  if (ch.roll) { const ok = rng(hash(`${s.seed}:devroll:${m.id}`))() < devOdds(ch.roll.odds, s, you), [msg, fx2] = ok ? ch.roll.good : ch.roll.bad; applyFx(s, fx2); total = addFx(total, fx2); text += ` ${locTxt(s, msg)}`; }
+  if (ch.next) { (s.dPend = s.dPend || []).push({ at: s.week + ch.next.in, ev: e.id, ci: choice, mid: m.id }); text += " You'll find out in a few weeks how this plays out."; }
+  delete total.h;
+  s.toast = { title: locTxt(s, e.t), text: text + fxLine(total), tone: (total.a || 0) + (total.b || 0) * 0.5 > 0.5 ? "good" : (total.a || 0) + (total.b || 0) * 0.5 < -0.5 ? "bad" : "" };
+}
+
+// ── Storylines: things that start now and come due later ──
+const DONOR_BIZ = ["a pharmacy benefit manager", "a crypto exchange", "a defense contractor", "a private equity firm", "a hospital chain", "an oil and gas company", "a payday lender", "a sports betting company"];
+const RIVAL_JOB = ["a state senator", "the county executive", "a popular mayor", "the county sheriff", "a state representative"];
+function arcWeek(s, r) {
+  const you = memberById[s.youId]; if (!isMem(roleOf(s)) || !you) return;
+  s.arcs = s.arcs || [];
+  for (const a of s.arcs) if (!a.done && a.waiting && s.week - (a.asked ?? a.start) > 5) { const msg = s.inbox.find((x) => x.arc === a.id && !x.done); if (msg) { msg.done = true; msg.choice = a.kind === "scandal" ? 1 : msg.choices.length - 1; msg.auto = true; answerArc(s, msg, msg.choice); } else a.waiting = false; }
+  for (const a of s.arcs) if (!a.done && a.next && s.week >= a.next && !a.waiting) arcStep(s, a, r);
+  s.arcs = s.arcs.filter((a) => !a.done || s.week - (a.endWeek || 0) < 60).slice(-12);
+  const rw = s.week - (s.termStart || 0);
+  if (s.arcs.some((a) => !a.done) || rw < 3 || rw > ELECTION_WEEK - 6 || r() > 0.045) return;
+  const kinds = ["scandal", "donor", ...(upThisTerm(s, you) && !s.lastTerm && rw < PRIMARY_WEEK - 20 && !(s.arcs || []).some((a) => a.kind === "rival" && a.term === s.term) ? ["rival", "rival"] : [])];
+  const kind = kinds[Math.floor(r() * kinds.length)], id = `arc${s.week}-${s.n++}`;
+  if (kind === "scandal") {
+    const pool = CH(s).filter((m) => m.id !== s.youId && m.p === you.p && !m.vacant), warm = pool.filter((m) => (s.rel[m.id] || 0) > 0.05);
+    const m = (warm.length && r() < 0.6 ? warm : pool)[Math.floor(r() * (warm.length && r() < 0.6 ? warm : pool).length)]; if (!m) return;
+    const what = ["used campaign money for family vacations", "kept a lobbyist on their payroll", "traded stock in a company their committee oversees", "steered a grant to a relative's nonprofit"][Math.floor(r() * 4)];
+    const a = { id, kind, who: m.id, what, guilty: r() < 0.55, stage: 0, term: s.term, start: s.week, asked: s.week, waiting: true }; s.arcs.push(a);
+    pushInbox(s, { kind: "arc", arc: id, stage: 0, from: `${titleOf(m)} ${nameOf(m)}`, title: `${nameOf(m)} is in trouble`, body: `A newspaper reports that ${nameOf(m)} ${what}. They call you before anyone else: "I need people standing with me this week. I'll remember who did."`, choices: ["Stand by them", "Say nothing", "Call on them to step down"] });
+  } else if (kind === "donor") {
+    const name = `${PF[Math.floor(r() * PF.length)]} ${PL[Math.floor(r() * PL.length)]}`, biz = DONOR_BIZ[Math.floor(r() * DONOR_BIZ.length)], amt = 80 + Math.round(r() * 8) * 10;
+    s.arcs.push({ id, kind, name, biz, amt, stage: 0, term: s.term, start: s.week, asked: s.week, waiting: true });
+    pushInbox(s, { kind: "arc", arc: id, stage: 0, from: name, title: "A big donor wants to help", body: `${name}, who runs ${biz}, offers to host a fundraiser for you worth about $${amt}K. "No strings. I just want us to have a relationship."`, choices: [`Take the fundraiser`, "Take it, but set ground rules first", "Decline"] });
+  } else {
+    const name = `${PF[Math.floor(r() * PF.length)]} ${PL[Math.floor(r() * PL.length)]}`, job = RIVAL_JOB[Math.floor(r() * RIVAL_JOB.length)];
+    s.arcs.push({ id, kind, name, job, heat: 2, stage: 0, term: s.term, start: s.week, asked: s.week, waiting: true });
+    pushInbox(s, { kind: "arc", arc: id, stage: 0, from: roleOf(s) === "S" ? "Your state director" : "Your district director", title: `${name} is touring ${roleOf(s) === "S" ? "the state" : "the district"}`, body: `${name}, ${job} in your own party, is showing up at your events, meeting your donors and telling people you've lost touch. It looks like the start of a primary challenge.`, choices: ["Meet them and offer to help with their projects (3 hours)", "Lock down endorsements before they can (6 hours)", "Ignore them"] });
+  }
+}
+function arcEnd(s, a, from, title, body, fx = {}) {
+  applyFx(s, fx); a.done = true; a.endWeek = s.week; a.outcome = title;
+  pushInbox(s, { kind: "staff", from, title, body: body + fxLine(fx), done: true, followup: true });
+  s.moments.push({ week: s.week, text: `${title}. ${body}` });
+}
+function arcStep(s, a, r) {
+  const you = memberById[s.youId];
+  if (a.kind === "scandal") {
+    const m = memberById[a.who]; if (!m) { a.done = true; return; }
+    if (a.guilty) {
+      newsBoth(s, (real) => `More reporting on ${nameOf(m, real)}: the House ethics committee opens an investigation. ${nameOf(m, real)} says ${m.g === "F" ? "she" : "he"} won't run again.`, "bad");
+      if (a.pick === 0) arcEnd(s, a, "Your communications director", `You defended ${nameOf(m)}, and it got worse`, `The new reporting is bad, and your statement of support is in every story.`, { a: -2, i: -4 });
+      else if (a.pick === 2) arcEnd(s, a, "Your communications director", `You were early on ${nameOf(m)}`, `You called for them to step down before the rest of the story came out. You look like you saw it first.`, { p: 2, i: 2 });
+      else arcEnd(s, a, "Your chief of staff", `${nameOf(m)} is done`, `The story got worse. You said nothing, which turned out to be safe.`, {});
+    } else {
+      newsBoth(s, (real) => `${nameOf(m, real)} is cleared: the payments were properly reported, the ethics office says.`, "good");
+      if (a.pick === 0) { s.owedToYou[m.id] = (s.owedToYou[m.id] || 0) + 1; s.rel[m.id] = clamp((s.rel[m.id] || 0) + 0.2, -1, 1); arcEnd(s, a, `${titleOf(m)} ${nameOf(m)}`, `${nameOf(m)} was cleared, and remembers you stood by them`, `"You were there when nobody else was. I owe you." They'll back you when it counts.`, { cl: 3 }); }
+      else if (a.pick === 2) { s.rel[m.id] = clamp((s.rel[m.id] || 0) - 0.4, -1, 1); arcEnd(s, a, "Your chief of staff", `${nameOf(m)} was cleared, and won't forget your statement`, `You called for them to step down over a story that turned out to be wrong. They're telling colleagues about it.`, { a: -1, cl: -2 }); }
+      else arcEnd(s, a, "Your chief of staff", `${nameOf(m)} was cleared`, `The story fell apart. You stayed out of it.`, {});
+    }
+    return;
+  }
+  if (a.kind === "donor") {
+    if (a.stage === 1) {
+      a.stage = 2; a.waiting = true; a.asked = s.week;
+      const ask = a.rules ? `They want a meeting with the regulators who oversee ${a.biz.replace(/^an? /, "")}s. "Just an introduction."` : `They want one sentence slipped into a must-pass bill that helps ${a.biz.replace(/^an? /, "")}s. "Nobody reads these things."`;
+      pushInbox(s, { kind: "arc", arc: a.id, stage: 2, from: a.name, title: `${a.name} needs a favor`, body: `${a.name} has been a reliable donor since the fundraiser. ${ask} Saying no ends the relationship, and ${a.name} has friends who fund primary challengers.`, choices: a.rules ? ["Set up the meeting", "Say no"] : ["Slip it in", "Offer a meeting with regulators instead", "Say no"] });
+      return;
+    }
+    if (a.stage === 3) {
+      if (a.pick === "no") arcEnd(s, a, "Your finance director", `${a.name} is funding your opponents`, `Since you said no, ${a.name} has been calling other donors about you. Expect a better-funded challenger.`, upThisTerm(s, you) ? { rv: 1 } : { c: -20 });
+      else { const caught = rng(hash(`${s.seed}:arc:${a.id}`))() < a.risk;
+        if (caught) { pushNews(s, `Report: ${nameOf(you)} ${a.pick === "slip" ? "inserted a provision" : "arranged a regulator meeting"} for a major donor's company.`, "bad"); arcEnd(s, a, "Your communications director", "A reporter found the favor", `${a.pick === "slip" ? "The provision you slipped in" : "The meeting you set up"} for ${a.name} is on the front page, next to the fundraiser.`, { a: -4, i: -5, p: 2 }); }
+        else arcEnd(s, a, "Your finance director", `${a.name} is happy`, `Nobody noticed. ${a.name} hosted another event for you.`, { c: 40, i: -1 }); }
+      return;
+    }
+  }
+  if (a.kind === "rival") {
+    if (a.stage === 1) {
+      a.stage = 2; a.waiting = true; a.asked = s.week;
+      const v = [...(s.votesCast || [])].reverse().find((x) => byId[x.pid]);
+      pushInbox(s, { kind: "arc", arc: a.id, stage: 2, from: "Your campaign manager", title: `${a.name} is attacking your record`, body: `${a.name} is on local radio saying you've gone Washington${v ? `, and pointing to your vote on ${byId[v.pid].name}` : ""}. Donors are asking what you're going to do.`, choices: ["Hit back hard", "Answer with your record at home (4 hours)", "Let it go"] });
+      return;
+    }
+    if (a.stage === 3) {
+      const files = a.heat + (s.baseApproval < 55 ? 1 : 0) - (s.baseApproval > 70 ? 1 : 0) >= 2;
+      if (files) { newsBoth(s, (real) => `${a.name}, ${a.job}, launches a primary challenge against ${titleOf(you)} ${nameOf(you, real)}.`, "bad"); arcEnd(s, a, "Your campaign manager", `${a.name} is running against you`, `They filed today and have $400K in the bank. The primary just got real.`, { rv: 2, b: -1 }); }
+      else arcEnd(s, a, "Your campaign manager", `${a.name} won't run`, `${a.name} says they'll run for re-election instead. Whatever you did worked.`, { b: 1 });
+    }
+  }
+}
+function answerArc(s, m, choice) {
+  const a = (s.arcs || []).find((x) => x.id === m.arc); if (!a || a.done) return;
+  const you = memberById[s.youId]; a.waiting = false;
+  if (a.kind === "scandal") {
+    a.pick = choice; a.stage = 1; a.next = s.week + 3 + Math.floor(rng(hash(`${s.seed}:arcw:${a.id}`))() * 4);
+    const mm = memberById[a.who];
+    if (choice === 0) { s.rel[a.who] = clamp((s.rel[a.who] || 0) + 0.25, -1, 1); s.toast = { title: "You stood by them", text: `${nameOf(mm)} is grateful. If the story gets worse, your statement goes with it.`, tone: "" }; }
+    else if (choice === 2) { s.rel[a.who] = clamp((s.rel[a.who] || 0) - 0.5, -1, 1); applyFx(s, { b: 1, i: 2, p: 1, l: -0.5 }); pushNews(s, `${nameOf(you)} calls on ${nameOf(mm)} to step down.`, "event"); s.toast = { title: "You called for them to go", text: `Voters like it. ${nameOf(mm)} and the leadership do not. If they're cleared, you'll own this.`, tone: "" }; }
+    else s.toast = { title: "No comment", text: "You'll wait and see.", tone: "" };
+    return;
+  }
+  if (a.kind === "donor") {
+    if (m.stage === 0) {
+      if (choice === 2) { applyFx(s, { i: 1 }); a.done = true; a.endWeek = s.week; a.outcome = "Declined"; s.toast = { title: "You said no", text: "No fundraiser and no relationship. Your finance director sighs.", tone: "" }; return; }
+      a.rules = choice === 1; const amt = a.rules ? Math.round(a.amt * 0.6) : a.amt; applyFx(s, { c: amt, i: a.rules ? 0 : -2 });
+      a.stage = 1; a.next = s.week + 6 + Math.floor(rng(hash(`${s.seed}:arcw:${a.id}`))() * 6);
+      s.toast = { title: "The fundraiser", text: `You raised $${amt}K.${a.rules ? " You made clear you don't trade votes for money. They smiled." : ""} Donors like this usually call back.`, tone: "good" }; return;
+    }
+    const opts = a.rules ? ["meet", "no"] : ["slip", "meet", "no"], pick = opts[choice];
+    a.pick = pick; a.stage = 3; a.next = s.week + 6 + Math.floor(rng(hash(`${s.seed}:arcw2:${a.id}`))() * 8);
+    a.risk = pick === "slip" ? 0.45 : pick === "meet" ? 0.15 : 0;
+    if (pick === "slip") { applyFx(s, { i: -5, c: 50 }); s.toast = { title: "One sentence", text: `It's in. ${a.name} sends $50K your way. Reporters do sometimes read these things.`, tone: "" }; }
+    else if (pick === "meet") { applyFx(s, { i: -2, h: 2 }); s.toast = { title: "An introduction", text: "You set up the meeting. Legal, and the kind of thing that shows up in stories.", tone: "" }; }
+    else { applyFx(s, { i: 3 }); s.toast = { title: "You said no", text: `${a.name} is not used to hearing no.`, tone: "" }; }
+    return;
+  }
+  if (a.kind === "rival") {
+    if (m.stage === 0) {
+      if (choice === 0) { applyFx(s, { h: 3, cl: -1 }); a.heat -= rng(hash(`${s.seed}:rv:${a.id}`))() < 0.5 ? 2 : 0; }
+      else if (choice === 1) { applyFx(s, { h: 6, b: 2, e: -3 }); a.heat -= 1; }
+      else a.heat += 1;
+      if (a.heat <= 0) { a.done = true; a.endWeek = s.week; a.outcome = "Backed off"; s.toast = { title: "Peace", text: `${a.name} says they're happy where they are.`, tone: "good" }; return; }
+      a.stage = 1; a.next = s.week + 5 + Math.floor(rng(hash(`${s.seed}:arcw:${a.id}`))() * 4);
+      s.toast = { title: "Noted", text: `${a.name} is still out there.`, tone: "" }; return;
+    }
+    if (choice === 0) { applyFx(s, { b: 1, a: -1, p: 1 }); a.heat -= 1; }
+    else if (choice === 1) { applyFx(s, { h: 4, a: 1 }); a.heat -= 1; }
+    else { applyFx(s, { b: -1 }); a.heat += 1; }
+    a.stage = 3; a.next = s.week + 5 + Math.floor(rng(hash(`${s.seed}:arcw2:${a.id}`))() * 4);
+    s.toast = { title: "Round two", text: "Now you wait to see if they file.", tone: "" };
+  }
+}
+export const storylines = (s) => (s.arcs || []);
 
 // ── Attributes, Football Manager style: 1 to 20 ──
 const to20 = (x) => Math.max(1, Math.min(20, Math.round(1 + x * 19)));
@@ -2628,7 +2962,7 @@ function orgWeek(s, r) {
   if (roleOf(s) === "P") return;
   const you = memberById[s.youId];
   for (const m of s.inbox) if ((m.kind === "orgmeet" || m.kind === "orgoffer" || m.kind === "foreign") && !m.done && m.week < s.week - 1) { m.done = true; m.choice = -1; if (m.kind === "orgmeet") orgState(s, m.org).rel -= 0.03; }
-  if (s.week - (s.orgAt ?? -99) < 2) return;
+  if (s.week - (s.orgAt ?? -99) < 3) return;
   // Foreign influence is rare and gets more likely as your profile grows.
   if (r() < 0.012 + s.profile / 8000) { const fs = ORGS.filter((o) => o.kind === "foreign"), o = fs[Math.floor(r() * fs.length)], k = Math.floor(r() * 3); s.orgAt = s.week;
     const offers = [
@@ -2638,7 +2972,7 @@ function orgWeek(s, r) {
     ][k];
     pushInbox(s, { kind: "foreign", org: o.id, k, amt: offers.amt, risk: offers.risk, from: o.name, title: offers.t, body: offers.b, choices: ["Accept", "Decline politely", "Decline and report it to the FBI"] });
     return; }
-  if (r() > 0.32 + s.profile / 300) return;
+  if (r() > 0.24 + s.profile / 400) return;
   const pool = ORGS.filter((o) => o.kind !== "foreign" && !(o.id === "emily" && you.g !== "F")).map((o) => ({ o, f: orgFit(s, o) + (orgState(s, o.id).rel) * 0.5 }));
   // Groups reach out to people they like, and to people they want to scare.
   const c = pool.filter((x) => x.f > 0.15 || (x.f < -0.2 && x.o.kind === "donor" && x.o.party === you.p)).sort(() => r() - 0.5)[0]; if (!c) return;
@@ -3933,3 +4267,5 @@ export function allRankings(s) {
   return rows;
 }
 export { CABINET };
+export const nameOfId = (id) => (memberById[id] ? nameOf(memberById[id]) : "A colleague");
+export const devTitle = (s, ev) => { const e = DEV.find((x) => x.id === ev); return e ? locTxt(s, e.t) : "A district matter"; };
