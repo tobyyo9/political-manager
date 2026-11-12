@@ -6,7 +6,7 @@ import RollCall from "./RollCall.jsx";
 import WeekTurn from "./Week.jsx";
 import { sfx, soundOn, setSound } from "./sfx.js";
 import Scene from "./Scene.jsx";
-import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight, Campaign, Court, Earnings, AfterOffice, RaceNight, Donors, GovPanel } from "./Pages.jsx";
+import { Face, Attrs, Capitol, Network, Office, WhiteHouse, Cabinet, Elections, ElectionNight, Campaign, Court, Earnings, AfterOffice, RaceNight, Donors, GovPanel, Record } from "./Pages.jsx";
 
 const { useState, useEffect, useMemo } = React;
 const KEY = "political-manager:v1";
@@ -64,11 +64,11 @@ export default function App() {
   const sceneMsg = scene && s.inbox.find((m) => m.id === scene);
   const finishScene = (out, mode) => { if (mode === "prep") { setS(S.prepScene(s, scene)); return; } setS(S.finishScene(s, scene, out)); setScene(null); };
   const desk = s.bills.filter((b) => b.stage === "desk").length;
-    const TABS = role === "G" ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["state", "Your state"], ["floor", "Bills"], ["wh", "White House"], ["court", "Court"], ["office", "Office"], ["elections", "Map"], ["capitol", "Capitol"], ["network", "Network"], ["rank", "Rankings"], ["news", "News"]]
-    : role === "C" ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["cabinet", "Your department"], ["wh", "White House"], ["court", "Court"], ["office", "Office"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["rank", "Rankings"], ["news", "News"]]
+    const TABS = role === "G" ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["state", "Your state"], ["floor", "Bills"], ["wh", "White House"], ["court", "Court"], ["office", "Office"], ["elections", "Map"], ["capitol", "Capitol"], ["network", "Network"], ["rank", "Rankings"], ["record", "Record"], ["news", "News"]]
+    : role === "C" ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["cabinet", "Your department"], ["wh", "White House"], ["court", "Court"], ["office", "Office"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["rank", "Rankings"], ["record", "Record"], ["news", "News"]]
     : role === "P"
-    ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["court", "Court"], ["office", "Office"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["news", "News"]]
-    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["campaign", "Campaign"], ["donors", "Donors & groups"], ["court", "Court"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["news", "News"]];
+    ? [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", `Bills${desk ? ` (${desk} on desk)` : ""}`], ["cabinet", "Cabinet"], ["court", "Court"], ["office", "Office"], ["elections", "Map"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["network", "Network"], ["record", "Record"], ["news", "News"]]
+    : [["inbox", `Inbox${open ? ` (${open})` : ""}`], ["floor", "Bills"], ["chamber", "Chamber"], ["capitol", "Capitol"], ["wh", "White House"], ["cabinet", "Cabinet"], ["campaign", "Campaign"], ["donors", "Donors & groups"], ["court", "Court"], ["network", "Network"], ["office", "Office"], ["you", role === "S" ? "Your state" : "Your seat"], ["elections", "Map"], ["groups", "Groups"], ["rank", "Rankings"], ["record", "Record"], ["news", "News"]];
 
   return (
     <div className="pm">
@@ -80,6 +80,7 @@ export default function App() {
         <div className="pm-meters">
           <Meter label={s.term > 1 ? `${S.ord(119 + s.term)} Congress` : "Week"} value={`${Math.min(s.week - (s.termStart || 0) + 1, S.WEEKS)} / ${S.WEEKS}`} sub={S.fmtDate(s.week)} />
           <Meter label="Hours left" value={s.hours} sub={`of ${S.HOURS}`} />
+          <Meter label="Energy" num={s.energy ?? 80} fmt={(v) => Math.round(v)} tone={(s.energy ?? 80) >= 30 ? "ok" : "no"} />
           {role === "G" ? <>
             <Meter label="Approval in your state" num={s.approval} fmt={(v) => `${Math.round(v)}%`} tone={s.approval >= 50 ? "ok" : "no"} />
             <Meter label="Scandal heat" num={(s.govCareer?.heat || 0) * 100} fmt={(v) => Math.round(v)} invert tone={(s.govCareer?.heat || 0) < 0.6 ? "ok" : "no"} />
@@ -130,6 +131,7 @@ export default function App() {
         {tab === "cabinet" && <Cabinet {...ctx} />}
         {tab === "elections" && <Elections {...ctx} />}
         {tab === "state" && <GovPanel s={s} real={real} />}
+        {tab === "record" && <Record s={s} real={real} />}
         {tab === "network" && <Network {...ctx} />}
         {tab === "office" && <Office {...ctx} />}
         {tab === "campaign" && <Campaign {...ctx} />}
@@ -139,7 +141,7 @@ export default function App() {
         {tab === "news" && <News {...ctx} />}
         <p className="pm-fine">Characters are fictionalized: names are altered, and personalities, words and actions in the game are invented. Voting records, districts and committee seats come from public data. House roster is the 2026 result as called by Nov 10, 2026: real winners in flipped and open seats, with a few close races shown with the current leader. Redrawn districts use estimated leans on the new lines.</p>
       </main>
-      {card && <MemberCard id={card} {...ctx} onClose={() => setCard(null)} />}
+      {card && (String(card).startsWith("org:") ? <OrgCard id={card.slice(4)} {...ctx} onClose={() => setCard(null)} /> : String(card).startsWith("cab:") ? <OfficialCard id={card.slice(4)} {...ctx} onClose={() => setCard(null)} /> : S.memberById[card]?.ch ? <MemberCard id={card} {...ctx} onClose={() => setCard(null)} /> : null)}
       {billOpen && <BillBoard id={billOpen} {...ctx} onClose={() => setBillOpen(null)} />}
       {toast && <Toast t={toast} onClose={() => setToast(null)} />}
       {turn && <WeekTurn key={turn.k} turn={turn} onDone={() => setTurn(null)} />}
@@ -420,14 +422,14 @@ function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene, real, setCa
         <h2 className="pm-h">Inbox</h2>
         {list.map((m) => (
           <article key={m.id} className={`pm-msg ${m.kind} ${m.done ? "done" : ""}`}>
-            <header><strong>{realize(m.from, [], real)}</strong><small>{S.fmtDate(m.week)}</small></header>
-            <h3>{real && m.rtitle ? m.rtitle : realize(m.title, [], real)}</h3>
+            <header><strong><Linked text={realize(m.from, [], real)} s={s} setCard={setCard} /></strong><small>{S.fmtDate(m.week)}</small></header>
+            <h3><Linked text={real && m.rtitle ? m.rtitle : realize(m.title, [], real)} s={s} setCard={setCard} /></h3>
             {m.kind === "scene" ? (
               <div className="pm-scene-row">
                 {m.done ? <p className="small">{m.skipped ? "Your staff handled it. Nothing memorable either way." : <>Coverage: <em>{m.result?.headline}</em></>}</p>
                   : <><button type="button" className="primary" onClick={() => setScene(m.id)}>Play the scene →</button><span className="muted small">If you don't, your staff handles it {S.fmtDate(m.due)}.</span></>}
               </div>
-            ) : <p>{real && m.rbody ? m.rbody : realize(m.body, [], real)}</p>}
+            ) : <p><Linked text={real && m.rbody ? m.rbody : realize(m.body, [], real)} s={s} setCard={setCard} /></p>}
             {m.choices && (
               <div className="pm-choices">
                 {m.choices.map((c, i) => <button key={c} type="button" className={`ghost ${m.choice === i ? "on" : ""}`} disabled={m.done} onClick={() => reply(m.id, i)}>{real && m.rchoices ? m.rchoices[i] : realize(c, [], real)}</button>)}
@@ -448,8 +450,8 @@ function Inbox({ s, act, setBillOpen, reply, role, setTab, setScene, real, setCa
         {(s.wire || []).length > 0 && <section className="pm-today"><h2 className="pm-h">Today's papers</h2>{s.wire.slice(0, 2).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={setCard} />)}<button type="button" className="linkbtn" onClick={() => setTab("news")}>All the coverage →</button></section>}
         <h2 className="pm-h">Spend your hours</h2>
         <div className="pm-actions">
-          {(role === "G" ? [["gbudget", "Push your budget through the legislature. Works better when you're popular."], ["gtour", "Every county, every diner. Raises your approval."], ["gmanage", "Audits, contracts, agency heads. Lowers scandal heat."], ...(s.govCareer && !s.govCareer.medicaid ? [["gmedicaid", "Expand Medicaid. Popular overall; your party's activists may disagree."]] : []), ...(S.presParty() !== s.govCareer?.me.p ? [["gsue", "Join a multistate lawsuit against the administration."]] : []), ["tv", "A national interview. Raises your profile."]] : role === "C" ? [["dpush", "Work the Hill for a bill in your department's lane. Moves votes; the President notices."], ["drule", "Write a regulation in your lane. It takes effect now; opponents may sue."], ["dtravel", "Get out of Washington. Raises your approval and profile."], ["dmanage", "Answer the inspector general, fix the bad contracts. Lowers your department's heat."], ["tv", "A Sunday show. Raises your profile; small risk of a gaffe."]] : role === "P" ? [["rally", "A rally in a swing state. Lifts approval; less each time if you overdo it."]] : [["district", role === "S" ? "Tour the state. Raises approval." : "Town halls and events back home. Raises approval."], ["funds", "Call time with big donors. Steady money, a few favors asked."], ["pacs", "Corporate PAC checks: the most money, with strings attached."], ["smalldollar", "Email your list. Small gifts; grows with your profile and base."], ["committee", "Hearings and markups. Builds your record and clout."], ["tv", "A cable hit. Raises your profile; small risk of a gaffe."], ...(role === "S" && !s.filOff ? [["nuke", "Make the case for passing bills with 51 votes. If you're Majority Leader, call the vote."]] : [])]).map(([a, d]) => (
-            <button key={a} type="button" className="pm-act" disabled={!S.can(s, a)} onClick={() => act(a)}><strong>{S.ACTIONS[a].label}</strong><span>{d}</span><small>{S.ACTIONS[a].hours} hours</small></button>
+          {[...(role === "G" ? [["gbudget", "Push your budget through the legislature. Works better when you're popular."], ["gtour", "Every county, every diner. Raises your approval."], ["gmanage", "Audits, contracts, agency heads. Lowers scandal heat."], ...(s.govCareer && !s.govCareer.medicaid ? [["gmedicaid", "Expand Medicaid. Popular overall; your party's activists may disagree."]] : []), ...(S.presParty() !== s.govCareer?.me.p ? [["gsue", "Join a multistate lawsuit against the administration."]] : []), ["tv", "A national interview. Raises your profile."]] : role === "C" ? [["dpush", "Work the Hill for a bill in your department's lane. Moves votes; the President notices."], ["drule", "Write a regulation in your lane. It takes effect now; opponents may sue."], ["dtravel", "Get out of Washington. Raises your approval and profile."], ["dmanage", "Answer the inspector general, fix the bad contracts. Lowers your department's heat."], ["tv", "A Sunday show. Raises your profile; small risk of a gaffe."]] : role === "P" ? [["rally", "A rally in a swing state. Lifts approval; less each time if you overdo it."]] : [["district", role === "S" ? "Tour the state. Raises approval." : "Town halls and events back home. Raises approval."], ["funds", "Call time with big donors. Steady money, a few favors asked."], ["pacs", "Corporate PAC checks: the most money, with strings attached."], ["smalldollar", "Email your list. Small gifts; grows with your profile and base."], ["committee", "Hearings and markups. Builds your record and clout."], ["tv", "A cable hit. Raises your profile; small risk of a gaffe."], ...(role === "S" && !s.filOff ? [["nuke", "Make the case for passing bills with 51 votes. If you're Majority Leader, call the vote."]] : [])]), ...((role === "H" || role === "S") ? [["casework", "Unstick a veteran's benefits, rush a passport. Small, steady approval that doesn't wear out fast."], ["oped", "Make an argument in print. Profile, with some risk."], ["recruit", "Find candidates for your party. Clout and loyalty with the committee."], ["codel", "A week of briefings abroad. Profile and foreign-policy chops; bad optics if things are on fire at home."]] : []), ...(role !== "P" ? [["study", "Briefing books and experts. Permanently better at policy arguments (up to +6)."], ["mediatrain", "A coach and a camera. Permanently better on TV (up to +6)."]] : []), ["family", "Rest. Restores your energy so you stop making tired mistakes."]].map(([a, d]) => (
+            <button key={a} type="button" className="pm-act" disabled={!S.can(s, a)} onClick={() => act(a)}><strong>{S.ACTIONS[a].label}</strong><span>{d}</span><small>{S.ACTIONS[a].hours} hours{S.grindMul(s, a) < 0.95 ? ` · pays ${Math.round(S.grindMul(s, a) * 100)}% now` : ""}</small></button>
           ))}
         </div>
         <p className="muted small">{role === "P" ? <>Call members and threaten vetoes from the Bills tab. Executive orders and firings are on the <button type="button" className="linkbtn" onClick={() => setTab("cabinet")}>Cabinet</button> tab. Invite members to the White House from the Chamber tab.</> : role === "S" ? "Meet colleagues from the Chamber tab. Holds, filibusters, whipping and cosponsoring are on the Bills tab. Oversight is on the Cabinet tab." : "Meet colleagues from the Chamber tab. Whip votes, cosponsor and introduce bills from the Bills tab."}</p>
@@ -669,6 +671,14 @@ function MemberCard({ id, s, real, act, onClose, setBillOpen, setCard }) {
             {(() => { const v = S.voiceOf(m), info = S.VOICES[v]; return <div className="wide"><dt>Personality</dt><dd><strong>{info.label}.</strong> {info.desc}</dd></div>; })()}
             <div><dt>Voting record</dt><dd>More conservative than {lr}% of the {m.ch === "H" ? "House" : "Senate"}{m.est || m.gen ? " (estimated)" : ""}</dd></div>
             <div><dt>{m.ch === "H" ? "District" : "State"} in 2024</dt><dd>{m.dem >= 50 ? `Democrats +${((m.dem - 50) * 2).toFixed(0)}` : `Republicans +${((50 - m.dem) * 2).toFixed(0)}`}</dd></div>
+            {(() => { const rows = S.allRankings(s), me2 = rows.find((x) => x.m.id === id), n = rows.length; const lean = m.ch === "H" ? S.houseLean(m) : S.LEAN[m.st]; const mine = S.activeBills(s).filter((b) => b.sponsor === id).length, laws = s.bills.filter((b) => b.sponsor === id && b.stage === "law").length;
+              return <>
+                <div><dt>Age</dt><dd>{m.born ? S.yearOf() - m.born : "?"}</dd></div>
+                <div><dt>Power ranking</dt><dd>{me2 ? `#${me2.a_score} of ${n}` : "unranked"}</dd></div>
+                <div><dt>{m.ch === "H" ? "District" : "State"} after 2026</dt><dd>{lean == null ? "?" : `${lean >= 0 ? "D" : "R"}+${Math.abs(lean).toFixed(0)} vs. the nation`}</dd></div>
+                <div><dt>This Congress</dt><dd>{mine} bill{mine === 1 ? "" : "s"} in play, {laws} law{laws === 1 ? "" : "s"}</dd></div>
+                {me2 && <div className="wide"><dt>Ratings</dt><dd className="pm-ratings">{[["Influence", me2.influence], ["Legislating", me2.legis], ["Popularity", me2.pop], ["Profile", me2.profile], ["Integrity", me2.integrity]].map(([l, v]) => <span key={l}><small>{l}</small><b>{Math.round(v)}</b><i><em style={{ width: `${Math.max(0, Math.min(100, v))}%` }} /></i></span>)}</dd></div>}
+              </>; })()}
             <div><dt>Feels pressure from</dt><dd>{m.vuln > 0.6 ? "The general election" : m.prisk > 0.5 ? "A primary" : "Neither much"}</dd></div>
             {m.comm?.length > 0 && <div className="wide"><dt>Committees</dt><dd>{m.comm.map((c) => c.n + (c.title ? ` (${c.title}${c.exp ? ", expected" : ""})` : c.exp ? " (expected)" : "")).join(", ")}</dd></div>}
           </dl>
@@ -788,6 +798,63 @@ function Rankings({ s, real, setCard }) {
   );
 }
 // Articles are written with the altered names; with real names on, swap them back for the people involved.
+// Names in text become links to their card: members, Cabinet officers, the President, and outside groups.
+let LK = null, LK_KEY = "";
+function linkMap(s) {
+  const key = S.MEMBERS.map((m) => m.sl).join("|") + (s.cab || []).map((c) => c.sl).join("|") + S.PRES_M.sl;
+  if (key === LK_KEY && LK) return LK;
+  const map = new Map(); const add = (name, id, min = 5) => { if (name && name.length >= min && !map.has(name)) map.set(name, id); };
+  for (const m of S.MEMBERS) if (m.ch && !m.vacant) { add(`${m.sf} ${m.sl}`, m.id); add(`${m.first} ${m.last}`, m.id); }
+  for (const c of s.cab || []) if (!c.vacant) { add(`${c.sf} ${c.sl}`, "cab:" + c.id); add(`${c.first} ${c.last}`, "cab:" + c.id); }
+  add(`${S.PRES_M.sf} ${S.PRES_M.sl}`, "cab:POTUS"); add(`${S.PRES_M.first} ${S.PRES_M.last}`, "cab:POTUS");
+  for (const o of S.ORGS) { add(o.name, "org:" + o.id, 3); add(o.real, "org:" + o.id, 3); add(o.real?.replace(/ \(.*\)$/, ""), "org:" + o.id); }
+  const keys = [...map.keys()].sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  LK = { re: new RegExp(`(${keys.join("|")})`, "g"), map }; LK_KEY = key; return LK;
+}
+export function Linked({ text, s, setCard }) {
+  if (!text || !setCard) return text || null;
+  const { re, map } = linkMap(s), out = []; let last = 0, m; re.lastIndex = 0;
+  while ((m = re.exec(text))) { const id = map.get(m[0]); if (!id) continue; if (m.index > last) out.push(text.slice(last, m.index)); out.push(<button key={m.index} type="button" className="pm-namelink" onClick={(e) => { e.stopPropagation(); setCard(id); }}>{m[0]}</button>); last = m.index + m[0].length; }
+  if (!out.length) return text; if (last < text.length) out.push(text.slice(last)); return <>{out}</>;
+}
+function OrgCard({ id, s, real, onClose, setTab }) {
+  const o = S.orgById[id]; const row = (S.orgRows(s) || []).find((x) => x.o?.id === id); const st = row?.st || {};
+  const lean = o.x <= -0.6 ? "far left" : o.x <= -0.25 ? "left" : o.x < 0.25 ? "center" : o.x < 0.6 ? "right" : "far right";
+  const KIND = { pac: "PAC and industry money", donor: "Megadonor", org: "Movement group", foreign: "Influence from abroad" };
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className="modal pm-card" role="dialog" aria-modal="true" aria-label={real ? o.real : o.name} onClick={(e) => e.stopPropagation()}>
+        <div className={`pm-cardtop ${o.party === "D" ? "d" : o.party === "R" ? "r" : ""}`}><div><h2>{real ? o.real : o.name}</h2><p>{KIND[o.kind]} · {o.party === "any" ? "works both parties" : o.party === "D" ? "works with Democrats" : "works with Republicans"} · sits on the {lean}</p></div></div>
+        <div className="modal-body">
+          <p>{o.note}</p>
+          <dl className="pm-facts">
+            <div><dt>Money</dt><dd>{o.budget ? `Up to about $${o.budget}K a cycle for a member it likes` : "Endorsements, volunteers and pressure, not checks"}</dd></div>
+            {o.cares && <div className="wide"><dt>Cares about</dt><dd>{Object.entries(o.cares).map(([pid, d]) => `${d > 0 ? "for" : "against"} ${S.byId[pid]?.name || pid}`).join("; ")}</dd></div>}
+            <div><dt>With you</dt><dd>{st.given ? `Has given you $${st.given}K. ` : ""}{st.met ? `Met ${st.met} time${st.met > 1 ? "s" : ""}. ` : ""}{st.cut ? "You cut ties." : `Relationship ${(st.rel || 0) > 0.3 ? "warm" : (st.rel || 0) < -0.3 ? "hostile" : "neutral"}.`}{row?.fit != null ? ` Fit with your record: ${row.fit > 0.3 ? "good" : row.fit < -0.3 ? "poor" : "mixed"}.` : ""}</dd></div>
+          </dl>
+          <div className="bill-actions"><button type="button" className="ghost" onClick={() => { onClose(); setTab && setTab("donors"); }}>Open Donors &amp; groups →</button><button type="button" className="ghost" onClick={onClose}>Close</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function OfficialCard({ id, s, real, onClose }) {
+  const pres = id === "POTUS", c = pres ? null : s.cab.find((x) => x.id === id), m = pres ? S.PRES_M : { id: "cab" + c.last, first: c.first, last: c.last, sf: c.sf, sl: c.sl, g: c.g, born: c.born, p: S.presParty(), look: c.tone != null ? { skin: c.tone } : undefined };
+  const name = real ? `${m.first} ${m.last}` : `${m.sf} ${m.sl}`;
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className="modal pm-card" role="dialog" aria-modal="true" aria-label={name} onClick={(e) => e.stopPropagation()}>
+        <div className={`pm-cardtop ${S.presParty() === "D" ? "d" : "r"}`}><Face m={m} size={84} /><div><h2>{pres ? `President ${name}` : name}</h2><p>{pres ? `${S.presParty() === "D" ? "Democrat" : "Republican"} · approval ${Math.round(s.presApproval)}%` : `${c.post} · ${S.presParty() === "D" ? "Democrat" : "Republican"}`}{m.born ? ` · born ${m.born}` : ""}</p></div></div>
+        <div className="modal-body">
+          {pres ? <dl className="pm-facts"><div><dt>Approval</dt><dd>{Math.round(s.presApproval)}%</dd></div><div><dt>Scandal heat</dt><dd>{Math.round((s.presHeat || 0) * 100)}/100</dd></div><div><dt>Your rapport</dt><dd>{S.RAPPORT(s.rapport || 0)}</dd></div><div><dt>Laws signed this Congress</dt><dd>{s.laws.length}</dd></div></dl>
+            : <dl className="pm-facts"><div><dt>Scandal heat</dt><dd>{Math.round(c.heat * 100)}/100{c.heat >= 0.7 ? " · under fire" : ""}</dd></div><div><dt>Loyalty to the President</dt><dd>{Math.round((c.loyal || 0.5) * 100)}/100</dd></div>
+              {c.area?.length > 0 && <div className="wide"><dt>Fights over</dt><dd>{c.area.map((x) => S.byId[x]?.name).filter(Boolean).join(", ")}</dd></div>}<div className="wide"><dt>Notes</dt><dd>{c.note}</dd></div></dl>}
+          <div className="bill-actions"><button type="button" className="ghost" onClick={onClose}>Close</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
 const newsText = (n, real) => (real && n.rt ? n.rt : realize(n.text, n.ids || [], real));
 // Every invented member name maps back to the real one: one pass with a cached pattern (rebuilt when the roster changes).
 let RX = null, RX_KEY = "";
@@ -807,7 +874,7 @@ function Article({ a, s, real, setCard, big }) {
   return (
     <article className={`pm-art ${big ? "big" : ""}`}>
       <header><span className="pm-art-outlet">{a.outlet}</span><small>{S.fmtDate(a.week)}</small></header>
-      <h3>{a.headline}</h3>
+      <h3><Linked text={a.headline} s={s} setCard={setCard} /></h3>
       {a.quote && <div className="pm-art-body">{m && <button type="button" className="linkless" onClick={() => m.id !== "POTUS" && setCard(m.id)} title={S.nameOf(m, real)}><Face m={m} size={big ? 64 : 44} /></button>}<blockquote>"{a.quote}"{a.dek && <small> {a.dek}</small>}</blockquote></div>}
       {a.voice && <span className="pm-voice">{S.VOICES[a.voice]?.label}</span>}
     </article>
@@ -821,7 +888,7 @@ function News({ s, real, setCard }) {
         <div className="pm-masthead"><span>Washington's paper of record · {S.fmtDate(s.week)}</span><strong>The Capitol Ledger</strong><span>All the politics that's fit to print</span></div>
         {wire.length ? <div className="pm-papers">{wire.slice(0, 24).map((a, i) => <Article key={i} a={a} s={s} real={real} setCard={setCard} big={i === 0} />)}</div> : <p className="muted">Nothing yet. Give it a week.</p>}
       </section>
-      <aside className="stack"><h2 className="pm-h">The wire</h2><ul className="pm-news">{s.news.slice(0, 60).map((n, i) => <li key={i} className={n.tone}><small>{S.fmtDate(n.week)}</small>{newsText(n, real)}</li>)}</ul></aside>
+      <aside className="stack"><h2 className="pm-h">The wire</h2><ul className="pm-news">{s.news.slice(0, 60).map((n, i) => <li key={i} className={n.tone}><small>{S.fmtDate(n.week)}</small><Linked text={newsText(n, real)} s={s} setCard={setCard} /></li>)}</ul></aside>
     </div>
   );
 }

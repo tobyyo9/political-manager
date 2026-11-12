@@ -702,3 +702,29 @@ export function GovPanel({ s, real }) {
     </div>
   );
 }
+
+// ── Your record: achievements, the offices you've held, and the moments that defined your career ──
+export function Record({ s, real }) {
+  const A = S.achievements(s), got = A.filter((a) => a.week != null), you = S.memberById[s.youId];
+  const laws = (s.lawsMine || 0) + s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length;
+  const lawList = s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law");
+  return (
+    <div className="stack">
+      <h2 className="pm-h">Your record</h2>
+      <section className="panel pm-gov-grid">
+        <div><span className="stat-label">Achievements</span><b>{got.length} / {A.length}</b><small>unlocked</small></div>
+        <div><span className="stat-label">Laws you wrote</span><b>{laws}</b><small>across your career</small></div>
+        <div><span className="stat-label">Votes cast</span><b>{s.votesCast.length}</b><small>{s.votesCast.filter((v) => !v.partyLine).length} against your party</small></div>
+        <div><span className="stat-label">Terms completed</span><b>{(s.career || []).length}</b><small>{(s.career || []).map((c) => c.year).join(", ") || "first term"}</small></div>
+        <div><span className="stat-label">Lifetime earnings</span><b>${Math.round(S.earnTotal(s)).toLocaleString()}K</b><small>salary, investments and more</small></div>
+        <div><span className="stat-label">Integrity</span><b>{Math.round(s.integrity)}</b><small>{s.integrity >= 80 ? "a reputation for straight dealing" : s.integrity >= 55 ? "about average for Washington" : "people check their wallets"}</small></div>
+      </section>
+      <section className="panel"><h3>Achievements</h3>
+        <ul className="pm-ach">{A.map((a) => <li key={a.id} className={a.week != null ? "got" : ""}><b>{a.week != null ? "★" : "☆"} {a.title}</b><small>{a.desc}{a.week != null ? ` · ${S.fmtDate(a.week)}` : ""}</small></li>)}</ul>
+      </section>
+      {(s.career || []).length > 0 && <section className="panel"><h3>Career</h3><ol className="pm-cal">{s.career.map((c, i) => <li key={i}><b>{c.year}</b> {({ H: "House", S: "Senate", P: "President", C: "Cabinet", G: "Governor" })[c.role] || ""} · {({ general: "re-elected", term: "term completed", higher: "won a Senate seat", pres: "won the presidency", gov: "won the governorship", cabinet: "served in the Cabinet", governor: "governed", midterm: "midterms" })[c.kind] || c.kind}{c.margin != null ? ` (${c.margin > 0 ? "+" : ""}${c.margin})` : ""}{c.laws ? ` · ${c.laws} law${c.laws === 1 ? "" : "s"}` : ""}</li>)}</ol></section>}
+      {lawList.length > 0 && <section className="panel"><h3>Your laws this Congress</h3><ul className="small">{lawList.map((b) => <li key={b.id}>{S.byId[b.pid].name}</li>)}</ul></section>}
+      <section className="panel"><h3>Moments</h3>{(s.moments || []).length ? <ul className="small pm-moments">{[...s.moments].reverse().slice(0, 40).map((m, i) => <li key={i}><small>{S.fmtDate(m.week)}</small> {m.text}</li>)}</ul> : <p className="muted small">Nothing yet. Make some news.</p>}</section>
+    </div>
+  );
+}

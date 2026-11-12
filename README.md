@@ -251,3 +251,11 @@ The Senate and the President as full characters, committees and amendments as pl
 - Fixed: bill actions no longer crash if the bill died or passed in the meantime; hiring and riders check their targets.
 - Fixed party assumptions that only held while Republicans had the White House and Democrats had Congress: who files impeachment articles, which party loads riders onto must-pass bills (and only if it runs a chamber), who trades riders away, what the President demands, veto-override loyalty, rider odds for members, lobbying odds with the White House, and how a confirmation vote plays with your base.
 - The House majority now counts members actually serving, so empty seats don't hand control to the wrong party.
+
+## Twenty-eighth pass: clickable names, your record, and real trade-offs
+
+- **Click any name.** Members, Cabinet officials, the President and outside groups are links wherever they show up: inbox senders, message text, headlines, the wire. A member card shows age, party, seat, power ranking, how they voted this Congress and their ratings. A group card shows what it is, which party it works with, how much it gives and your history with it.
+- **Veto overrides keep their votes.** An override now starts from how each member voted on passage. Members of the President's party who voted yes switch to no about one time in eight on a partisan bill and one in twenty-five otherwise, and very few no votes become yes. That puts swings at a handful of votes, in line with real overrides (the 2020 defense bill went from 335 to 322 in the House).
+- **Your record.** A new Record tab shows 27 achievements, the laws you wrote, votes cast and against your party, terms served, earnings and memorable moments.
+- **Harder.** Repeating the same money or clout action within three weeks pays less each time. Energy drops as you work long weeks and recovers on light ones; run it down and you lose hours next week, and tired members make more gaffes. Your office costs money every week and clout fades if you don't use it. Inbox choices no longer have a free answer: playing it safe costs your base, staying out costs profile, and saying no to leadership costs loyalty.
+- **More places to spend hours:** casework, op-eds, policy study, media training, recruiting candidates, congressional trips abroad, and time with family (which restores energy).
