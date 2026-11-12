@@ -378,7 +378,19 @@ export function grindMul(s, act) { if (!GRIND.has(act)) return 1; const n = (s.g
 const tired = (s) => (s.energy ?? 80) < 30;
 // Actions that work on a bill need one that still exists and is still moving.
 const BILL_ACTS = new Set(["whip", "cosponsor", "wh", "hold", "filibuster", "privileged", "petition", "call", "push", "threat"]);
-export function doAction(s0, act, arg = {}) {
+export function doAction(s0, act, arg = {}) { const s = doAction0(s0, act, arg); if (s !== s0) softCaps(s, s0); return s; }
+// Donors max out: every dollar raised this cycle makes the next one harder to get.
+export const donorFatigue = (s, k = 1) => 1 / (1 + (s.cycleRaised || 0) / ((roleOf(s) === "S" ? 2700 : 900) * k));
+function raised(s, amt) { s.cycleRaised = (s.cycleRaised || 0) + amt; }
+// What your seat will bear: approval far above the district's natural level gets much harder to gain.
+export function apCap(s) { const you = memberById[s.youId]; if (!you) return 95; const nat = 50 + (you.own - 50) * 0.5; return clamp(nat + 14 + (you.own - 50) * 0.2, 55, 85); }
+function softCaps(s, s0) {
+  if (!isMem(roleOf(s)) || !memberById[s.youId]) return;
+  const squeeze = (key, cap, k = 0.3) => { const a0 = s0[key], a = s[key]; if (a > a0 && a > cap) { const free = Math.max(0, cap - a0); s[key] = a0 + Math.min(a - a0, free) + Math.max(0, a - a0 - free) * k; } };
+  squeeze("approval", apCap(s)); squeeze("baseApproval", 85);
+  if (s.clout > s0.clout && s0.clout > 50) s.clout = s0.clout + (s.clout - s0.clout) * clamp((130 - s0.clout) / 80, 0.1, 1);
+}
+function doAction0(s0, act, arg = {}) {
   const s = structuredClone(s0);
   if (!can(s, act)) return s;
   if (BILL_ACTS.has(act) && !s.bills.some((b) => b.id === arg.bill && !b.dead && b.stage !== "law")) return s;
@@ -401,7 +413,7 @@ export function doAction(s0, act, arg = {}) {
   if (act === "privileged") { const b = s.bills.find((x) => x.id === arg.bill); if (b && PRIVILEGED[b.pid] && !b.dead && b.stage === "committee" && !b.privileged) { b.privileged = b.discharged = b.marked = true; b.floorWeek = s.week + 2; s.profile = clamp(s.profile + 2, 0, 100);
     pushNews(s, `${nameOf(you)} uses ${PRIVILEGED[b.pid]} to force a vote on ${byId[b.pid].name}. Leaders can't stop it.`, "event");
     s.toast = { title: "You forced a vote", text: `Under ${PRIVILEGED[b.pid]}, the vote comes in about two weeks${you.ch === "S" ? ", and it needs only 51 in the Senate: no filibuster" : ""}. Everyone has to go on the record.`, tone: "good" }; } else s.hours += ACTIONS.privileged.hours; }
-  if (act === "funds") { const amt = Math.round((30 + s.profile * 0.6 + you.seniority * 1.5 + r() * 40) * (you.chair ? 1.4 : 1) * mul); s.cash += amt; addMoney(s, "large", amt); s.energy = (s.energy ?? 80) - 2; s.toast = { title: "Call time", text: `Hours on the phone with people who expect to be called back. You raised $${amt}K.${worn}`, tone: "good" }; }
+  if (act === "funds") { const fat = donorFatigue(s), amt = Math.round((30 + s.profile * 0.6 + you.seniority * 1.5 + r() * 40) * (you.chair ? 1.4 : 1) * mul * fat); s.cash += amt; addMoney(s, "large", amt); raised(s, amt); s.energy = (s.energy ?? 80) - 2; s.toast = { title: "Call time", text: `Hours on the phone with people who expect to be called back. You raised $${amt}K.${fat < 0.6 ? " Most of your donors have already given this cycle." : ""}${worn}`, tone: "good" }; }
   if (act === "district") { const g = (1.2 + r() * 1.3) * clamp(1 - (s.approval - 45) / 30, 0.1, 1) * mul; /* each visit matters less once people already like you */ s.approval = clamp(s.approval + g, 5, 95); s.baseApproval = clamp(s.baseApproval + g * 0.5, 5, 95); s.toast = { title: "Back home", text: `Town halls and ribbon cuttings. Approval at home is up ${g.toFixed(1)} points.${worn}`, tone: "good" }; }
   if (act === "tv") {
     const gaffe = r() < (tired(s) ? 0.25 : 0.1);
@@ -450,8 +462,8 @@ export function doAction(s0, act, arg = {}) {
   if (act === "pacs") {
     if (s.pledge) { s.hours += ACTIONS.pacs.hours; s.toast = { title: "You took the pledge", text: "No corporate PAC money. That's the point.", tone: "" }; return s; }
     const sec = you.fund?.sectors.filter((g) => g !== "labor" && g !== "lowtax") || [], g = sec.length ? sec[Math.floor(r() * sec.length)] : "chamber";
-    const amt = Math.round((70 + s.clout * 1.6 + (you.chair ? 100 : 0) + (you.lead?.length ? 120 : 0) + r() * 50) * mul); s.integrity -= 1;
-    s.cash += amt; addMoney(s, "pac", amt); s.ties = s.ties || {}; s.ties[g] = (s.ties[g] || 0) + amt;
+    const amt = Math.round((70 + s.clout * 1.6 + (you.chair ? 100 : 0) + (you.lead?.length ? 120 : 0) + r() * 50) * mul * donorFatigue(s)); s.integrity -= 1;
+    s.cash += amt; addMoney(s, "pac", amt); raised(s, amt); s.ties = s.ties || {}; s.ties[g] = (s.ties[g] || 0) + amt;
     const left = you.p === "D" && /Progressive/.test(you.faction || ""), pop = you.p === "R" && /Freedom|MAGA/.test(you.faction || "");
     if (left || pop) s.baseApproval = clamp(s.baseApproval - 2.5, 5, 95);
     pushNews(s, `${titleOf(you)} ${nameOf(you)} holds a fundraiser with ${groupById[g]?.name || "industry"} PACs.`);
@@ -459,8 +471,8 @@ export function doAction(s0, act, arg = {}) {
   }
   if (act === "smalldollar") {
     const v = voiceOf(you), loud = v === "firebrand" || v === "showboat" || v === "devotee";
-    const amt = Math.round((15 + s.profile * 1.3 + Math.max(0, s.baseApproval - 55) * 1.6) * (loud ? 1.5 : 1) * (0.8 + r() * 0.4) * mul);
-    s.cash += amt; addMoney(s, "small", amt); s.baseApproval = clamp(s.baseApproval + 0.6, 5, 95);
+    const amt = Math.round((15 + s.profile * 1.3 + Math.max(0, s.baseApproval - 55) * 1.6) * (loud ? 1.5 : 1) * (0.8 + r() * 0.4) * mul * donorFatigue(s, 1.6));
+    s.cash += amt; addMoney(s, "small", amt); raised(s, amt); s.baseApproval = clamp(s.baseApproval + 0.6, 5, 95);
     s.toast = { title: `$${amt}K from ${Math.round(amt * 1000 / 34).toLocaleString()} donors`, text: `An average gift of about $34. ${amt < 60 ? "A bigger national profile would raise more." : "Your list is working."} Nobody on it will ask you for a favor.`, tone: "good" };
   }
   if (act === "hold") {
@@ -488,7 +500,7 @@ export function doAction(s0, act, arg = {}) {
   if (act === "study") { s.train = s.train || {}; if ((s.train.policy || 0) >= 6) { s.hours += ACTIONS.study.hours; s.toast = { title: "You know the material", text: "Nothing left to learn from briefing books. The rest comes from doing.", tone: "" }; return s; } s.train.policy = (s.train.policy || 0) + 1; s.toast = { title: "Briefing books", text: `Policy +1 (now +${s.train.policy}). Better odds when you argue the details in hearings, debates and markups.`, tone: "good" }; return s; }
   if (act === "mediatrain") { s.train = s.train || {}; if ((s.train.media || 0) >= 6) { s.hours += ACTIONS.mediatrain.hours; s.toast = { title: "Camera-ready", text: "Your coach has nothing left to teach you.", tone: "" }; return s; } s.train.media = (s.train.media || 0) + 1; s.toast = { title: "Media training", text: `Media +1 (now +${s.train.media}). Fewer gaffes, better clips.`, tone: "good" }; return s; }
   if (act === "recruit") { s.loyalty += 0.5 * mul; s.clout += 1 * mul; s.recruits = (s.recruits || 0) + 1; s.toast = { title: "Candidate recruitment", text: `Coffee with a sheriff, a school board member and a veteran thinking about running. The campaign committee is grateful.${worn}`, tone: "good" }; return s; }
-  if (act === "family") { s.energy = clamp((s.energy ?? 80) + 18, 0, 100); s.rested = (s.rested || 0) + ACTIONS.family.hours; s.toast = { title: "Home for dinner", text: "No calls, no cameras. You feel human again.", tone: "good" }; return s; }
+  if (act === "family") { s.energy = clamp((s.energy ?? 80) + 12, 0, 100); s.rested = (s.rested || 0) + ACTIONS.family.hours; s.toast = { title: "Home for dinner", text: "No calls, no cameras. You feel human again.", tone: "good" }; return s; }
   if (act === "codel") { const bad = s.inbox.some((m) => !m.done && /crisis/.test(m.kind)) || (s.mp || []).some((x) => x.lapsed); s.profile = clamp(s.profile + 3, 0, 100); s.train = s.train || {}; s.train.foreign = Math.min(6, (s.train.foreign || 0) + 1);
     if (bad || r() < 0.2) { s.approval = clamp(s.approval - 2, 5, 95); s.toast = { title: "Bad optics", text: bad ? "You were abroad while things were on fire at home. The local paper noticed." : "A photo from the trip makes it look like a vacation. It wasn't, mostly.", tone: "bad" }; }
     else s.toast = { title: "A week abroad", text: "Briefings with generals and prime ministers. You come back knowing more than most of your colleagues about the region.", tone: "good" }; return s; }
@@ -557,7 +569,8 @@ function wantOf(s, m, r) {
 }
 
 // ── Inbox choices ──
-export function answer(s0, msgId, choice) {
+export function answer(s0, msgId, choice) { const s = answer0(s0, msgId, choice); if (s !== s0) softCaps(s, s0); return s; }
+function answer0(s0, msgId, choice) {
   const s = structuredClone(s0);
   const m = s.inbox.find((x) => x.id === msgId);
   if (!m || m.done) return s;
@@ -648,12 +661,12 @@ export function advance(s0) {
     if (f.status === "broken") { const m = memberById[f.to]; s.rel[f.to] = clamp((s.rel[f.to] || 0) - (m.t.label === "grudge" ? 0.6 : 0.3), -1, 1); s.integrity -= 6; s.clout -= 2; pushNews(s, `${nameOf(m)} says ${nameOf(you)} broke a promise on ${byId[f.pid].name}.`, "bad"); }
   }
   // Your body keeps score: a full week drains you, a lighter one (or time with family) brings you back.
-  { const used = HOURS - s.hours - (s.rested || 0); s.energy = clamp((s.energy ?? 80) + 11 - used * 0.32, 0, 100); s.rested = 0;
-    if (isMem(roleOf(s))) { const staff = (s.staff || []).reduce((a, x) => a + (x.skill || 10), 0); s.cash = Math.max(0, s.cash - Math.round(3 + staff * 0.06)); if (s.clout > 30) s.clout -= 0.08; } }
+  { const used = HOURS - s.hours - (s.rested || 0); s.energy = clamp((s.energy ?? 80) + 9 - used * 0.3, 0, 100); s.rested = 0;
+    if (isMem(roleOf(s))) { const staff = (s.staff || []).reduce((a, x) => a + (x.skill || 10), 0); s.cash = Math.max(0, s.cash - Math.round(3 + staff * 0.06 + Math.max(0, s.cash - 500) * 0.004)); if (s.clout > 60) s.clout -= s.clout * 0.01; else if (s.clout > 30) s.clout -= 0.08; } }
   const exhausted = (s.energy ?? 80) < 12;
   s.week++; s.hours = exhausted ? Math.round(HOURS * 0.6) : HOURS;
   s.theme = weekTheme(s);
-  if (isRecess(s)) { s.energy = clamp((s.energy ?? 80) + 4, 0, 100); for (const b of s.bills) if (!b.dead && b.stage === "committee" && b.floorWeek <= s.week) b.floorWeek = s.week + 1; }
+  if (isRecess(s)) { s.energy = clamp((s.energy ?? 80) + 2, 0, 100); for (const b of s.bills) if (!b.dead && b.stage === "committee" && b.floorWeek <= s.week) b.floorWeek = s.week + 1; }
   if (exhausted) { s.energy += 15; pushInbox(s, { kind: "staff", from: "Your chief of staff", done: true, title: "You're running on empty", body: "You've worked every hour for weeks. This week you're slower, you miss a meeting, and your scheduler blocked off time whether you like it or not. Leave some hours unspent, or spend a few with your family." }); }
   const r = R(s, "week");
   // 3. The world moves.
@@ -665,7 +678,7 @@ export function advance(s0) {
     if (r() < 0.5) pushNews(s, `Economy: growth ${s.econ.growth.toFixed(1)}%, inflation ${s.econ.inflation.toFixed(1)}%, unemployment ${s.econ.jobs.toFixed(1)}%. The President's approval is ${Math.round(s.presApproval)}%.`);
   }
   if (roleOf(s) === "P") s.approval = s.presApproval;
-  else s.approval = clamp(s.approval + (50 + (you.own - 50) * 0.5 - s.approval) * 0.02, 5, 95);  // drifts back toward the seat's natural level
+  else { s.approval = clamp(s.approval + (50 + (you.own - 50) * 0.5 - s.approval) * 0.03, 5, 95); const cap = apCap(s); if (isMem(roleOf(s)) && s.approval > cap) s.approval -= (s.approval - cap) * 0.08; }  // drifts back toward the seat's natural level, faster when above what the seat will bear
   // 4. Other members act: new bills, leadership scheduling.
   if (r() < 0.55) {
     const party = r() < 0.72 ? "D" : "R";
@@ -715,6 +728,7 @@ export function advance(s0) {
   if (!s.theme && isMem(roleOf(s)) && s.inbox.some((m) => m.week === s.week && (m.kind === "event" || m.kind === "crisis" || m.kind === "crisisreact"))) s.theme = "crisis";
   if (!isMem(roleOf(s))) s.theme = null;
   flushBrief(s);
+  softCaps(s, s0);
   achWeek(s);
   s.events = events;
   return s;
@@ -2004,7 +2018,7 @@ export function nextCongress(s0) {
   const w = electWorld(s);
   const fundedWon = fundedSeats.filter((id) => memberById[id]?.p === mineP).length;
   s.term++; s.termStart = Math.ceil((731 * (s.term - 1)) / 7); s.debateBonus = 0; s.week = s.termStart; s.hours = HOURS; s.over = false; s.result = null; s.primary = null; s.rivals = 0; s.endorsed = false;
-  s.lawsMine = (s.lawsMine || 0) + s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length; s.bills = []; s.youOwe = []; s.promises = []; s.flags.punished = s.flags.rewarded = false; s.inbox = s.inbox.filter((m) => !m.done).slice(0, 0); s.trend = [];
+  s.lawsMine = (s.lawsMine || 0) + s.bills.filter((b) => b.sponsor === s.youId && b.stage === "law").length; s.bills = []; s.youOwe = []; s.promises = []; s.flags.punished = s.flags.rewarded = false; s.inbox = s.inbox.filter((m) => !m.done).slice(0, 0); s.trend = []; s.cycleRaised = 0;
   s.noms = s.noms.filter((n) => !n.done); s.imp = s.imp.filter((i) => !i.done); s.runFor = null;
   s.clout += 4; s.profile = clamp(s.profile + 3, 0, 100); s.approval = clamp(s.approval * 0.6 + 52 * 0.4, 5, 95);
   const you = memberById[s.youId]; derive(you); keep(s, you);
@@ -2183,7 +2197,8 @@ function sceneWeek(s, r) {
 }
 export function prepScene(s0, id) { const s = structuredClone(s0); const m = s.inbox.find((x) => x.id === id); if (m && !m.prep && s.hours >= 4) { m.prep = true; s.hours -= 4; } return s; }
 // Apply a played scene. out: { score (-6..6), base, swing, profile, rel: {id: d}, tags }
-export function finishScene(s0, id, out) {
+export function finishScene(s0, id, out) { const s = finishScene0(s0, id, out); if (s !== s0) softCaps(s, s0); return s; }
+function finishScene0(s0, id, out) {
   const s = structuredClone(s0); const m = s.inbox.find((x) => x.id === id); if (!m || m.done) return s;
   m.done = true; m.result = { score: out.score, headline: out.headline };
   const sc = m.scene, role = roleOf(s), you = memberById[s.youId], k = clamp(out.score / 6, -1, 1);
