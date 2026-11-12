@@ -370,9 +370,12 @@ export function whipCount(s, b, chamber = "H") {
 // ── Your actions ──
 export function can(s, act) { const a = ACTIONS[act]; return !s.over && s.hours >= a.hours && (!a.role || a.role.includes(roleOf(s))); }
 function spend(s, act) { s.hours -= ACTIONS[act].hours; }
+// Actions that work on a bill need one that still exists and is still moving.
+const BILL_ACTS = new Set(["whip", "cosponsor", "wh", "hold", "filibuster", "privileged", "petition", "call", "push", "threat"]);
 export function doAction(s0, act, arg = {}) {
   const s = structuredClone(s0);
   if (!can(s, act)) return s;
+  if (BILL_ACTS.has(act) && !s.bills.some((b) => b.id === arg.bill && !b.dead && b.stage !== "law")) return s;
   const you = memberById[s.youId], r = R(s, act);
   spend(s, act);
   if (act === "meet") {
@@ -411,7 +414,7 @@ export function doAction(s0, act, arg = {}) {
   if (act === "wh") {
     const b = s.bills.find((x) => x.id === arg.bill), info = billInfo(b.pid, b.party);
     const firm = Math.abs(PRESIDENT_STANCE[b.pid] ?? 0);                    // he barely moves where he has a fixed view
-    const odds = clamp(0.25 + s.clout / 250 + s.profile / 300 + 0.3 * s.rapport + (you.p === "R" ? 0.2 : 0) - 0.25 * firm, 0.05, 0.85);
+    const odds = clamp(0.25 + s.clout / 250 + s.profile / 300 + 0.3 * s.rapport + (you.p === PP ? 0.2 : 0) - 0.25 * firm, 0.05, 0.85);
     const x = r();
     if (x < odds * 0.5) { b.wh = (b.wh || 0) + 0.3 * (1 - 0.7 * firm); s.rapport = clamp(s.rapport + 0.2, -1, 1); s.toast = { title: "The President is charmed", text: presPron(`The meeting runs long. He tells reporters ${byId[b.pid].name} "could be a very good bill."`), tone: "good" }; }
     else if (x < odds) { b.wh = (b.wh || 0) + 0.15 * (1 - 0.7 * firm); s.rapport = clamp(s.rapport + 0.08, -1, 1); s.toast = { title: presPron("He's open to it"), text: presPron("No commitment, but his staff says he is listening."), tone: "good" }; }
@@ -420,7 +423,8 @@ export function doAction(s0, act, arg = {}) {
     void info;
   }
   if (act === "hire") {
-    const i = s.staff.findIndex((x) => x.role === arg.role), old = s.staff[i], cost = hireCost(old);
+    const i = s.staff.findIndex((x) => x.role === arg.role), old = s.staff[i]; if (!old) { s.hours += ACTIONS.hire.hours; return s; }
+    const cost = hireCost(old);
     if (s.cash < cost) { s.hours += ACTIONS.hire.hours; s.toast = { title: "Not enough money", text: `A better ${old.title.toLowerCase()} costs about $${cost}K a year.`, tone: "bad" }; return s; }
     const first = PF[Math.floor(r() * PF.length)], last = PL[Math.floor(r() * PL.length)];
     s.staff[i] = { ...old, first, last, name: `${first} ${last}`, skill: Math.min(20, old.skill + 2 + Math.floor(r() * 4)), loyalty: 8 + Math.floor(r() * 8), exp: 4 + Math.floor(r() * 14) };
@@ -428,10 +432,10 @@ export function doAction(s0, act, arg = {}) {
     s.toast = { title: `New ${old.title.toLowerCase()}`, text: `${old.name} is out; ${first} ${last} is in. Better at the job. The rest of the staff noticed how fast it happened.`, tone: "good" };
   }
   if (act === "rider" || act === "strip") {
-    const mp = s.mp.find((x) => x.id === arg.mp), role = roleOf(s);
-    const odds = clamp((role === "P" ? 0.45 + (s.presApproval - 40) / 60 : (you.p === "D" ? 0.45 : 0.15) + s.clout / 200 + (onComm(you, "HSAP") || onComm(you, "SSAP") ? 0.2 : 0)), 0.05, 0.9);
+    const mp = s.mp.find((x) => x.id === arg.mp), role = roleOf(s); if (!mp || !byId[arg.pid]) { s.hours += ACTIONS[act].hours; return s; }
+    const odds = clamp((role === "P" ? 0.45 + (s.presApproval - 40) / 60 : (you.p === (you.ch === "S" ? senMaj() : houseMaj()) ? 0.45 : 0.15) + s.clout / 200 + (onComm(you, "HSAP") || onComm(you, "SSAP") ? 0.2 : 0)), 0.05, 0.9);
     if (r() < odds) {
-      if (act === "rider") { mp.riders.push({ pid: arg.pid, p: role === "P" ? "R" : you.p, by: role === "P" ? "the President" : nameOf(you), you: true }); s.profile = clamp(s.profile + 2, 0, 100); s.baseApproval = clamp(s.baseApproval + 1.5, 5, 99); pushNews(s, `${role === "P" ? "The President" : nameOf(you)} gets ${byId[arg.pid].name} attached to ${mp.name.toLowerCase()}.`); s.toast = { title: "Rider attached", text: `${byId[arg.pid].name} now rides on ${mp.name.toLowerCase()}. Watch the Senate count: every rider costs votes on the other side.`, tone: "good" }; }
+      if (act === "rider") { mp.riders.push({ pid: arg.pid, p: role === "P" ? PP : you.p, by: role === "P" ? "the President" : nameOf(you), you: true }); s.profile = clamp(s.profile + 2, 0, 100); s.baseApproval = clamp(s.baseApproval + 1.5, 5, 99); pushNews(s, `${role === "P" ? "The President" : nameOf(you)} gets ${byId[arg.pid].name} attached to ${mp.name.toLowerCase()}.`); s.toast = { title: "Rider attached", text: `${byId[arg.pid].name} now rides on ${mp.name.toLowerCase()}. Watch the Senate count: every rider costs votes on the other side.`, tone: "good" }; }
       else { const x = mp.riders.splice(mp.riders.findIndex((y) => y.pid === arg.pid), 1)[0]; pushNews(s, `${byId[x.pid].name} comes off ${mp.name.toLowerCase()}.`); s.toast = { title: "Rider stripped", text: `${byId[x.pid].name} is out. ${x.p === (role === "P" ? "R" : you.p) ? "Your own side is annoyed." : "The other side is furious."}`, tone: "good" }; if (isMem(role) && x.p === you.p) s.loyalty -= 1; }
     } else s.toast = { title: "Leadership said no", text: act === "rider" ? "The appropriators wouldn't take it. Build clout, or get a seat on Appropriations." : "The rider stays. Its backers had the votes in the room.", tone: "" };
   }
@@ -1216,20 +1220,20 @@ function execTick(s, r) {
     else { const key = `${s.term}:${c.id}`; tries[key] = (tries[key] || 0) + 1;
       pushNews(s, `The Senate rejects ${n.first} ${n.last} for ${c.post}, ${v.yes}-${v.no}.${tries[key] >= 2 && role !== "P" ? ` An acting ${c.short} chief will serve for the rest of this Congress.` : ""}`, "bad");
       if (role === "P") { s.presApproval -= 0.8; s.clout -= 4; vacate(s, c, "still"); c.vacant = true; } else if (tries[key] < 2) s.vacQ.push({ post: c.id, week: s.week + 3 }); }
-    if (role === "S") { const mine = v.votes[s.youId]; s.rapport = clamp(s.rapport + (mine ? 0.1 : -0.08), -1, 1); s.baseApproval = clamp(s.baseApproval + ((mine ? 1 : -1) * (you.p === "R" ? 1 : -1)) * 1.2, 5, 95); }
+    if (role === "S") { const mine = v.votes[s.youId]; s.rapport = clamp(s.rapport + (mine ? 0.1 : -0.08), -1, 1); s.baseApproval = clamp(s.baseApproval + ((mine ? 1 : -1) * (you.p === PP ? 1 : -1)) * 1.2, 5, 95); }
   }
   // Impeachment: the House needs a majority; the Senate needs 67 to remove.
   const hot = s.cab.find((c) => !c.vacant && !c.imp && c.heat >= 0.92);
   if (hot && HOUSE.filter((m) => m.p !== PP).length >= 218) {
     hot.imp = true; s.imp.push({ id: `i${s.week}`, who: hot.id, stage: "house", week: s.week + 3 });
-    pushNews(s, `House Democrats file articles of impeachment against ${hot.post} ${cabName(hot)}.`, "event");
+    pushNews(s, `House ${PP === "R" ? "Democrats" : "Republicans"} file articles of impeachment against ${hot.post} ${cabName(hot)}.`, "event");
     if (role === "H") pushInbox(s, { kind: "impeach", imp: `i${s.week}`, from: "Your legislative director", title: `Impeach ${cabName(hot)}?`, body: `The floor vote is ${fmtDate(s.week + 3)}. ${you.p === "D" ? "Leadership wants every Democrat. Your swing-seat colleagues are nervous." : "Your party will vote no. A yes would make national news."}`, choices: ["Vote to impeach", "Vote no"] });
   }
   if (s.presHeat >= 0.9 && s.presApproval < 36 && HOUSE.filter((m) => m.p !== PP).length >= 218 && !s.imp.some((i) => i.who === "POTUS")) {
     s.imp.push({ id: `i${s.week}p`, who: "POTUS", stage: "house", week: s.week + 4 });
-    pushNews(s, "House Democrats introduce articles of impeachment against the President.", "event");
+    pushNews(s, `House ${PP === "R" ? "Democrats" : "Republicans"} introduce articles of impeachment against the President.`, "event");
     if (role === "H") pushInbox(s, { kind: "impeach", imp: `i${s.week}p`, from: "Your legislative director", title: "Impeach the President?", body: `The floor vote is ${fmtDate(s.week + 4)}. This will define your career either way.`, choices: ["Vote to impeach", "Vote no"] });
-    if (role === "P") pushInbox(s, { kind: "staff", from: "White House Counsel", title: "They're coming for you", body: "House Democrats filed articles of impeachment. The House will pass them. Removal takes 67 senators, so the fight is for Republican senators: keep them close and keep your numbers up." });
+    if (role === "P") pushInbox(s, { kind: "staff", from: "White House Counsel", title: "They're coming for you", body: `House ${PP === "R" ? "Democrats" : "Republicans"} filed articles of impeachment. The House will pass them. Removal takes 67 senators, so the fight is for ${PP === "R" ? "Republican" : "Democratic"} senators: keep them close and keep your numbers up.` });
   }
   for (const i of s.imp) {
     if (i.done || i.week > s.week) continue;
@@ -1447,7 +1451,7 @@ const riderL = (s, m, rd) => lean(m, rd.pid, { sponsor: rd.p, kind: "passage", s
 function mpLean(s, m, mp, over = false) {
   const base = mp.kind === "funding" ? 0.28 : m.p === "D" ? 0.3 : 0.12;
   const rs = mp.riders.length ? mp.riders.reduce((a, rd) => a + riderL(s, m, rd), 0) / mp.riders.length : 0;
-  return base + 0.55 * rs + (over && m.p === "R" ? -0.12 : 0) + (mp.lapsed ? 0.06 * mp.lapsed : 0) + ((mp.deals || {})[m.id] || 0);
+  return base + 0.55 * rs + (over && m.p === PP ? -0.12 : 0) + (mp.lapsed ? 0.06 * mp.lapsed : 0) + ((mp.deals || {})[m.id] || 0);
 }
 export function mpCount(s, mp, ch) { const ms = ch === "H" ? HOUSE : SENATE; let yes = 0; for (const m of ms) if (sig(14 * mpLean(s, m, mp)) > 0.5) yes++; return { yes, no: ms.length - yes }; }
 function mpVote(s, mp, ch, over = false) {
@@ -1462,8 +1466,10 @@ function mpWeek(s, r) {
     if (mp.stage === "law") continue;
     if (mp.stage === "waiting" && s.week >= mp.open) {
       mp.stage = "open";
-      for (const pid of D_RIDERS[mp.kind].filter((p) => !s.laws.includes(p)).sort(() => r() - 0.5).slice(0, 2)) mp.riders.push({ pid, p: "D", by: "Democratic leaders" });
-      pushNews(s, `${mp.name}: the deadline is ${fmtDate(mp.deadline)}. ${mp.riders.length ? `Democrats attach ${mp.riders.map((x) => byId[x.pid].name).join(" and ")}.` : "Democrats want it clean."}`, "event");
+      // The party out of the White House loads its priorities onto the must-pass bill, if it runs a chamber.
+      const opp = PP === "R" ? "D" : "R", oppRuns = houseMaj() === opp || senMaj() === opp, RID = opp === "D" ? D_RIDERS : R_RIDERS;
+      if (oppRuns) for (const pid of (RID[mp.kind] || []).filter((p) => !s.laws.includes(p) && byId[p]).sort(() => r() - 0.5).slice(0, 2)) mp.riders.push({ pid, p: opp, by: `${opp === "D" ? "Democratic" : "Republican"} leaders` });
+      pushNews(s, `${mp.name}: the deadline is ${fmtDate(mp.deadline)}. ${mp.riders.length ? `${PP === "R" ? "Democrats" : "Republicans"} attach ${mp.riders.map((x) => byId[x.pid].name).join(" and ")}.` : `${PP === "R" ? "Democrats" : "Republicans"} want it clean.`}`, "event");
       if (isMem(role)) pushInbox(s, { kind: "staff", from: "Your legislative director", title: `${mp.name} due ${fmtDate(mp.deadline)}`, body: mp.kind === "funding" ? "Miss it and the government shuts down. Riders are the fight: each side tries to attach policy the other has to swallow. You can add or strip riders from the Bills tab." : "Miss the X-date and the Treasury can't pay every bill. Republicans want spending cuts attached; Democrats want it clean.", done: true });
       if (role === "P") pushInbox(s, { kind: "staff", from: "OMB", title: `${mp.name} due ${fmtDate(mp.deadline)}`, body: `Democrats attached ${mp.riders.map((x) => byId[x.pid].name).join(", ") || "nothing yet"}. You can demand riders of your own or demand theirs come off. If it reaches you with a rider you can't accept, you can veto, and own the shutdown.`, done: true });
       continue;
@@ -1471,11 +1477,12 @@ function mpWeek(s, r) {
     if (mp.stage === "desk") { const m = s.inbox.find((x) => x.kind === "mpdesk" && x.mp === mp.id && !x.done); if (m && m.week < s.week) { m.done = true; m.choice = mpPresSigns(s, mp) ? 0 : 1; if (m.choice === 0) mpSettle(s, mp, true); else { mp.blame = "pres"; s.vetoes++; mpSettle(s, mp, false); } } continue; }
     if (mp.stage !== "open" && mp.stage !== "lapsed") continue;
     // The President demands a rider of his own (when you aren't him).
-    if (isMem(role) && !mp.presAsked && mp.riders.length && r() < 0.35) { mp.presAsked = true; const pid = R_RIDERS[mp.kind].find((p) => !mp.riders.some((x) => x.pid === p)); if (pid) { presPost(s, `The President says he won't sign ${mp.name.toLowerCase()} without ${byId[pid].name}.`, pid); mp.demand = pid; } }
+    if (isMem(role) && !mp.presAsked && mp.riders.length && r() < 0.35) { mp.presAsked = true; const pid = ((PP === "R" ? R_RIDERS : D_RIDERS)[mp.kind] || []).find((p) => !mp.riders.some((x) => x.pid === p) && byId[p]); if (pid) { presPost(s, `The President says he won't sign ${mp.name.toLowerCase()} without ${byId[pid].name}.`, pid); mp.demand = pid; } }
     // Leaders trade riders away when the Senate count is short.
     const sc = mpCount(s, mp, "S");
-    if (sc.yes < 60 && !mp.lock) { const d = mp.riders.findIndex((x) => x.p === "D"); if (d >= 0 && r() < 0.4) { const x = mp.riders.splice(d, 1)[0]; pushNews(s, `To win Republican votes, Democratic leaders drop ${byId[x.pid].name} from ${mp.name.toLowerCase()}.`); }
-      else if (d < 0 && mp.kind === "debt" && r() < 0.3) { const pid = R_RIDERS.debt.find((p) => !mp.riders.some((x) => x.pid === p)); if (pid) { mp.riders.push({ pid, p: "R", by: "Senate deal" }); pushNews(s, `Senate deal: ${mp.name.toLowerCase()} now carries ${byId[pid].name}.`); } } }
+    const opp = PP === "R" ? "D" : "R", oppN = opp === "D" ? "Democratic" : "Republican", ppN = PP === "R" ? "Republican" : "Democratic";
+    if (sc.yes < 60 && !mp.lock) { const d = mp.riders.findIndex((x) => x.p === opp); if (d >= 0 && r() < 0.4) { const x = mp.riders.splice(d, 1)[0]; pushNews(s, `To win ${ppN} votes, ${oppN} leaders drop ${byId[x.pid].name} from ${mp.name.toLowerCase()}.`); }
+      else if (d < 0 && mp.kind === "debt" && r() < 0.3) { const pid = ((PP === "R" ? R_RIDERS : D_RIDERS).debt || []).find((p) => !mp.riders.some((x) => x.pid === p) && byId[p]); if (pid) { mp.riders.push({ pid, p: PP, by: "Senate deal" }); pushNews(s, `Senate deal: ${mp.name.toLowerCase()} now carries ${byId[pid].name}.`); } } }
     if (mp.lock && s.week >= mp.lock) mp.lock = null;
     if (s.week < mp.deadline - 1 && mp.stage === "open") continue;
     // The vote.
@@ -2236,7 +2243,7 @@ function backersWin(s, m, year) {
 // War Powers and National Emergencies Act resolutions are privileged: any member can force a vote,
 // and in the Senate they need only a simple majority.
 export const PRIVILEGED = { war_powers: "the War Powers Resolution", tariff_repeal: "the National Emergencies Act" };
-const houseMaj = () => (HOUSE.filter((m) => m.p === "D").length >= 218 ? "D" : "R");
+const houseMaj = () => { const d = HOUSE.filter((m) => m.p === "D").length; return d * 2 > HOUSE.length ? "D" : d * 2 < HOUSE.length ? "R" : PP; };   // with empty seats, a majority of those serving
 export const canPetition = (s, b) => roleOf(s) === "H" && !b.dead && b.stage === "committee" && b.origin === "H" && !b.discharged && !(s.petitions || []).some((p) => p.bill === b.id && p.status !== "off")
   && (b.party !== houseMaj() || (!b.marked && b.floorWeek - s.week > 4));
 export const petitionOf = (s, b) => (s.petitions || []).find((p) => p.bill === b.id && p.status !== "off");
