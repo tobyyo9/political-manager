@@ -383,14 +383,14 @@ export function doAction(s0, act, arg = {}) { const s = doAction0(s0, act, arg);
 export const donorFatigue = (s, k = 1) => 1 / (1 + (s.cycleRaised || 0) / ((roleOf(s) === "S" ? 2700 : 900) * k));
 function raised(s, amt) { s.cycleRaised = (s.cycleRaised || 0) + amt; }
 // No hard ceiling, but every point above what your seat naturally gives you is harder to win than the last.
-export function apNat(s) { const you = memberById[s.youId]; if (!you) return 60; return 55 + (you.own - 50) * 0.5; }
+export function apNat(s) { const you = memberById[s.youId]; if (!you || !isMem(roleOf(s)) || you.own == null) return 58; return 55 + (you.own - 50) * 0.5; }
 const easeAt = (x, nat, k) => Math.exp(-Math.max(0, x - nat) / k);
 export const apEase = (s) => easeAt(s.approval, apNat(s), 14);
 function softCaps(s, s0) {
-  if (!isMem(roleOf(s)) || !memberById[s.youId]) return;
+  if (!memberById[s.youId] || roleOf(s) === "P") return;
   const squeeze = (key, nat, k) => { const a0 = s0[key], a = s[key]; if (a > a0) s[key] = a0 + (a - a0) * easeAt(a0, nat, k); };
   squeeze("approval", apNat(s), 14); squeeze("baseApproval", 65, 15);
-  if (s.clout > s0.clout && s0.clout > 50) s.clout = s0.clout + (s.clout - s0.clout) * clamp((130 - s0.clout) / 80, 0.1, 1);
+  if (isMem(roleOf(s)) && s.clout > s0.clout && s0.clout > 50) s.clout = s0.clout + (s.clout - s0.clout) * clamp((130 - s0.clout) / 80, 0.1, 1);
 }
 function doAction0(s0, act, arg = {}) {
   const s = structuredClone(s0);
@@ -702,6 +702,8 @@ export function advance(s0) {
   (s.trend = s.trend || []).push({ w: s.week, a: Math.round(s.approval), b: Math.round(s.baseApproval), p: Math.round(s.presApproval), m: Math.round(s.mood * 10) / 10 });
   // 5. Your inbox.
   if (isMem(roleOf(s))) { inbox(s, r); districtWeek(s, R(s, "dist")); arcWeek(s, R(s, "arc")); }
+  else roleEventsWeek(s, R(s, "rdev"));
+  devPending(s); knockWeek(s, R(s, "knock"));
   lawWeek(s); productivityCheck(s);
   if (!inCab) { sceneWeek(s, R(s, "scene")); donorWeek(s, R(s, "donor")); campaignWeek(s, R(s, "camp")); moneyWeek(s, R(s, "money")); }
   if (isMem(roleOf(s)) || s.week % 2 === 0) petitionWeek(s, R(s, "pet"));
@@ -1251,10 +1253,16 @@ function weekTheme(s) {
 
 // ── District events: many of them, each once a term, and some come back weeks later ──
 const COAST = new Set(["FL", "TX", "LA", "MS", "AL", "GA", "SC", "NC"]), WEST = new Set(["CA", "OR", "WA", "CO", "NM", "AZ", "MT", "ID", "NV", "UT"]), FARM = new Set(["IA", "NE", "KS", "ND", "SD", "MN", "WI", "IL", "IN", "OH", "MO", "AR", "OK"]), BORDER = new Set(["TX", "AZ", "NM", "CA"]);
-const FX_LABEL = { a: "approval at home", b: "your base", c: "money", cl: "clout", i: "integrity", p: "profile", e: "energy", l: "loyalty", lg: "record", rv: "primary threat" };
+const FX_LABEL = { a: "approval", b: "your base", c: "money", cl: "clout", i: "integrity", p: "profile", e: "energy", l: "loyalty", lg: "record", rv: "primary threat", tr: "the President's trust", ht: "scandal heat", lgc: "legacy", g: "growth", inf: "inflation" };
 function applyFx(s, fx = {}) {
+  const role = roleOf(s);
   if (fx.h) s.hours = Math.max(0, s.hours - fx.h);
-  if (fx.a) s.approval = clamp(s.approval + fx.a, 5, 95);
+  if (fx.a) { if (role === "P") { s.presApproval = clamp(s.presApproval + fx.a * 0.5, 25, 60); s.approval = s.presApproval; } else s.approval = clamp(s.approval + fx.a, 5, 95); }
+  if (fx.tr && s.cabCareer) s.cabCareer.trust = clamp(s.cabCareer.trust + fx.tr, -1, 1);
+  if (fx.ht) { if (role === "P") s.presHeat = clamp((s.presHeat || 0) + fx.ht, 0, 1); else if (role === "G" && s.govCareer) s.govCareer.heat = clamp(s.govCareer.heat + fx.ht, 0, 1); else if (role === "C") { const c = (s.cab || []).find((x) => x.you); if (c) c.heat = clamp(c.heat + fx.ht, 0, 1); } }
+  if (fx.lgc) { if (role === "G" && s.govCareer) s.govCareer.legacy += fx.lgc; else s.legacy = (s.legacy || 0) + fx.lgc; }
+  if (fx.g) s.econ.growth = clamp(s.econ.growth + fx.g, -3, 4.5);
+  if (fx.inf) s.econ.inflation = clamp(s.econ.inflation + fx.inf, 1, 8);
   if (fx.b) s.baseApproval = clamp(s.baseApproval + fx.b, 5, 95);
   if (fx.c) { s.cash = Math.max(0, s.cash + fx.c); if (fx.c > 0) addMoney(s, "large", fx.c); }
   if (fx.cl) s.clout = Math.max(0, s.clout + fx.cl);
@@ -1266,7 +1274,7 @@ function applyFx(s, fx = {}) {
   if (fx.rv) s.rivals = Math.max(0, (s.rivals || 0) + fx.rv);
 }
 export function fxLine(fx = {}) {
-  const parts = Object.entries(fx).filter(([k, v]) => FX_LABEL[k] && v).map(([k, v]) => k === "c" ? `${v > 0 ? "+" : "−"}$${Math.abs(v)}K` : k === "rv" ? (v > 0 ? "a stronger primary threat" : "a weaker primary threat") : `${FX_LABEL[k]} ${v > 0 ? "+" : "−"}${Math.abs(Math.round(v * 10) / 10)}`);
+  const parts = Object.entries(fx).filter(([k, v]) => FX_LABEL[k] && v).map(([k, v]) => k === "c" ? `${v > 0 ? "+" : "−"}$${Math.abs(v)}K` : k === "rv" ? (v > 0 ? "a stronger primary threat" : "a weaker primary threat") : k === "tr" || k === "ht" ? `${FX_LABEL[k]} ${v > 0 ? "+" : "−"}${Math.round(Math.abs(v) * 100)}` : k === "g" || k === "inf" ? `${FX_LABEL[k]} ${v > 0 ? "+" : "−"}${Math.abs(v)} pts` : `${FX_LABEL[k]} ${v > 0 ? "+" : "−"}${Math.abs(Math.round(v * 10) / 10)}`);
   return parts.length ? ` (${parts.join(", ")})` : "";
 }
 const addFx = (a, b) => { const o = { ...a }; for (const [k, v] of Object.entries(b || {})) o[k] = (o[k] || 0) + v; return o; };
@@ -1388,30 +1396,220 @@ const DEV = [
       { t: "Go to the vigil and stay off policy (4 hours)", fx: { h: 4, a: 2, e: -4 }, m: "You hugged a lot of people. It was not about politics." },
       { t: "Talk about mental health and security", fx: (s, you) => ({ b: you.p === "R" ? 1 : -2 }), m: "Some say it's a dodge." }] },
 ];
+// The President's week: crises and choices that land on the Resolute Desk.
+const PDEV = [
+  { id: "p-hurricane", t: "A hurricane hits the Gulf Coast", b: "A Category 4 storm made landfall overnight. Two million people are without power, and the governors want to see you.",
+    c: [{ t: "Fly down and tour the damage (10 hours)", fx: { h: 10, a: 3, e: -5 }, m: "You walked the flooded streets with the governors. It's the picture people will remember." },
+      { t: "Approve aid fast and run it from the Situation Room (4 hours)", fx: { h: 4, a: 1, lgc: 1 }, m: "Disaster declarations went out in hours.", next: { in: 4, odds: 0.65, good: ["The recovery is going well", "Power is back and aid is flowing. Local officials are praising the federal response.", { a: 2 }], bad: ["The recovery is stalling", "Trailers haven't arrived and the local news is full of people still waiting.", { a: -3, ht: 0.05 }] } },
+      { t: "Keep your schedule and let FEMA handle it", fx: { a: -2 }, m: "You kept your schedule.", next: { in: 3, odds: 0.3, good: ["Nobody noticed you stayed away", "The response went fine without you.", {}], bad: ["Where was the President?", "Cable news is running split screens of you at an event and families on rooftops.", { a: -4 }] } }] },
+  { id: "p-port", t: "A port strike shuts the East Coast", b: "Dockworkers walked out from Maine to Texas. Retailers say shelves will be empty in two weeks.",
+    c: [{ t: "Order them back to work under Taft-Hartley", fx: (s, you) => ({ a: 1, b: you.p === "D" ? -3 : 1, g: 0.05 }), m: "The ports reopen. Labor leaders call it a betrayal." },
+      { t: "Lean on both sides privately (6 hours)", fx: { h: 6 }, m: "You call the union president and the shipping lines yourself.", next: { in: 2, odds: 0.6, good: ["A deal at the ports", "The strike ended with a contract both sides can live with. You get the credit.", { a: 2, lgc: 1 }], bad: ["The port strike drags on", "Talks collapsed and prices are rising.", { a: -2, g: -0.15, inf: 0.1 }] } },
+      { t: "Stay out of it", fx: { g: -0.2, inf: 0.1 }, m: "You say it's between the parties.", next: { in: 3, odds: 0.4, good: ["The port strike ended on its own", "They settled. Nobody remembers where you stood.", {}], bad: ["Empty shelves", "Stores are running short and voters blame Washington, which means you.", { a: -3 }] } }] },
+  { id: "p-family", t: "A relative's business deal is in the news", b: "A newspaper reports that a member of your family took money from a company with business before the government.",
+    c: [{ t: "Defend them", fx: { b: 1, a: -1.5, ht: 0.06 }, m: "You call the story a smear." },
+      { t: "Have them step back from the business", fx: { i: 2, b: -0.5 }, m: "They resign from the board. Your base thinks you caved." },
+      { t: "Say nothing", fx: {}, m: "No comment from the White House.", next: { in: 5, odds: 0.4, good: ["The family story faded", "The news moved on.", {}], bad: ["More reporting on your family", "A second story with emails. The House wants documents.", { a: -2, ht: 0.1 }] } }] },
+  { id: "p-insult", t: "A foreign leader insults you on camera", b: "At a press conference abroad, a foreign leader mocked you by name. It's everywhere.",
+    c: [{ t: "Hit back hard", fx: { b: 2, a: -1 }, m: "Your base loves it. Diplomats wince." },
+      { t: "Laugh it off", fx: { a: 1, b: -0.5 }, m: "A light answer that plays well with most people." },
+      { t: "Cancel the upcoming summit", fx: { b: 1, lgc: -1 }, m: "The summit is off. So is the deal that was supposed to come out of it." }] },
+  { id: "p-hotmic", t: "A hot mic at a fundraiser", b: "Audio leaked of you mocking voters in a state you need. It's the top story.",
+    c: [{ t: "Apologize", fx: { a: -0.5, b: -1 }, m: "A real apology. Your base hates apologizing." },
+      { t: "Double down", fx: { b: 1.5, a: -2 }, m: "You say you meant it." },
+      { t: "Say nothing", fx: {}, m: "You let it run.", next: { in: 2, odds: 0.5, good: ["The hot mic story faded", "Something else took over the news.", {}], bad: ["The hot mic is in an ad", "Your opponents put the audio in an ad.", { a: -2 }] } }] },
+  { id: "p-gas", t: "Gas prices jump 40 cents", b: "Refinery outages and a cold snap pushed gas up 40 cents in two weeks.",
+    c: [{ t: "Release oil from the strategic reserve", fx: { a: 1, inf: -0.05 }, m: "Prices ease a little. Critics say you're raiding the reserve for politics." },
+      { t: "Blame the oil companies", fx: { b: 1, p: 1 }, m: "It plays well with your base. Prices don't move." },
+      { t: "Say prices will come down on their own", fx: { a: -1 }, m: "Economists agree with you. Drivers do not.", next: { in: 6, odds: 0.6, good: ["Gas prices came back down", "You were right, and nobody remembers that you said it.", {}], bad: ["Gas prices stayed high", "It's the first thing voters mention to pollsters.", { a: -2 }] } }] },
+  { id: "p-fed", t: "The Fed won't cut rates", b: "The Federal Reserve held rates steady again. Mortgage rates are near 7%.",
+    c: [{ t: "Attack the Fed chair publicly", fx: { b: 1, a: -0.5, inf: 0.05 }, m: "Markets wobble. Your base loves it." },
+      { t: "Stay quiet", fx: { b: -0.5 }, m: "You respect the Fed's independence. Your base wanted a fight." },
+      { t: "Call the chair privately (2 hours)", fx: { h: 2 }, m: "A polite call.", roll: { odds: 0.35, good: ["They cut at the next meeting. You don't say a word about it.", { a: 1.5, g: 0.1 }], bad: ["The call leaked, and it looks like pressure.", { a: -1, ht: 0.03 }] } }] },
+  { id: "p-pardon", t: "An old friend asks for a pardon", b: "A longtime supporter was convicted of fraud. His family is asking you to pardon him.",
+    c: [{ t: "Grant it", fx: { b: 0.5, i: -6, a: -2, ht: 0.05 }, m: "The pardon goes out on a Friday night. It doesn't stay quiet." },
+      { t: "Refuse", fx: { i: 2, b: -0.5 }, m: "You tell him no. He tells everyone." },
+      { t: "Say you'll look at it later", fx: {}, m: "You put it off.", next: { in: 10, odds: 0.5, good: ["The pardon request went away", "His lawyers stopped calling.", {}], bad: ["The pardon request leaked", "Reporters know he asked and you didn't say no.", { a: -1, i: -2 }] } }] },
+  { id: "p-leak", t: "A classified memo leaks", b: "A memo about a military operation is on the front page. The Pentagon is furious.",
+    c: [{ t: "Order a hunt for the leaker", fx: { b: 1, a: -0.5, i: -1 }, m: "Reporters' phone records are subpoenaed. Press groups are alarmed." },
+      { t: "Downplay it", fx: { a: -0.5 }, m: "You say there's nothing new in it." },
+      { t: "Declassify the rest and get ahead of it (4 hours)", fx: { h: 4, i: 2, p: 1 }, m: "You release the full context.", roll: { odds: 0.6, good: ["The full context helped you.", { a: 1 }], bad: ["The full context was worse.", { a: -2 }] } }] },
+  { id: "p-youth", t: "Young voters are turning on you", b: "A new poll has you down 20 points with voters under 30.",
+    c: [{ t: "Do a podcast tour (8 hours)", fx: { h: 8, p: 2, e: -3 }, m: "Three long-form shows in a week.", roll: { odds: 0.55, good: ["One clip went very viral, the good way.", { a: 2 }], bad: ["You seemed out of touch, and the clips say so.", { a: -1 }] } },
+      { t: "Announce a student debt plan", fx: (s, you) => ({ a: 1, b: you.p === "D" ? 1 : -2, inf: 0.05 }), m: "It's popular with young people and expensive." },
+      { t: "Ignore it", fx: {}, m: "Young voters don't turn out anyway, your pollster says." }] },
+  { id: "p-shooting", t: "A mass shooting at a school", b: "Nine people were killed at a high school. The country is watching what you do.",
+    c: [{ t: "Push Congress for gun legislation", fx: (s, you) => ({ b: you.p === "D" ? 2 : -3, a: 1, p: 1 }), m: "You go to the Rose Garden with families of victims." },
+      { t: "Visit the community (6 hours)", fx: { h: 6, a: 2, e: -4 }, m: "You spent the day with families. No speech." },
+      { t: "Order a review of school security", fx: (s, you) => ({ b: you.p === "R" ? 1 : -1 }), m: "A commission. Critics call it a dodge." }] },
+];
+// A Cabinet secretary's week.
+const CDEV = [
+  { id: "c-ig", t: "The inspector general found waste", b: "A new report says your department wasted $400 million on a contract that never delivered.",
+    c: [{ t: "Accept the findings and fix it (6 hours)", fx: { h: 6, ht: -0.08, tr: -0.03, a: 1 }, m: "You own it. The White House wishes you'd been quieter." },
+      { t: "Fight the report", fx: { ht: 0.08, tr: 0.04 }, m: "You call the IG biased. The President likes the fight." },
+      { t: "Fire the official responsible", fx: { ht: -0.04, a: 0.5, i: -1 }, m: "A head rolls. Some say it was the wrong head." }] },
+  { id: "c-whistle", t: "A whistleblower in your department", b: "A career official filed a complaint saying political appointees rigged a grant program.",
+    c: [{ t: "Protect them and investigate", fx: { i: 3, tr: -0.08, ht: -0.03 }, m: "The White House counsel calls you, unhappy." },
+      { t: "Investigate the leak instead", fx: { tr: 0.05, ht: 0.08, a: -1 }, m: "The story becomes about retaliation." },
+      { t: "Meet with them yourself (4 hours)", fx: { h: 4 }, m: "You hear them out.", next: { in: 6, odds: 0.55, good: ["The whistleblower complaint was resolved", "You fixed the program quietly. The complaint was closed.", { ht: -0.05, i: 1 }], bad: ["The whistleblower went public", "They testified to Congress anyway, and named you.", { ht: 0.1, a: -2 }] } }] },
+  { id: "c-industry", t: "An industry wants your rule delayed", b: "The biggest companies you regulate want your new rule pushed back two years. Their lobbyists are close to the White House.",
+    c: [{ t: "Delay it", fx: { tr: 0.06, i: -3, a: -0.5 }, m: "The industry is grateful. Advocates are furious." },
+      { t: "Hold firm", fx: { i: 2, a: 1, tr: -0.05 }, m: "The rule goes ahead. Someone at the White House is annoyed." },
+      { t: "Negotiate a compromise (6 hours)", fx: { h: 6, tr: 0.02, i: 1 }, m: "A one-year phase-in. Nobody loves it." }] },
+  { id: "c-jet", t: "Your travel is in the news", b: "Reporters found you took a government jet to a conference near your vacation home.",
+    c: [{ t: "Pay the government back", fx: { c: -30, i: 2, ht: -0.03 }, m: "A $30K check and an apology." },
+      { t: "Defend the trip", fx: { ht: 0.12, a: -1 }, m: "You say it was official business. Nobody believes it." },
+      { t: "Apologize and change the rules", fx: { a: -0.5, i: 1, ht: -0.02 }, m: "A new travel policy for the whole department." }] },
+  { id: "c-cuts", t: "The budget office wants 15% cuts", b: "The White House budget office wants your department to cut 15% next year.",
+    c: [{ t: "Accept them", fx: { tr: 0.08, a: -1, lgc: -1 }, m: "Programs will close. The White House is pleased." },
+      { t: "Fight them", fx: { tr: -0.08, a: 1 }, m: "You take it to the chief of staff. You win some of it back, and lose some goodwill." },
+      { t: "Find savings yourself (8 hours)", fx: { h: 8, tr: 0.04, e: -3 }, m: "You find 9% without closing anything important." }] },
+  { id: "c-breach", t: "A data breach at your department", b: "Hackers took personal records for two million people.",
+    c: [{ t: "Own it publicly", fx: { a: -0.5, ht: -0.03, i: 1 }, m: "You take responsibility at a press conference." },
+      { t: "Blame the contractor", fx: { ht: 0.05 }, m: "The contractor fires back with emails showing your team ignored warnings.", roll: { odds: 0.5, good: ["The contractor's emails went nowhere.", {}], bad: ["The emails are worse than you thought.", { a: -1.5, ht: 0.05 }] } },
+      { t: "Brief Congress first (4 hours)", fx: { h: 4, ht: -0.04 }, m: "Members appreciate hearing it from you before the papers." }] },
+  { id: "c-contradict", t: "The President contradicts you on TV", b: "Hours after your testimony, the President said the opposite on television.",
+    c: [{ t: "Fall in line", fx: { tr: 0.05, i: -1, a: -0.5 }, m: "You say the President's view is the policy." },
+      { t: "Clarify carefully (2 hours)", fx: { h: 2 }, m: "A careful statement that both things are true." },
+      { t: "Stand by your testimony", fx: { i: 2, tr: -0.12, p: 2 }, m: "Respect from the press. A cold call from the chief of staff." }] },
+  { id: "c-court", t: "A court blocks your signature rule", b: "A federal judge blocked your biggest rule nationwide.",
+    c: [{ t: "Appeal (6 hours)", fx: { h: 6 }, m: "Your lawyers file.", next: { in: 10, odds: 0.5, good: ["Your rule is back", "The appeals court reversed the judge. Your rule takes effect.", { lgc: 1, tr: 0.03 }], bad: ["The appeal failed", "The appeals court agreed with the judge.", { tr: -0.03 }] } },
+      { t: "Rewrite it to survive (8 hours)", fx: { h: 8, e: -3, lgc: 0.5 }, m: "A narrower rule that's harder to challenge." },
+      { t: "Drop it", fx: { tr: -0.03, a: -0.5 }, m: "Advocates call it a surrender." }] },
+  { id: "c-senator", t: "A senator wants a favor", b: "A senator on the committee that confirms your nominees wants a grant for his state that your staff says doesn't qualify.",
+    c: [{ t: "Find a way to give it", fx: { cl: 3, i: -3, ht: 0.03 }, m: "The grant goes out. The senator owes you." },
+      { t: "Say no", fx: { cl: -3, i: 1 }, m: "Your next nominee's hearing just got harder." },
+      { t: "Offer a different grant he does qualify for", fx: { h: 3 }, m: "It's smaller. He takes it, grudgingly." }] },
+  { id: "c-morale", t: "Morale at your department has collapsed", b: "A survey shows your department now ranks last in government on employee morale. It leaked.",
+    c: [{ t: "Hold town halls with staff (6 hours)", fx: { h: 6, e: -3, ht: -0.03 }, m: "You listened for six hours. Some of it stung." },
+      { t: "Say the survey proves you're shaking things up", fx: { tr: 0.03, a: -0.5 }, m: "The White House likes the line." },
+      { t: "Ignore it", fx: {}, m: "Nobody outside the building cares, you hope.", next: { in: 8, odds: 0.5, good: ["Morale stabilized", "Things settled down.", {}], bad: ["Senior staff are quitting", "Three senior officials quit in a week, and one talked to the press.", { ht: 0.08, a: -1 }] } }] },
+];
+// A governor's week.
+const GDEV = [
+  { id: "g-teachers", t: "Teachers threaten to strike", b: "The teachers' union says it will strike in two weeks without a 7% raise.",
+    c: [{ t: "Give them the raise", fx: (s, you) => ({ a: 1.5, b: you.p === "D" ? 1 : -2, lgc: 1 }), m: "Schools stay open. The budget gets tighter." },
+      { t: "Hold the line", fx: (s, you) => ({ b: you.p === "R" ? 1.5 : -2 }), m: "You say the state can't afford it.", next: { in: 3, odds: 0.4, good: ["The teachers backed down", "They took 3% and went back to work.", { a: 1 }], bad: ["Schools are closed", "The strike is on and parents are furious at everyone, you included.", { a: -3 }] } },
+      { t: "Mediate it yourself (6 hours)", fx: { h: 6, e: -3 }, m: "You sit down with both sides.", roll: { odds: 0.6, good: ["A deal at 5%. Everyone claims a win.", { a: 2 }], bad: ["Talks broke down with you in the room.", { a: -1 }] } }] },
+  { id: "g-prison", t: "A scandal at the state prison", b: "Video shows guards beating an inmate. The warden says it was handled.",
+    c: [{ t: "Fire the warden", fx: { ht: -0.04, a: 0.5 }, m: "Swift and visible. The guards' union is angry." },
+      { t: "Order an independent review (4 hours)", fx: { h: 4, lgc: 1, ht: -0.02 }, m: "A former judge will run it." },
+      { t: "Back the warden", fx: { ht: 0.1, b: 1 }, m: "You say it was isolated.", next: { in: 6, odds: 0.4, good: ["The prison story faded", "No more videos came out.", {}], bad: ["More prison videos", "Two more videos surfaced. Legislators want hearings.", { a: -3, ht: 0.08 }] } }] },
+  { id: "g-shortfall", t: "A $1.2 billion budget hole", b: "Tax revenue came in far below forecasts. The budget has to balance by law.",
+    c: [{ t: "Cut spending across the board", fx: { a: -2, b: 1 }, m: "Every agency takes a hit." },
+      { t: "Raise taxes on the wealthy", fx: (s, you) => ({ a: -1, b: you.p === "D" ? 1 : -3, lgc: 0.5 }), m: "The business lobby is running ads within a day." },
+      { t: "Use the rainy day fund", fx: {}, m: "It buys you a year.", next: { in: 16, odds: 0.45, good: ["Revenue bounced back", "The economy picked up and the hole closed itself.", { lgc: 0.5 }], bad: ["The budget hole is back and bigger", "The fund is empty and the gap is $1.6 billion now.", { a: -2.5 }] } }] },
+  { id: "g-factory", t: "A company wants $300 million to build here", b: "A battery maker will build a plant with 2,500 jobs if the state puts up $300 million in incentives.",
+    c: [{ t: "Make the deal", fx: { a: 1, c: 25 }, m: "A groundbreaking with hard hats.", next: { in: 20, odds: 0.55, good: ["The plant is hiring", "The factory opened on schedule and is hiring.", { a: 2, lgc: 1 }], bad: ["The plant deal fell apart", "The company scaled back to 600 jobs and kept the money.", { a: -3, ht: 0.03 }] } },
+      { t: "Say no", fx: { i: 1, a: -1 }, m: "The plant goes to the next state over." },
+      { t: "Offer less, with clawbacks (6 hours)", fx: { h: 6 }, m: "You negotiate hard.", roll: { odds: 0.55, good: ["They took it. Jobs with a guarantee.", { a: 2, lgc: 1 }], bad: ["They walked.", { a: -1 }] } }] },
+  { id: "g-dmv", t: "The DMV backlog goes viral", b: "Videos of six-hour waits at state DMV offices have millions of views.",
+    c: [{ t: "Fix it yourself (6 hours)", fx: { h: 6, a: 1.5, e: -2 }, m: "Weekend hours, new kiosks and a deadline for the director." },
+      { t: "Blame the legislature's budget", fx: { b: 1, a: -0.5 }, m: "True, and nobody waiting in line cares." },
+      { t: "Hire a contractor to modernize it", fx: { c: 0, a: 0.5 }, m: "A big contract.", next: { in: 14, odds: 0.5, good: ["The DMV is fixed", "Waits are down to 20 minutes. People noticed.", { a: 2 }], bad: ["The DMV contract is a mess", "The new system crashed for a week.", { a: -2, ht: 0.04 }] } }] },
+  { id: "g-court", t: "A state supreme court vacancy", b: "A justice retired and the appointment is yours.",
+    c: [{ t: "Appoint a reliable ideologue", fx: { b: 2, a: -1, lgc: 1 }, m: "Your base is thrilled." },
+      { t: "Appoint a respected moderate", fx: { a: 1, b: -1, i: 1 }, m: "Editorial boards praise it." },
+      { t: "Appoint a close friend", fx: { i: -3, ht: 0.04 }, m: "Loyal, and everybody knows it." }] },
+  { id: "g-lg", t: "Your lieutenant governor is criticizing you", b: "Your lieutenant governor, who wants your job, is criticizing you on talk radio.",
+    c: [{ t: "Make peace over dinner (3 hours)", fx: { h: 3 }, m: "A long dinner.", roll: { odds: 0.5, good: ["Truce.", {}], bad: ["The radio criticism kept coming.", { b: -1 }] } },
+      { t: "Freeze them out", fx: { b: 0.5, ht: 0.02 }, m: "No more invitations, no more staff help." },
+      { t: "Hit back in public", fx: { p: 1, a: -0.5, b: 1 }, m: "A messy family fight on the evening news." }] },
+  { id: "g-guard", t: "A call to send the Guard", b: "The administration wants your National Guard troops for a federal mission. It's controversial in your state.",
+    c: [{ t: "Send them", fx: (s, you) => ({ b: you.p === PP ? 2 : -3, a: -0.5 }), m: "Troops deploy next week." },
+      { t: "Refuse", fx: (s, you) => ({ b: you.p === PP ? -3 : 2, p: 2 }), m: "You go on national TV to explain why." },
+      { t: "Send a smaller unit with conditions", fx: { a: 0.5, h: 3 }, m: "A compromise nobody loves." }] },
+  { id: "g-campus", t: "Protests at the state university", b: "Protesters have taken over a building at the flagship campus. The university president asks what you want.",
+    c: [{ t: "Send in the state police", fx: (s, you) => ({ b: you.p === "R" ? 2 : -1, a: 0.5 }), m: "The building is cleared by morning. Video of arrests is everywhere." },
+      { t: "Let the university handle it", fx: { b: -0.5 }, m: "You stay out." },
+      { t: "Go meet the students (4 hours)", fx: { h: 4, p: 2 }, m: "You walk into the building yourself.", roll: { odds: 0.5, good: ["They left peacefully after talking with you.", { a: 2 }], bad: ["You were booed and it's on video.", { a: -1 }] } }] },
+  { id: "g-pot", t: "Potholes everywhere", b: "A brutal winter left the roads cratered. Talk radio is calling it the worst in memory.",
+    c: [{ t: "Declare a road emergency", fx: { a: 1.5, lgc: 0.5 }, m: "Crews out on weekends with your name on the signs." },
+      { t: "Push a gas tax increase for roads", fx: { a: -1.5, lgc: 1.5 }, m: "Unpopular now, and the roads will be better for years." },
+      { t: "Wait for the spring budget", fx: { a: -1 }, m: "Drivers aren't patient." }] },
+];
+// What knocks you back down: the higher you climb, the more people look for something to use against you.
+const KNOCK = [
+  { id: "k-oppo", knock: true, t: "An old quote of yours resurfaced", b: "Opposition researchers dug up something you said years ago. It's ugly out of context, and not great in it either.",
+    c: [{ t: "Apologize", fx: { a: -1, i: 1, b: -0.5 }, m: "A clean apology. It mostly works." },
+      { t: "Defend what you meant", fx: { b: 1.5, a: -2 }, m: "Your base rallies. Everyone else hears you defending it." },
+      { t: "Say nothing", fx: {}, m: "You let it sit.", next: { in: 2, odds: 0.5, good: ["The old quote faded", "Something else took over the news.", {}], bad: ["The old quote is in an ad", "Now it's in an ad, on a loop.", { a: -2.5 }] } }] },
+  { id: "k-ad", knock: true, t: "A $2 million ad campaign against you", b: "A dark-money group just bought two weeks of TV against you. The ads are brutal and mostly true.",
+    c: [{ t: "Answer with your own ads ($150K)", fx: { c: -150, a: -0.5 }, m: "You answered on the same stations. It blunted the worst of it." },
+      { t: "Hold a press conference about who's behind it (4 hours)", fx: { h: 4 }, m: "You name the donors.", roll: { odds: 0.5, good: ["The story became the dark money, not you.", { a: -0.5, p: 1 }], bad: ["Nobody cared who paid. They saw the ads.", { a: -2 }] } },
+      { t: "Ignore it", fx: { a: -2.5 }, m: "The ads ran unanswered." }] },
+  { id: "k-staffer", knock: true, t: "A former staffer talked to a reporter", b: "Someone who used to work for you told a reporter you're cruel to your staff. The story runs tomorrow.",
+    c: [{ t: "Deny it", fx: {}, m: "You call it false.", roll: { odds: (s) => clamp(((s.staff || []).reduce((a, x) => a + (x.loyalty || 10), 0) / Math.max(1, (s.staff || []).length) - 6) / 12, 0.2, 0.8), good: ["Other former staff came to your defense.", { a: 0.5 }], bad: ["Two more former staffers backed up the story.", { a: -2.5, i: -2 }] } },
+      { t: "Apologize and promise to do better", fx: { a: -1, i: 1 }, m: "You say you've been too hard on people." },
+      { t: "Attack the former staffer", fx: { b: 1, a: -1.5, i: -2 }, m: "It looks like exactly what they described." }] },
+  { id: "k-expenses", knock: true, w: (you, s) => (s.integrity ?? 70) < 65, t: "A reporter has your expense reports", b: "A reporter is asking about meals, travel and a few charges that are hard to explain.",
+    c: [{ t: "Pay it all back", fx: { c: -20, i: 2, a: -0.5 }, m: "A $20K check and a short statement." },
+      { t: "Explain each charge (3 hours)", fx: { h: 3 }, m: "You go through every line with the reporter.", roll: { odds: (s) => clamp((s.integrity ?? 70) / 100, 0.2, 0.8), good: ["The story ran small and fair.", {}], bad: ["The story ran big, with receipts.", { a: -2, i: -2 }] } },
+      { t: "Refuse to comment", fx: { i: -1 }, m: "No comment.", next: { in: 3, odds: 0.35, good: ["The expense story died", "The reporter moved on.", {}], bad: ["Your expenses are front-page news", "The story ran with photos of the restaurant.", { a: -3, i: -3, ht: 0.05 }] } }] },
+  { id: "k-exhausted", knock: true, w: (you, s) => (s.energy ?? 80) < 35, t: "You collapsed at an event", b: "You fainted at a public event. Doctors say it's exhaustion. Video is online.",
+    c: [{ t: "Take a real week off", fx: { e: 30, h: 25, a: 0.5 }, m: "You go dark for a week. People are sympathetic." },
+      { t: "Be back at work tomorrow", fx: { e: 5, p: 1 }, m: "You're back the next day, looking rough.", next: { in: 4, odds: 0.5, good: ["You bounced back", "You're fine, and people respect the grit.", {}], bad: ["You're making mistakes", "You looked and sounded off at two events.", { a: -2, e: -5 }] } },
+      { t: "Joke about it", fx: { a: 0.5, e: 8 }, m: "A good line at your next event takes the edge off." }] },
+  { id: "k-hotmic", knock: true, w: (you, s) => (s.energy ?? 80) < 45, t: "A hot mic catches you", b: "Tired after a long day, you said something you shouldn't have near a live microphone.",
+    c: [{ t: "Apologize right away", fx: { a: -0.5, b: -0.5 }, m: "Quick and clean." },
+      { t: "Say it was taken out of context", fx: { a: -1.5 }, m: "It wasn't, and the full audio is out." },
+      { t: "Lean into it", fx: { b: 1.5, a: -2, p: 2 }, m: "You put it on a T-shirt. Your base buys it." }] },
+  { id: "k-poll", knock: true, t: "A bad poll leaks", b: "An internal poll showing you weaker than you look leaked to the press. Donors are calling.",
+    c: [{ t: "Reassure donors in person (6 hours)", fx: { h: 6, e: -3 }, m: "You spend the day on calls and coffees." },
+      { t: "Release a better poll", fx: { c: -40 }, m: "You pay for a public poll.", roll: { odds: 0.5, good: ["Your poll looked good.", { p: 1 }], bad: ["Your poll looked worse.", { a: -1.5 }] } },
+      { t: "Ignore it", fx: { c: -30 }, m: "Some donors sit on their checks." }] },
+];
+const ALL_DEV = () => [...DEV, ...PDEV, ...CDEV, ...GDEV, ...KNOCK];
+function devById(id) { return ALL_DEV().find((x) => x.id === id); }
+const ROLE_POOL = { P: PDEV, C: CDEV, G: GDEV };
+function roleEventsWeek(s, r) {
+  const role = roleOf(s), pool0 = ROLE_POOL[role], you = memberById[s.youId]; if (!pool0 || !you) return;
+  if (r() > 0.15) return;
+  s.dUsed = s.dUsed || {};
+  const pool = pool0.filter((e) => s.dUsed[e.id] !== (s.term || 1) && (!e.w || e.w(you, s))); if (!pool.length) return;
+  const e = pool[Math.floor(r() * pool.length)]; s.dUsed[e.id] = s.term || 1;
+  pushInbox(s, { kind: "district", dev: e.id, from: devFrom(s), title: e.t, body: e.b, choices: e.c.map((c) => (typeof c.t === "function" ? c.t(you) : c.t)) });
+}
+// The higher you are and the more people know you, the more likely someone comes after you.
+export function scrutiny(s) {
+  const role = roleOf(s), a = role === "P" ? s.presApproval : s.approval, nat = role === "P" ? 42 : isMem(role) ? apNat(s) : 58;
+  return clamp(0.02 + Math.max(0, a - nat) / 220 + (s.profile || 0) / 2500 + ((s.integrity ?? 70) < 45 ? 0.02 : 0) + ((s.energy ?? 80) < 30 ? 0.02 : 0), 0.02, 0.16);
+}
+function knockWeek(s, r) {
+  const you = memberById[s.youId]; if (!you || s.over) return;
+  if (s.week - (s.knockAt ?? -99) < 5 || r() > scrutiny(s)) return;
+  const pool = KNOCK.filter((e) => (s.dUsed?.[e.id] ?? -1) !== (s.term || 1) && (!e.w || e.w(you, s))); if (!pool.length) return;
+  const e = pool[Math.floor(r() * pool.length)]; (s.dUsed = s.dUsed || {})[e.id] = s.term || 1; s.knockAt = s.week;
+  pushInbox(s, { kind: "district", dev: e.id, from: "Your communications director", title: e.t, body: e.b, choices: e.c.map((c) => (typeof c.t === "function" ? c.t(you) : c.t)) });
+}
 const locTxt = (s, t) => (roleOf(s) === "S" ? String(t).replace(/\bthe district's\b/g, "the state's").replace(/\bthe district\b/g, "the state").replace(/\bin the district\b/g, "in the state").replace(/\bAnother district\b/g, "another state").replace(/\banother district\b/g, "another state") : t);
 const devOdds = (o, s, you) => (typeof o === "function" ? o(s, you) : o);
-function districtWeek(s, r) {
-  const you = memberById[s.youId]; if (!isMem(roleOf(s)) || !you) return;
-  // Follow-ups from choices made weeks ago.
+const devFrom = (s) => ({ H: "Your district director", S: "Your state director", P: "Your chief of staff", C: "Your deputy secretary", G: "Your chief of staff" }[roleOf(s)] || "Your chief of staff");
+function devPending(s) {
+  const you = memberById[s.youId]; if (!you) return;
   for (const p of s.dPend || []) {
     if (p.done || s.week < p.at) continue; p.done = true;
-    const e = DEV.find((x) => x.id === p.ev), ch = e?.c[p.ci]; if (!ch?.next) continue;
+    const e = devById(p.ev), ch = e?.c[p.ci]; if (!ch?.next) continue;
     const ok = rng(hash(`${s.seed}:devnext:${p.mid}`))() < devOdds(ch.next.odds, s, you), [title, body, fx] = ok ? ch.next.good : ch.next.bad;
     applyFx(s, fx);
-    pushInbox(s, { kind: "staff", from: roleOf(s) === "S" ? "Your state director" : "Your district director", title: locTxt(s, title), body: `${locTxt(s, body)}${fxLine(fx)}`, done: true, followup: true });
+    pushInbox(s, { kind: "staff", from: e.knock ? "Your communications director" : devFrom(s), title: locTxt(s, title), body: `${locTxt(s, body)}${fxLine(fx)}`, done: true, followup: true });
     if (Math.abs(fx.a || 0) >= 3) s.moments.push({ week: s.week, text: `${locTxt(s, title)}. ${locTxt(s, body)}` });
   }
   s.dPend = (s.dPend || []).filter((p) => !p.done);
+}
+function districtWeek(s, r) {
+  const you = memberById[s.youId]; if (!isMem(roleOf(s)) || !you) return;
   const rate = isRecess(s) ? 0.35 : s.theme === "campaign" ? 0.22 : 0.17;
   if (r() > rate) return;
   s.dUsed = s.dUsed || {};
   const pool = DEV.filter((e) => s.dUsed[e.id] !== (s.term || 1) && (!e.w || e.w(you, s)));
   if (!pool.length) return;
   const e = pool[Math.floor(r() * pool.length)]; s.dUsed[e.id] = s.term || 1;
-  pushInbox(s, { kind: "district", dev: e.id, from: roleOf(s) === "S" ? "Your state director" : "Your district director", title: locTxt(s, e.t), body: locTxt(s, e.b), choices: e.c.map((c) => locTxt(s, typeof c.t === "function" ? c.t(you) : c.t)) });
+  pushInbox(s, { kind: "district", dev: e.id, from: devFrom(s), title: locTxt(s, e.t), body: locTxt(s, e.b), choices: e.c.map((c) => locTxt(s, typeof c.t === "function" ? c.t(you) : c.t)) });
 }
 function answerDistrict(s, m, choice) {
-  const you = memberById[s.youId], e = DEV.find((x) => x.id === m.dev), ch = e?.c[choice]; if (!ch) return;
+  const you = memberById[s.youId], e = devById(m.dev), ch = e?.c[choice]; if (!ch) return;
   let fx = typeof ch.fx === "function" ? ch.fx(s, you) : ch.fx, text = locTxt(s, ch.m);
   if (fx.h && s.hours < fx.h) { const short = fx.h - s.hours; fx = { ...fx, e: (fx.e || 0) - short }; text += ` You didn't have the hours, so it came out of your sleep.`; }
   applyFx(s, fx); let total = { ...fx };
@@ -4367,4 +4565,4 @@ export function allRankings(s) {
 }
 export { CABINET };
 export const nameOfId = (id) => (memberById[id] ? nameOf(memberById[id]) : "A colleague");
-export const devTitle = (s, ev) => { const e = DEV.find((x) => x.id === ev); return e ? locTxt(s, e.t) : "A district matter"; };
+export const devTitle = (s, ev) => { const e = devById(ev); return e ? locTxt(s, e.t) : "A district matter"; };

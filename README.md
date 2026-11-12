@@ -282,3 +282,14 @@ The Senate and the President as full characters, committees and amendments as pl
 - **Your vote comes back.** About six months after a law passes, voters decide how it's working. Members who voted with the verdict gain at home, and the bill's sponsor gains the most. Members who voted against it lose ground, and opponents put that vote in their ads ahead of anything else.
 - **Do-nothing Congress.** At the one-year mark and again before the election, a House majority that has passed little gets blamed nationally (more if it runs the whole government), and its members lose ground at home. A productive majority gets a small boost.
 - Fixed: committee work kept pushing your own bill's floor date back a week, so a member who did committee work every week could never get a vote on their bill.
+
+## Thirty-second pass: every career gets a week worth playing, and nothing stays easy
+
+- **President, Cabinet and governor events.** Each career now has its own set of choices, each coming up at most once per term, with follow-ups weeks later:
+  - **President (eleven):** a hurricane on the Gulf Coast, a port strike, a relative's business deal, a hot mic, gas prices, a Fed that won't cut rates, a friend asking for a pardon, a leaked memo, a school shooting and more. Some move the economy.
+  - **Cabinet secretary (ten):** an inspector general's report, a whistleblower, an industry lobbying to delay your rule, your travel on a government jet, budget-office cuts, a data breach, the President contradicting your testimony, a court blocking your rule, and more. They move the President's trust and your department's scandal heat.
+  - **Governor (ten):** a teachers' strike, a prison scandal, a budget hole, a factory incentive deal, the DMV backlog, a state supreme court pick, a feuding lieutenant governor, a request for your National Guard, campus protests and potholes.
+  
+  Before this, a governor could go months without a single inbox decision.
+- **Knock-downs.** The more popular and well known you are, the more often someone comes after you: an old quote resurfaces, a dark-money group buys ads against you, a former staffer talks to a reporter, or a reporter gets your expense reports (more likely when your integrity is low). Running yourself ragged can mean a hot mic or collapsing at an event. Each choice costs something. These apply to every career, at most one every five weeks.
+- Governors and Cabinet secretaries now get the same progressive approval curve as members of Congress.
