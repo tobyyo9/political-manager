@@ -101,7 +101,7 @@ export default function App() {
             <Meter label="Scandal heat" num={s.presHeat * 100} fmt={(v) => Math.round(v)} invert tone={s.presHeat < 0.6 ? "ok" : "no"} />
           </> : <>
           <Meter label="War chest" num={s.cash} fmt={money} />
-          <Meter label={role === "S" ? "Approval in your state" : "Approval at home"} num={s.approval} fmt={(v) => `${Math.round(v)}%`} sub={`seat ceiling ~${Math.round(S.apCap(s))}%`} tone={s.approval >= 50 ? "ok" : "no"} />
+          <Meter label={role === "S" ? "Approval in your state" : "Approval at home"} num={s.approval} fmt={(v) => `${Math.round(v)}%`} sub={S.apEase(s) < 0.95 && (role === "H" || role === "S") ? `harder from here: gains ${Math.round(S.apEase(s) * 100)}%` : undefined} tone={s.approval >= 50 ? "ok" : "no"} />
           <Meter label="Your base" num={s.baseApproval} fmt={(v) => `${Math.round(v)}%`} tone={s.baseApproval >= 60 ? "ok" : "no"} />
           <Meter label="Clout" num={s.clout} fmt={(v) => Math.round(v)} />
           <Meter label="Lifetime earnings" num={S.earnTotal(s)} fmt={money} />

@@ -270,6 +270,6 @@ The Senate and the President as full characters, committees and amendments as pl
 ## Thirtieth pass: ceilings
 
 - **Donors max out.** Every dollar you raise in a cycle makes the next one harder to get: call time, PAC fundraisers and email lists all slow down as the cycle goes on (Senate donors run deeper). The hours panel shows how tapped out your donors are, and they reset each Congress. A large war chest also costs about 0.4% a week to keep a campaign running. Raising every hour now peaks around $5M instead of $28M; a balanced member ends a cycle with $1M to $2.5M.
-- **Your seat has a ceiling.** Approval far above what your district naturally gives you is hard to gain and fades back. A swing seat tops out in the low to mid 60s and a safe one around 80. The ceiling appears under your approval meter. Base approval is capped around 85.
+- **Each point is harder than the last.** There's no hard ceiling, but approval gains shrink the further you climb above what your seat naturally gives you, and the same goes for your base above 65. In a swing seat, the climb from the mid 50s to 65 goes at half speed, and 75 is a real achievement. The approval meter shows how much a gain is worth at your current level.
 - **Clout levels off.** Gains shrink above 50 and clout above 60 fades about 1% a week, so it settles around 70 unless you keep working it.
 - **Rest costs more.** Energy recovers a little slower, time with family restores less, and recess gives a smaller boost.

@@ -382,12 +382,14 @@ export function doAction(s0, act, arg = {}) { const s = doAction0(s0, act, arg);
 // Donors max out: every dollar raised this cycle makes the next one harder to get.
 export const donorFatigue = (s, k = 1) => 1 / (1 + (s.cycleRaised || 0) / ((roleOf(s) === "S" ? 2700 : 900) * k));
 function raised(s, amt) { s.cycleRaised = (s.cycleRaised || 0) + amt; }
-// What your seat will bear: approval far above the district's natural level gets much harder to gain.
-export function apCap(s) { const you = memberById[s.youId]; if (!you) return 95; const nat = 50 + (you.own - 50) * 0.5; return clamp(nat + 14 + (you.own - 50) * 0.2, 55, 85); }
+// No hard ceiling, but every point above what your seat naturally gives you is harder to win than the last.
+export function apNat(s) { const you = memberById[s.youId]; if (!you) return 60; return 55 + (you.own - 50) * 0.5; }
+const easeAt = (x, nat, k) => Math.exp(-Math.max(0, x - nat) / k);
+export const apEase = (s) => easeAt(s.approval, apNat(s), 14);
 function softCaps(s, s0) {
   if (!isMem(roleOf(s)) || !memberById[s.youId]) return;
-  const squeeze = (key, cap, k = 0.3) => { const a0 = s0[key], a = s[key]; if (a > a0 && a > cap) { const free = Math.max(0, cap - a0); s[key] = a0 + Math.min(a - a0, free) + Math.max(0, a - a0 - free) * k; } };
-  squeeze("approval", apCap(s)); squeeze("baseApproval", 85);
+  const squeeze = (key, nat, k) => { const a0 = s0[key], a = s[key]; if (a > a0) s[key] = a0 + (a - a0) * easeAt(a0, nat, k); };
+  squeeze("approval", apNat(s), 14); squeeze("baseApproval", 65, 15);
   if (s.clout > s0.clout && s0.clout > 50) s.clout = s0.clout + (s.clout - s0.clout) * clamp((130 - s0.clout) / 80, 0.1, 1);
 }
 function doAction0(s0, act, arg = {}) {
@@ -678,7 +680,7 @@ export function advance(s0) {
     if (r() < 0.5) pushNews(s, `Economy: growth ${s.econ.growth.toFixed(1)}%, inflation ${s.econ.inflation.toFixed(1)}%, unemployment ${s.econ.jobs.toFixed(1)}%. The President's approval is ${Math.round(s.presApproval)}%.`);
   }
   if (roleOf(s) === "P") s.approval = s.presApproval;
-  else { s.approval = clamp(s.approval + (50 + (you.own - 50) * 0.5 - s.approval) * 0.03, 5, 95); const cap = apCap(s); if (isMem(roleOf(s)) && s.approval > cap) s.approval -= (s.approval - cap) * 0.08; }  // drifts back toward the seat's natural level, faster when above what the seat will bear
+  else { s.approval = clamp(s.approval + (50 + (you.own - 50) * 0.5 - s.approval) * 0.03, 5, 95); }  // drifts back toward the seat's natural level
   // 4. Other members act: new bills, leadership scheduling.
   if (r() < 0.55) {
     const party = r() < 0.72 ? "D" : "R";
