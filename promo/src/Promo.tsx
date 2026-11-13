@@ -56,6 +56,6 @@ export const Promo: React.FC = () => (
         <EndCard />
       </Series.Sequence>
     </Series>
-    <Audio src={staticFile("audio/soundtrack.wav")} />
+    <Audio src={staticFile("audio/theme.wav")} />
   </>
 );
