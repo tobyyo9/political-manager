@@ -293,3 +293,7 @@ The Senate and the President as full characters, committees and amendments as pl
   Before this, a governor could go months without a single inbox decision.
 - **Knock-downs.** The more popular and well known you are, the more often someone comes after you: an old quote resurfaces, a dark-money group buys ads against you, a former staffer talks to a reporter, or a reporter gets your expense reports (more likely when your integrity is low). Running yourself ragged can mean a hot mic or collapsing at an event. Each choice costs something. These apply to every career, at most one every five weeks.
 - Governors and Cabinet secretaries now get the same progressive approval curve as members of Congress.
+
+## Promo video
+
+`promo/` is a Remotion project for a 35-second trailer (1920x1080, 30 fps) built from real gameplay screenshots using the game's fictional names. Run `cd promo && npm i && npx remotion studio` to edit it and `npx remotion render Promo out/political-manager-promo.mp4` to render it. Fonts ship in `promo/public/fonts` (from Fontsource). `remotion.config.ts` points at a local Chromium; remove that line on a normal machine.
